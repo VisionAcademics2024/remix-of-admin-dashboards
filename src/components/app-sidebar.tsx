@@ -34,11 +34,17 @@ const items = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
+  const navigate = useNavigate();
   const currentPath = useRouterState({
     select: (router) => router.location.pathname,
   });
 
   const isActive = (path: string) => currentPath === path || currentPath.startsWith(`${path}/`);
+
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    navigate({ to: "/auth", replace: true });
+  }
 
   return (
     <Sidebar collapsible="icon">
