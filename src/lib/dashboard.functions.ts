@@ -22,11 +22,11 @@ export const getDashboardStats = createServerFn({ method: "GET" })
       supabase.from("sessions").select("id", { count: "exact", head: true }).gte("start_time", now),
       supabase.from("student_packages").select("id", { count: "exact", head: true }),
       supabase.from("session_students").select("id", { count: "exact", head: true }).gte("created_at", weekAgo),
-      supabase.from("student_packages").select("sessions_total, sessions_used"),
+      supabase.from("student_packages").select("total_sessions, sessions_used"),
     ]);
 
     const classesRemaining =
-      packageRows?.reduce((sum, row) => sum + (row.sessions_total - row.sessions_used), 0) ?? 0;
+      packageRows?.reduce((sum, row) => sum + (row.total_sessions - row.sessions_used), 0) ?? 0;
 
     return {
       activeStudents: activeStudents ?? 0,
