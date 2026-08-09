@@ -74,7 +74,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient; auth: AuthState }>()({
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -117,34 +117,13 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  const [auth, setAuth] = useState<AuthState>({ isAuthenticated: false, user: null, isLoading: true });
-  const router = useRouter();
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setAuth({
-        isAuthenticated: !!session?.user,
-        user: session?.user ?? null,
-        isLoading: false,
-      });
-    });
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAuth({
-        isAuthenticated: !!session?.user,
-        user: session?.user ?? null,
-        isLoading: false,
-      });
-      router.invalidate();
-    });
-
-    return () => listener.subscription.unsubscribe();
-  }, [router]);
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet context={{ auth }} />
-      <Toaster />
+      <AuthProvider>
+        <Outlet />
+        <Toaster />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
