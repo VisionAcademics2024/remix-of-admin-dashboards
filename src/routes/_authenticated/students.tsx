@@ -195,7 +195,7 @@ function StudentsPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit student" : "Add student"}</DialogTitle>
+            <DialogTitle>{editingId ? "Edit student" : "Add student"}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4 sm:grid-cols-2">
             <div className="space-y-2">
