@@ -57,7 +57,7 @@ function StudentsPage() {
   const { data: students } = useSuspenseQuery(studentsQueryOptions());
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<typeof emptyForm | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const queryClient = useQueryClient();
   const createFn = useServerFn(createStudent);
@@ -75,13 +75,13 @@ function StudentsPage() {
   });
 
   function openNew() {
-    setEditing(null);
+    setEditingId(null);
     setForm(emptyForm);
     setDialogOpen(true);
   }
 
   function openEdit(student: (typeof students)[number]) {
-    setEditing(student);
+    setEditingId(student.id);
     setForm({
       first_name: student.first_name,
       last_name: student.last_name,
@@ -101,8 +101,8 @@ function StudentsPage() {
 
   async function handleSave() {
     try {
-      if (editing && "id" in editing) {
-        await updateFn({ data: { id: (editing as { id: string }).id, ...form } });
+      if (editingId) {
+        await updateFn({ data: { id: editingId, ...form } });
         toast.success("Student updated");
       } else {
         await createFn({ data: form });
