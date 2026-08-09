@@ -7,7 +7,7 @@ export const getRouter = () => {
 
   const router = createRouter({
     routeTree,
-    context: { queryClient },
+    context: { queryClient, auth: { isAuthenticated: false, user: null, isLoading: true } },
     scrollRestoration: true,
     defaultPreloadStaleTime: 0,
   });
