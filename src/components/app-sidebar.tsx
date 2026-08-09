@@ -79,7 +79,7 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              onClick={() => supabase.auth.signOut()}
+              onClick={handleSignOut}
               className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
             >
               <LogOut className="h-4 w-4" />
