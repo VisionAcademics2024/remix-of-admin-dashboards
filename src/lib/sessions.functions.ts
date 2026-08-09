@@ -18,13 +18,22 @@ export const listSessions = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { data, error } = await context.supabase
       .from("sessions")
-      .select("*, tutors(first_name, last_name), session_students(id)")
+      .select(
+        "*, tutors(first_name, last_name), session_students(id, student_id, attendance_status, students(id, first_name, last_name))"
+      )
       .order("start_time", { ascending: true });
     if (error) throw error;
     return (data ?? []).map((s: any) => ({
       ...s,
       tutor_name: s.tutors ? `${s.tutors.first_name} ${s.tutors.last_name}` : null,
       student_count: s.session_students?.length ?? 0,
+      students: (s.session_students ?? []).map((ss: any) => ({
+        session_student_id: ss.id,
+        student_id: ss.student_id,
+        attendance_status: ss.attendance_status,
+        first_name: ss.students?.first_name,
+        last_name: ss.students?.last_name,
+      })),
     }));
   });
 

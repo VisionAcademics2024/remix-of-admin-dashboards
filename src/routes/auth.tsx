@@ -36,9 +36,12 @@ function AuthPage() {
         navigate({ to: "/dashboard", replace: true });
       }
     } else {
-      const { error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) {
         toast.error(error.message);
+      } else if (data.session) {
+        toast.success("Account created. Welcome!");
+        navigate({ to: "/dashboard", replace: true });
       } else {
         toast.success("Account created. Please check your email to confirm.");
         setMode("signin");
