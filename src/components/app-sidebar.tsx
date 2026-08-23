@@ -39,28 +39,36 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-/** Daily use first, setup last — the order the spec asks for. */
-const DAILY = [
+/**
+ * Four groups: what you do all day, what you manage, what you check, what you
+ * configure. Paths stay as they are — the specified sub-route hierarchy arrives
+ * with the screens that need it.
+ */
+const OPERATE = [
   { title: "Today", url: "/today", icon: Sunrise },
   { title: "Timetable", url: "/timetable", icon: CalendarDays },
-  { title: "Roll", url: "/roll", icon: ClipboardCheck },
-  { title: "Class Builder", url: "/classes/new", icon: Wrench },
+  { title: "Attendance", url: "/roll", icon: ClipboardCheck },
   { title: "Make-Ups", url: "/make-ups", icon: Repeat },
-  { title: "Classes", url: "/classes", icon: LayoutGrid },
+  { title: "Class Builder", url: "/classes/new", icon: Wrench },
 ];
 
-const RECORDS = [
+const MANAGE = [
   { title: "Students & Families", url: "/students", icon: GraduationCap },
+  { title: "Classes", url: "/classes", icon: LayoutGrid },
   { title: "Enrolments & Hours", url: "/enrolments", icon: Wallet },
   { title: "Billing", url: "/billing", icon: Receipt },
+  { title: "Tutor Pay", url: "/tutor-pay", icon: BadgeDollarSign, ownerOnly: true },
 ];
 
-const ADMIN = [
+const UNDERSTAND = [
   { title: "Needs Attention", url: "/needs-attention", icon: ListChecks, badge: true },
-  { title: "Tutor Pay", url: "/tutor-pay", icon: BadgeDollarSign, ownerOnly: true },
+];
+
+const CONFIGURE = [
   { title: "Setup", url: "/setup", icon: Settings },
   { title: "Staff", url: "/staff", icon: UserCog, ownerOnly: true },
 ];
+
 
 export function AppSidebar({ role, name }: { role: StaffRole; name: string }) {
   const { state } = useSidebar();
