@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { db } from "./client";
 
 const studentSchema = z.object({
   first_name: z.string().min(1),
@@ -20,7 +21,7 @@ const studentSchema = z.object({
 export const listStudents = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
+    const { data, error } = await db(context.supabase)
       .from("proto_students")
       .select("*")
       .order("last_name", { ascending: true });
@@ -32,7 +33,7 @@ export const getStudent = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: z.string() }).parse(data))
   .handler(async ({ context, data }) => {
-    const { data: student, error } = await context.supabase
+    const { data: student, error } = await db(context.supabase)
       .from("proto_students")
       .select("*")
       .eq("id", data.id)
@@ -57,7 +58,7 @@ export const createStudent = createServerFn({ method: "POST" })
       school: data.school || null,
       notes: data.notes || null,
     };
-    const { data: student, error } = await context.supabase
+    const { data: student, error } = await db(context.supabase)
       .from("proto_students")
       .insert(payload)
       .select()
@@ -90,7 +91,7 @@ export const updateStudent = createServerFn({ method: "POST" })
       school: rest.school || null,
       notes: rest.notes || null,
     };
-    const { data: student, error } = await context.supabase
+    const { data: student, error } = await db(context.supabase)
       .from("proto_students")
       .update(payload)
       .eq("id", id)
@@ -104,7 +105,7 @@ export const deleteStudent = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: z.string() }).parse(data))
   .handler(async ({ context, data }) => {
-    const { error } = await context.supabase.from("proto_students").delete().eq("id", data.id);
+    const { error } = await db(context.supabase).from("proto_students").delete().eq("id", data.id);
     if (error) throw error;
     return { success: true };
   });

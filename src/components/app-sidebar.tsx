@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { EnvironmentBadge } from "@/components/vision/environment-badge";
 import { supabase } from "@/integrations/supabase/client";
 import { getNeedsAttentionCount } from "@/lib/vision/overview.functions";
 import type { StaffRole } from "@/lib/vision/types";
@@ -39,28 +40,36 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-/** Daily use first, setup last — the order the spec asks for. */
-const DAILY = [
+/**
+ * Four groups: what you do all day, what you manage, what you check, what you
+ * configure. Paths stay as they are — the specified sub-route hierarchy arrives
+ * with the screens that need it.
+ */
+const OPERATE = [
   { title: "Today", url: "/today", icon: Sunrise },
   { title: "Timetable", url: "/timetable", icon: CalendarDays },
-  { title: "Roll", url: "/roll", icon: ClipboardCheck },
-  { title: "Class Builder", url: "/classes/new", icon: Wrench },
+  { title: "Attendance", url: "/roll", icon: ClipboardCheck },
   { title: "Make-Ups", url: "/make-ups", icon: Repeat },
-  { title: "Classes", url: "/classes", icon: LayoutGrid },
+  { title: "Class Builder", url: "/classes/new", icon: Wrench },
 ];
 
-const RECORDS = [
+const MANAGE = [
   { title: "Students & Families", url: "/students", icon: GraduationCap },
+  { title: "Classes", url: "/classes", icon: LayoutGrid },
   { title: "Enrolments & Hours", url: "/enrolments", icon: Wallet },
   { title: "Billing", url: "/billing", icon: Receipt },
+  { title: "Tutor Pay", url: "/tutor-pay", icon: BadgeDollarSign, ownerOnly: true },
 ];
 
-const ADMIN = [
+const UNDERSTAND = [
   { title: "Needs Attention", url: "/needs-attention", icon: ListChecks, badge: true },
-  { title: "Tutor Pay", url: "/tutor-pay", icon: BadgeDollarSign, ownerOnly: true },
+];
+
+const CONFIGURE = [
   { title: "Setup", url: "/setup", icon: Settings },
   { title: "Staff", url: "/staff", icon: UserCog, ownerOnly: true },
 ];
+
 
 export function AppSidebar({ role, name }: { role: StaffRole; name: string }) {
   const { state } = useSidebar();
@@ -126,7 +135,10 @@ export function AppSidebar({ role, name }: { role: StaffRole; name: string }) {
           {!collapsed && (
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold leading-tight">Vision CRM</p>
-              <p className="truncate text-xs text-muted-foreground">{name}</p>
+              <div className="flex items-center gap-1.5">
+                <p className="truncate text-xs text-muted-foreground">{name}</p>
+                <EnvironmentBadge />
+              </div>
             </div>
           )}
         </div>
@@ -134,45 +146,39 @@ export function AppSidebar({ role, name }: { role: StaffRole; name: string }) {
 
       <SidebarContent>
         <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel>Every day</SidebarGroupLabel>}
+          {!collapsed && <SidebarGroupLabel>Operate</SidebarGroupLabel>}
           <SidebarGroupContent>
-            <SidebarMenu>{renderItems(DAILY)}</SidebarMenu>
+            <SidebarMenu>{renderItems(OPERATE)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel>Records</SidebarGroupLabel>}
+          {!collapsed && <SidebarGroupLabel>Manage</SidebarGroupLabel>}
           <SidebarGroupContent>
-            <SidebarMenu>{renderItems(RECORDS)}</SidebarMenu>
+            <SidebarMenu>{renderItems(MANAGE)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel>Admin</SidebarGroupLabel>}
+          {!collapsed && <SidebarGroupLabel>Understand</SidebarGroupLabel>}
           <SidebarGroupContent>
-            <SidebarMenu>{renderItems(ADMIN)}</SidebarMenu>
+            <SidebarMenu>{renderItems(UNDERSTAND)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel>Reference</SidebarGroupLabel>}
+          {!collapsed && <SidebarGroupLabel>Configure</SidebarGroupLabel>}
           <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={currentPath.startsWith("/prototype")}
-                  tooltip="Original prototype"
-                >
-                  <Link to="/prototype/dashboard">
-                    <FlaskConical />
-                    {!collapsed && <span>Prototype</span>}
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
+            <SidebarMenu>{renderItems(CONFIGURE)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+
+        {/* The legacy /prototype/* screens are no longer linked from the
+            navigation: they read renamed proto_* tables that are not present
+            in the database. The code is retained for reference pending a
+            separately reviewed cleanup. */}
+
       </SidebarContent>
 
       <SidebarFooter>

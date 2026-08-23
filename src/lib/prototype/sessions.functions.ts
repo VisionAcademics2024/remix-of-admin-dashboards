@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { db } from "./client";
 
 const sessionSchema = z.object({
   title: z.string().min(1),
@@ -16,7 +17,7 @@ const sessionSchema = z.object({
 export const listSessions = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
+    const { data, error } = await db(context.supabase)
       .from("proto_sessions")
       .select(
         "*, proto_tutors(first_name, last_name), proto_session_students(id, student_id, attendance_status, proto_students(id, first_name, last_name))",
@@ -43,7 +44,7 @@ export const getSession = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: z.string() }).parse(data))
   .handler(async ({ context, data }) => {
-    const { data: session, error } = await context.supabase
+    const { data: session, error } = await db(context.supabase)
       .from("proto_sessions")
       .select(
         "*, proto_tutors(first_name, last_name), proto_session_students(id, student_id, attendance_status, proto_students(id, first_name, last_name))",
@@ -78,7 +79,7 @@ export const createSession = createServerFn({ method: "POST" })
       location: rest.location || null,
       notes: rest.notes || null,
     };
-    const { data: session, error } = await context.supabase
+    const { data: session, error } = await db(context.supabase)
       .from("proto_sessions")
       .insert(payload)
       .select()
@@ -86,7 +87,7 @@ export const createSession = createServerFn({ method: "POST" })
     if (error) throw error;
     if (student_ids.length > 0) {
       const rows = student_ids.map((student_id) => ({ session_id: session.id, student_id }));
-      const { error: enrollError } = await context.supabase
+      const { error: enrollError } = await db(context.supabase)
         .from("proto_session_students")
         .insert(rows);
       if (enrollError) throw enrollError;
@@ -113,7 +114,7 @@ export const updateSession = createServerFn({ method: "POST" })
       location: rest.location || null,
       notes: rest.notes || null,
     };
-    const { data: session, error } = await context.supabase
+    const { data: session, error } = await db(context.supabase)
       .from("proto_sessions")
       .update(payload)
       .eq("id", id)
@@ -121,14 +122,14 @@ export const updateSession = createServerFn({ method: "POST" })
       .single();
     if (error) throw error;
 
-    const { error: deleteError } = await context.supabase
+    const { error: deleteError } = await db(context.supabase)
       .from("proto_session_students")
       .delete()
       .eq("session_id", id);
     if (deleteError) throw deleteError;
     if (student_ids.length > 0) {
       const rows = student_ids.map((student_id) => ({ session_id: id, student_id }));
-      const { error: enrollError } = await context.supabase
+      const { error: enrollError } = await db(context.supabase)
         .from("proto_session_students")
         .insert(rows);
       if (enrollError) throw enrollError;
@@ -140,7 +141,7 @@ export const deleteSession = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: z.string() }).parse(data))
   .handler(async ({ context, data }) => {
-    const { error } = await context.supabase.from("proto_sessions").delete().eq("id", data.id);
+    const { error } = await db(context.supabase).from("proto_sessions").delete().eq("id", data.id);
     if (error) throw error;
     return { success: true };
   });
@@ -157,7 +158,7 @@ export const markAttendance = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ context, data }) => {
-    const { error } = await context.supabase
+    const { error } = await db(context.supabase)
       .from("proto_session_students")
       .update({ attendance_status: data.attendance_status })
       .eq("session_id", data.session_id)

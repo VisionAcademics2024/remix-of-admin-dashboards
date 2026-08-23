@@ -1,19 +1,20 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { db } from "./client";
 
 export const getStudentWithPackages = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: z.string() }).parse(data))
   .handler(async ({ context, data }) => {
-    const { data: student, error } = await context.supabase
+    const { data: student, error } = await db(context.supabase)
       .from("proto_students")
       .select("*")
       .eq("id", data.id)
       .single();
     if (error) throw error;
 
-    const { data: packages, error: packagesError } = await context.supabase
+    const { data: packages, error: packagesError } = await db(context.supabase)
       .from("proto_student_packages")
       .select("*, proto_packages(name)")
       .eq("student_id", data.id)
@@ -33,7 +34,7 @@ export const getStudentAttendance = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: z.string() }).parse(data))
   .handler(async ({ context, data }) => {
-    const { data: attendance, error } = await context.supabase
+    const { data: attendance, error } = await db(context.supabase)
       .from("proto_session_students")
       .select("*, proto_sessions(title, start_time, proto_tutors(first_name, last_name))")
       .eq("student_id", data.id)
