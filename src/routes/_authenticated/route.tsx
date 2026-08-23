@@ -1,5 +1,8 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
+import { useState } from "react";
+
+import { cn } from "@/lib/utils";
 
 import { supabase } from "@/integrations/supabase/client";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -37,6 +40,7 @@ export const Route = createFileRoute("/_authenticated")({
  */
 function AuthenticatedLayout() {
   const { data: me } = useSuspenseQuery(meQueryOptions());
+  const [navExpanded, setNavExpanded] = useState(false);
   if (!me.staff) return null;
 
   const initials = me.staff.full_name
@@ -48,8 +52,22 @@ function AuthenticatedLayout() {
     .toUpperCase();
 
   return (
-    <div className="min-h-screen pl-[5.5rem] pr-3 lg:pl-[6.25rem] lg:pr-5">
-      <AppSidebar role={me.staff.role} name={me.staff.full_name} />
+    <div
+      style={{ transitionTimingFunction: "var(--ease-spatial)" }}
+      className={cn(
+        // From lg up the page makes room for the rail rather than being covered
+        // by it. Below that there is no width to give away, so it overlays and
+        // the rail thickens instead — see .ornament[data-expanded] in styles.css.
+        "min-h-screen pl-[5.5rem] pr-3 transition-[padding] duration-[320ms] lg:pr-5",
+        navExpanded ? "lg:pl-[17.25rem]" : "lg:pl-[6.25rem]",
+      )}
+    >
+      <AppSidebar
+        role={me.staff.role}
+        name={me.staff.full_name}
+        expanded={navExpanded}
+        onExpandedChange={setNavExpanded}
+      />
 
       <header className="glass glass--thick animate-spatial-in sticky top-3 z-30 mt-3 flex h-14 items-center gap-3 rounded-full px-4">
         <span className="hidden items-baseline gap-2.5 sm:flex">

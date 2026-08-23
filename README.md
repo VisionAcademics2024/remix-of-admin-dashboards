@@ -11,6 +11,7 @@ the roll, hours packages, billing, and tutor pay.
 | [`docs/spec/`](docs/spec/) | The build specification. `01-domain-model.md` explains the business; the rest follows from it. |
 | [`docs/spec/08-CUSTOMISE-ME.md`](docs/spec/08-CUSTOMISE-ME.md) | Branding, naming and settings. Overrides every other spec file. |
 | [`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md) | The spatial (visionOS-style) design system — materials, motion, environments, and what to send for fonts, icons and backgrounds. |
+| [`docs/AIRTABLE-MIGRATION.md`](docs/AIRTABLE-MIGRATION.md) | How to move Vision Admin V2 into the app — written against the real base, with the decisions that have to be made first. |
 | [`supabase/tests/`](supabase/tests/) | The schema verification suite and how to run it. |
 
 The original Lovable prototype is kept, working, at `/prototype/*`.
