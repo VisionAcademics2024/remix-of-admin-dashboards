@@ -71,7 +71,7 @@ function TutorsPage() {
       t.first_name.toLowerCase().includes(q) ||
       t.last_name.toLowerCase().includes(q) ||
       t.email?.toLowerCase().includes(q) ||
-      t.subjects?.some((s) => s.toLowerCase().includes(q))
+      t.subjects?.some((s: string) => s.toLowerCase().includes(q))
     );
   });
 
@@ -177,7 +177,7 @@ function TutorsPage() {
                   </div>
                   {tutor.subjects && tutor.subjects.length > 0 && (
                     <div className="mt-1 flex flex-wrap gap-1">
-                      {tutor.subjects.map((subject) => (
+                      {tutor.subjects.map((subject: string) => (
                         <Badge key={subject} variant="outline" className="text-xs">
                           {subject}
                         </Badge>
