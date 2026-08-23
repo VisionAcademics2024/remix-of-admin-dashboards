@@ -1,6 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
 import {
   BadgeDollarSign,
   CalendarDays,
@@ -79,10 +78,20 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
   { label: "Configure", items: CONFIGURE },
 ];
 
-export function AppSidebar({ role, name }: { role: StaffRole; name: string }) {
+export function AppSidebar({
+  role,
+  name,
+  expanded,
+  onExpandedChange,
+}: {
+  role: StaffRole;
+  name: string;
+  expanded: boolean;
+  /** Lifted so the main content can make room instead of being covered. */
+  onExpandedChange: (expanded: boolean) => void;
+}) {
   const navigate = useNavigate();
   const currentPath = useRouterState({ select: (r) => r.location.pathname });
-  const [expanded, setExpanded] = useState(false);
 
   const { data: attention } = useQuery({
     queryKey: ["needs-attention-count"],
@@ -103,11 +112,11 @@ export function AppSidebar({ role, name }: { role: StaffRole; name: string }) {
   return (
     <nav
       aria-label="Primary"
-      onPointerEnter={() => setExpanded(true)}
-      onPointerLeave={() => setExpanded(false)}
-      onFocusCapture={() => setExpanded(true)}
+      onPointerEnter={() => onExpandedChange(true)}
+      onPointerLeave={() => onExpandedChange(false)}
+      onFocusCapture={() => onExpandedChange(true)}
       onBlurCapture={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node)) setExpanded(false);
+        if (!event.currentTarget.contains(event.relatedTarget as Node)) onExpandedChange(false);
       }}
       data-expanded={expanded}
       style={{ transitionTimingFunction: "var(--ease-spatial)" }}

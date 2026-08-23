@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AccessRouteImport } from './routes/access'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as PreviewRouteImport } from './routes/preview'
 import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
 import { Route as AuthenticatedEnrolmentsRouteImport } from './routes/_authenticated/enrolments'
 import { Route as AuthenticatedMakeUpsRouteImport } from './routes/_authenticated/make-ups'
@@ -51,6 +52,11 @@ const AccessRoute = AccessRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PreviewRoute = PreviewRouteImport.update({
+  id: '/preview',
+  path: '/preview',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedBillingRoute = AuthenticatedBillingRouteImport.update({
@@ -166,6 +172,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/access': typeof AccessRoute
   '/auth': typeof AuthRoute
+  '/preview': typeof PreviewRoute
   '/billing': typeof AuthenticatedBillingRoute
   '/enrolments': typeof AuthenticatedEnrolmentsRoute
   '/make-ups': typeof AuthenticatedMakeUpsRoute
@@ -191,6 +198,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/access': typeof AccessRoute
   '/auth': typeof AuthRoute
+  '/preview': typeof PreviewRoute
   '/billing': typeof AuthenticatedBillingRoute
   '/enrolments': typeof AuthenticatedEnrolmentsRoute
   '/make-ups': typeof AuthenticatedMakeUpsRoute
@@ -218,6 +226,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/access': typeof AccessRoute
   '/auth': typeof AuthRoute
+  '/preview': typeof PreviewRoute
   '/_authenticated/billing': typeof AuthenticatedBillingRoute
   '/_authenticated/enrolments': typeof AuthenticatedEnrolmentsRoute
   '/_authenticated/make-ups': typeof AuthenticatedMakeUpsRoute
@@ -245,6 +254,7 @@ export interface FileRouteTypes {
     | '/'
     | '/access'
     | '/auth'
+    | '/preview'
     | '/billing'
     | '/enrolments'
     | '/make-ups'
@@ -270,6 +280,7 @@ export interface FileRouteTypes {
     | '/'
     | '/access'
     | '/auth'
+    | '/preview'
     | '/billing'
     | '/enrolments'
     | '/make-ups'
@@ -296,6 +307,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/access'
     | '/auth'
+    | '/preview'
     | '/_authenticated/billing'
     | '/_authenticated/enrolments'
     | '/_authenticated/make-ups'
@@ -323,6 +335,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AccessRoute: typeof AccessRoute
   AuthRoute: typeof AuthRoute
+  PreviewRoute: typeof PreviewRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -353,6 +366,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/preview': {
+      id: '/preview'
+      path: '/preview'
+      fullPath: '/preview'
+      preLoaderRoute: typeof PreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/billing': {
@@ -577,6 +597,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AccessRoute: AccessRoute,
   AuthRoute: AuthRoute,
+  PreviewRoute: PreviewRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
