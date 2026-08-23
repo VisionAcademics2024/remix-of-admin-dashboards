@@ -38,8 +38,30 @@ export type Database = {
         }
         Relationships: []
       }
+      at_raw: {
+        Row: {
+          created_time: string | null
+          fields: Json
+          id: string
+          tbl: string
+        }
+        Insert: {
+          created_time?: string | null
+          fields: Json
+          id: string
+          tbl: string
+        }
+        Update: {
+          created_time?: string | null
+          fields?: Json
+          id?: string
+          tbl?: string
+        }
+        Relationships: []
+      }
       attendance: {
         Row: {
+          airtable_id: string | null
           att_type: Database["public"]["Enums"]["attendance_type"]
           code: string
           correction_note: string | null
@@ -47,11 +69,13 @@ export type Database = {
           enrolment_id: string
           id: string
           package_id: string | null
+          seq: number
           session_id: string
           source_attendance_id: string | null
           status: Database["public"]["Enums"]["attendance_status"]
         }
         Insert: {
+          airtable_id?: string | null
           att_type?: Database["public"]["Enums"]["attendance_type"]
           code?: string
           correction_note?: string | null
@@ -59,11 +83,13 @@ export type Database = {
           enrolment_id: string
           id?: string
           package_id?: string | null
+          seq?: number
           session_id: string
           source_attendance_id?: string | null
           status?: Database["public"]["Enums"]["attendance_status"]
         }
         Update: {
+          airtable_id?: string | null
           att_type?: Database["public"]["Enums"]["attendance_type"]
           code?: string
           correction_note?: string | null
@@ -71,6 +97,7 @@ export type Database = {
           enrolment_id?: string
           id?: string
           package_id?: string | null
+          seq?: number
           session_id?: string
           source_attendance_id?: string | null
           status?: Database["public"]["Enums"]["attendance_status"]
@@ -144,6 +171,7 @@ export type Database = {
       charges: {
         Row: {
           adjustment: number
+          airtable_id: string | null
           attendance_id: string | null
           code: string
           created_at: string
@@ -156,6 +184,7 @@ export type Database = {
           payer_id: string | null
           payment_ref: string | null
           route: Database["public"]["Enums"]["charge_route"]
+          seq: number
           source: Database["public"]["Enums"]["charge_source"]
           standard_amount: number
           status: Database["public"]["Enums"]["charge_status"]
@@ -164,6 +193,7 @@ export type Database = {
         }
         Insert: {
           adjustment?: number
+          airtable_id?: string | null
           attendance_id?: string | null
           code?: string
           created_at?: string
@@ -176,6 +206,7 @@ export type Database = {
           payer_id?: string | null
           payment_ref?: string | null
           route?: Database["public"]["Enums"]["charge_route"]
+          seq?: number
           source: Database["public"]["Enums"]["charge_source"]
           standard_amount?: number
           status?: Database["public"]["Enums"]["charge_status"]
@@ -184,6 +215,7 @@ export type Database = {
         }
         Update: {
           adjustment?: number
+          airtable_id?: string | null
           attendance_id?: string | null
           code?: string
           created_at?: string
@@ -196,6 +228,7 @@ export type Database = {
           payer_id?: string | null
           payment_ref?: string | null
           route?: Database["public"]["Enums"]["charge_route"]
+          seq?: number
           source?: Database["public"]["Enums"]["charge_source"]
           standard_amount?: number
           status?: Database["public"]["Enums"]["charge_status"]
@@ -249,6 +282,7 @@ export type Database = {
       }
       class_offerings: {
         Row: {
+          airtable_id: string | null
           capacity: number
           code: string
           created_at: string
@@ -263,11 +297,13 @@ export type Database = {
           recurrence: Database["public"]["Enums"]["recurrence_pattern"]
           recurrence_start: string | null
           room: string | null
+          seq: number
           session_duration_hours: number
           starts_on: string
           status: Database["public"]["Enums"]["offering_status"]
         }
         Insert: {
+          airtable_id?: string | null
           capacity?: number
           code?: string
           created_at?: string
@@ -282,11 +318,13 @@ export type Database = {
           recurrence?: Database["public"]["Enums"]["recurrence_pattern"]
           recurrence_start?: string | null
           room?: string | null
+          seq?: number
           session_duration_hours?: number
           starts_on: string
           status?: Database["public"]["Enums"]["offering_status"]
         }
         Update: {
+          airtable_id?: string | null
           capacity?: number
           code?: string
           created_at?: string
@@ -301,6 +339,7 @@ export type Database = {
           recurrence?: Database["public"]["Enums"]["recurrence_pattern"]
           recurrence_start?: string | null
           room?: string | null
+          seq?: number
           session_duration_hours?: number
           starts_on?: string
           status?: Database["public"]["Enums"]["offering_status"]
@@ -333,6 +372,7 @@ export type Database = {
         Row: {
           adjustment: Database["public"]["Enums"]["adjustment_type"]
           adjustment_value: number
+          airtable_id: string | null
           base_price: number | null
           class_offering_id: string
           closure: Database["public"]["Enums"]["closure_reason"] | null
@@ -344,6 +384,7 @@ export type Database = {
           id: string
           method: Database["public"]["Enums"]["billing_method"] | null
           notes: string | null
+          seq: number
           standard_price_id: string | null
           starts_on: string
           status: Database["public"]["Enums"]["enrolment_status"]
@@ -352,6 +393,7 @@ export type Database = {
         Insert: {
           adjustment?: Database["public"]["Enums"]["adjustment_type"]
           adjustment_value?: number
+          airtable_id?: string | null
           base_price?: number | null
           class_offering_id: string
           closure?: Database["public"]["Enums"]["closure_reason"] | null
@@ -363,6 +405,7 @@ export type Database = {
           id?: string
           method?: Database["public"]["Enums"]["billing_method"] | null
           notes?: string | null
+          seq?: number
           standard_price_id?: string | null
           starts_on?: string
           status?: Database["public"]["Enums"]["enrolment_status"]
@@ -371,6 +414,7 @@ export type Database = {
         Update: {
           adjustment?: Database["public"]["Enums"]["adjustment_type"]
           adjustment_value?: number
+          airtable_id?: string | null
           base_price?: number | null
           class_offering_id?: string
           closure?: Database["public"]["Enums"]["closure_reason"] | null
@@ -382,6 +426,7 @@ export type Database = {
           id?: string
           method?: Database["public"]["Enums"]["billing_method"] | null
           notes?: string | null
+          seq?: number
           standard_price_id?: string | null
           starts_on?: string
           status?: Database["public"]["Enums"]["enrolment_status"]
@@ -427,6 +472,7 @@ export type Database = {
       }
       guardians: {
         Row: {
+          airtable_id: string | null
           code: string
           created_at: string
           email: string | null
@@ -434,9 +480,11 @@ export type Database = {
           id: string
           mobile: string | null
           notes: string | null
+          seq: number
           status: Database["public"]["Enums"]["person_status"]
         }
         Insert: {
+          airtable_id?: string | null
           code?: string
           created_at?: string
           email?: string | null
@@ -444,9 +492,11 @@ export type Database = {
           id?: string
           mobile?: string | null
           notes?: string | null
+          seq?: number
           status?: Database["public"]["Enums"]["person_status"]
         }
         Update: {
+          airtable_id?: string | null
           code?: string
           created_at?: string
           email?: string | null
@@ -454,6 +504,7 @@ export type Database = {
           id?: string
           mobile?: string | null
           notes?: string | null
+          seq?: number
           status?: Database["public"]["Enums"]["person_status"]
         }
         Relationships: []
@@ -461,6 +512,7 @@ export type Database = {
       hours_packages: {
         Row: {
           admin_note: string | null
+          airtable_id: string | null
           approved_on: string
           code: string
           courtesy_reason: string | null
@@ -470,12 +522,14 @@ export type Database = {
           low_balance_threshold: number
           package_type: Database["public"]["Enums"]["package_type"]
           price: number
+          seq: number
           standard_price_id: string | null
           status: Database["public"]["Enums"]["package_status"]
           student_id: string
         }
         Insert: {
           admin_note?: string | null
+          airtable_id?: string | null
           approved_on?: string
           code?: string
           courtesy_reason?: string | null
@@ -485,12 +539,14 @@ export type Database = {
           low_balance_threshold?: number
           package_type?: Database["public"]["Enums"]["package_type"]
           price?: number
+          seq?: number
           standard_price_id?: string | null
           status?: Database["public"]["Enums"]["package_status"]
           student_id: string
         }
         Update: {
           admin_note?: string | null
+          airtable_id?: string | null
           approved_on?: string
           code?: string
           courtesy_reason?: string | null
@@ -500,6 +556,7 @@ export type Database = {
           low_balance_threshold?: number
           package_type?: Database["public"]["Enums"]["package_type"]
           price?: number
+          seq?: number
           standard_price_id?: string | null
           status?: Database["public"]["Enums"]["package_status"]
           student_id?: string
@@ -523,6 +580,7 @@ export type Database = {
       }
       operating_periods: {
         Row: {
+          airtable_id: string | null
           code: string
           created_at: string
           ends_on: string
@@ -533,6 +591,7 @@ export type Database = {
           status: Database["public"]["Enums"]["period_status"]
         }
         Insert: {
+          airtable_id?: string | null
           code: string
           created_at?: string
           ends_on: string
@@ -543,6 +602,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["period_status"]
         }
         Update: {
+          airtable_id?: string | null
           code?: string
           created_at?: string
           ends_on?: string
@@ -600,6 +660,7 @@ export type Database = {
       }
       programs: {
         Row: {
+          airtable_id: string | null
           code: string
           created_at: string
           default_offering_type:
@@ -615,6 +676,7 @@ export type Database = {
           year_level: string | null
         }
         Insert: {
+          airtable_id?: string | null
           code: string
           created_at?: string
           default_offering_type?:
@@ -630,6 +692,7 @@ export type Database = {
           year_level?: string | null
         }
         Update: {
+          airtable_id?: string | null
           code?: string
           created_at?: string
           default_offering_type?:
@@ -986,6 +1049,7 @@ export type Database = {
       }
       sessions: {
         Row: {
+          airtable_id: string | null
           class_offering_id: string
           code: string
           created_at: string
@@ -994,12 +1058,14 @@ export type Database = {
           notes: string | null
           replaces_session_id: string | null
           room: string | null
+          seq: number
           session_type: Database["public"]["Enums"]["session_type"]
           starts_at: string
           status: Database["public"]["Enums"]["session_status"]
           tutor_id: string | null
         }
         Insert: {
+          airtable_id?: string | null
           class_offering_id: string
           code?: string
           created_at?: string
@@ -1008,12 +1074,14 @@ export type Database = {
           notes?: string | null
           replaces_session_id?: string | null
           room?: string | null
+          seq?: number
           session_type?: Database["public"]["Enums"]["session_type"]
           starts_at: string
           status?: Database["public"]["Enums"]["session_status"]
           tutor_id?: string | null
         }
         Update: {
+          airtable_id?: string | null
           class_offering_id?: string
           code?: string
           created_at?: string
@@ -1022,6 +1090,7 @@ export type Database = {
           notes?: string | null
           replaces_session_id?: string | null
           room?: string | null
+          seq?: number
           session_type?: Database["public"]["Enums"]["session_type"]
           starts_at?: string
           status?: Database["public"]["Enums"]["session_status"]
@@ -1094,6 +1163,7 @@ export type Database = {
       }
       standard_prices: {
         Row: {
+          airtable_id: string | null
           basis: Database["public"]["Enums"]["pricing_basis"]
           code: string
           created_at: string
@@ -1109,6 +1179,7 @@ export type Database = {
           year_group: string | null
         }
         Insert: {
+          airtable_id?: string | null
           basis: Database["public"]["Enums"]["pricing_basis"]
           code: string
           created_at?: string
@@ -1124,6 +1195,7 @@ export type Database = {
           year_group?: string | null
         }
         Update: {
+          airtable_id?: string | null
           basis?: Database["public"]["Enums"]["pricing_basis"]
           code?: string
           created_at?: string
@@ -1175,6 +1247,7 @@ export type Database = {
       }
       students: {
         Row: {
+          airtable_id: string | null
           code: string
           created_at: string
           current_school: string | null
@@ -1185,10 +1258,12 @@ export type Database = {
           id: string
           joined_on: string | null
           notes: string | null
+          seq: number
           status: Database["public"]["Enums"]["person_status"]
           year_level: string | null
         }
         Insert: {
+          airtable_id?: string | null
           code?: string
           created_at?: string
           current_school?: string | null
@@ -1199,10 +1274,12 @@ export type Database = {
           id?: string
           joined_on?: string | null
           notes?: string | null
+          seq?: number
           status?: Database["public"]["Enums"]["person_status"]
           year_level?: string | null
         }
         Update: {
+          airtable_id?: string | null
           code?: string
           created_at?: string
           current_school?: string | null
@@ -1213,6 +1290,7 @@ export type Database = {
           id?: string
           joined_on?: string | null
           notes?: string | null
+          seq?: number
           status?: Database["public"]["Enums"]["person_status"]
           year_level?: string | null
         }
@@ -1276,6 +1354,7 @@ export type Database = {
           paid_date: string | null
           payment_ref: string | null
           rate_at_payout: number
+          seq: number
           status: Database["public"]["Enums"]["payout_status"]
           tutor_id: string
         }
@@ -1293,6 +1372,7 @@ export type Database = {
           paid_date?: string | null
           payment_ref?: string | null
           rate_at_payout?: number
+          seq?: number
           status?: Database["public"]["Enums"]["payout_status"]
           tutor_id: string
         }
@@ -1310,6 +1390,7 @@ export type Database = {
           paid_date?: string | null
           payment_ref?: string | null
           rate_at_payout?: number
+          seq?: number
           status?: Database["public"]["Enums"]["payout_status"]
           tutor_id?: string
         }
@@ -1325,6 +1406,7 @@ export type Database = {
       }
       tutors: {
         Row: {
+          airtable_id: string | null
           code: string
           colour: string | null
           created_at: string
@@ -1333,9 +1415,11 @@ export type Database = {
           id: string
           mobile: string | null
           notes: string | null
+          seq: number
           status: Database["public"]["Enums"]["person_status"]
         }
         Insert: {
+          airtable_id?: string | null
           code?: string
           colour?: string | null
           created_at?: string
@@ -1344,9 +1428,11 @@ export type Database = {
           id?: string
           mobile?: string | null
           notes?: string | null
+          seq?: number
           status?: Database["public"]["Enums"]["person_status"]
         }
         Update: {
+          airtable_id?: string | null
           code?: string
           colour?: string | null
           created_at?: string
@@ -1355,6 +1441,7 @@ export type Database = {
           id?: string
           mobile?: string | null
           notes?: string | null
+          seq?: number
           status?: Database["public"]["Enums"]["person_status"]
         }
         Relationships: []
