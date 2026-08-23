@@ -45,7 +45,7 @@ function StudentDetailPage() {
   const { data } = useSuspenseQuery(detailQueryOptions(id));
   if (!data) return null;
 
-  const { student, guardians, enrolments, packages, attendance, charges } = data;
+  const { student, guardians, siblings, enrolments, packages, attendance, charges } = data;
 
   const hoursRemaining = packages
     .filter((p: Row) => p.status === "active")
@@ -80,35 +80,12 @@ function StudentDetailPage() {
         </WarningNote>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Hours remaining"
-          value={formatHours(hoursRemaining)}
-          hint="Across active packages"
-        />
-        <StatCard
-          label="Open enrolments"
-          value={enrolments.filter((e: Row) => e.status !== "closed").length}
-        />
-        <StatCard
-          label="Owed a make-up"
-          value={absencesOwed}
-          tone={absencesOwed ? "warning" : "default"}
-        />
-        <StatCard
-          label="Outstanding"
-          value={formatMoney(outstanding)}
-          hint="To invoice plus invoiced"
-          tone={outstanding > 0 ? "warning" : "default"}
-        />
-      </div>
-
       <div className="grid gap-4 lg:grid-cols-2">
         <Section title="Family" count={guardians.length}>
           {guardians.length === 0 ? (
             <EmptyState
-              title="No guardians linked"
-              hint="Link one from Students & Families — the default payer must be one of them."
+              title="No parent attached"
+              hint="Attach one from Students & Families — the default payer must be one of them."
             />
           ) : (
             <ul className="divide-y">
@@ -121,24 +98,51 @@ function StudentDetailPage() {
                         <StatusPill tone="success">Default payer</StatusPill>
                       )}
                     </div>
-                    <div className="mt-0.5 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                       {g.relationship && <span>{g.relationship}</span>}
-                      {g.email && (
-                        <span className="inline-flex items-center gap-1">
-                          <Mail className="h-3 w-3" /> {g.email}
-                        </span>
-                      )}
                       {g.mobile && (
-                        <span className="inline-flex items-center gap-1">
+                        <a
+                          href={`tel:${String(g.mobile).replace(/\s/g, "")}`}
+                          className="inline-flex items-center gap-1 hover:underline"
+                        >
                           <Phone className="h-3 w-3" /> {g.mobile}
-                        </span>
+                        </a>
                       )}
+                      {g.email && (
+                        <a
+                          href={`mailto:${g.email}`}
+                          className="inline-flex items-center gap-1 hover:underline"
+                        >
+                          <Mail className="h-3 w-3" /> {g.email}
+                        </a>
+                      )}
+                      {!g.mobile && !g.email && <span>No contact details on file</span>}
                     </div>
                   </div>
                   <Code>{g.code}</Code>
                 </li>
               ))}
             </ul>
+          )}
+
+          {siblings.length > 0 && (
+            <div className="mt-3 border-t pt-3">
+              <div className="mb-1.5 text-xs font-medium text-muted-foreground">
+                Siblings on the same parent
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {siblings.map((sib: Row) => (
+                  <Link
+                    key={sib.id}
+                    to="/students/$id"
+                    params={{ id: sib.id }}
+                    className="rounded-full border px-2.5 py-1 text-xs hover:bg-accent"
+                  >
+                    {sib.full_name}
+                  </Link>
+                ))}
+              </div>
+            </div>
           )}
         </Section>
 
@@ -160,6 +164,29 @@ function StudentDetailPage() {
             </p>
           )}
         </Section>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Hours remaining"
+          value={formatHours(hoursRemaining)}
+          hint="Across active packages"
+        />
+        <StatCard
+          label="Open enrolments"
+          value={enrolments.filter((e: Row) => e.status !== "closed").length}
+        />
+        <StatCard
+          label="Owed a make-up"
+          value={absencesOwed}
+          tone={absencesOwed ? "warning" : "default"}
+        />
+        <StatCard
+          label="Outstanding"
+          value={formatMoney(outstanding)}
+          hint="To invoice plus invoiced"
+          tone={outstanding > 0 ? "warning" : "default"}
+        />
       </div>
 
       <Section title="Enrolments" count={enrolments.length}>

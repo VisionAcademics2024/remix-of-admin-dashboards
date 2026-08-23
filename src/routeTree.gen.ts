@@ -13,7 +13,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AccessRouteImport } from './routes/access'
 import { Route as AuthRouteImport } from './routes/auth'
-import { Route as PreviewRouteImport } from './routes/preview'
 import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
 import { Route as AuthenticatedEnrolmentsRouteImport } from './routes/_authenticated/enrolments'
 import { Route as AuthenticatedMakeUpsRouteImport } from './routes/_authenticated/make-ups'
@@ -21,7 +20,6 @@ import { Route as AuthenticatedNeedsAttentionRouteImport } from './routes/_authe
 import { Route as AuthenticatedRollRouteImport } from './routes/_authenticated/roll'
 import { Route as AuthenticatedSetupRouteImport } from './routes/_authenticated/setup'
 import { Route as AuthenticatedStaffRouteImport } from './routes/_authenticated/staff'
-import { Route as AuthenticatedStudentsRouteImport } from './routes/_authenticated/students'
 import { Route as AuthenticatedTimetableRouteImport } from './routes/_authenticated/timetable'
 import { Route as AuthenticatedTodayRouteImport } from './routes/_authenticated/today'
 import { Route as AuthenticatedTutorPayRouteImport } from './routes/_authenticated/tutor-pay'
@@ -32,6 +30,7 @@ import { Route as AuthenticatedPrototypePackagesRouteImport } from './routes/_au
 import { Route as AuthenticatedPrototypeSessionsRouteImport } from './routes/_authenticated/prototype.sessions'
 import { Route as AuthenticatedPrototypeStudentsRouteImport } from './routes/_authenticated/prototype.students'
 import { Route as AuthenticatedPrototypeTutorsRouteImport } from './routes/_authenticated/prototype.tutors'
+import { Route as AuthenticatedStudentsIndexRouteImport } from './routes/_authenticated/students.index'
 import { Route as AuthenticatedStudentsIdRouteImport } from './routes/_authenticated/students.$id'
 import { Route as AuthenticatedPrototypeStudentsIdRouteImport } from './routes/_authenticated/prototype.students.$id'
 
@@ -52,11 +51,6 @@ const AccessRoute = AccessRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PreviewRoute = PreviewRouteImport.update({
-  id: '/preview',
-  path: '/preview',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedBillingRoute = AuthenticatedBillingRouteImport.update({
@@ -93,11 +87,6 @@ const AuthenticatedSetupRoute = AuthenticatedSetupRouteImport.update({
 const AuthenticatedStaffRoute = AuthenticatedStaffRouteImport.update({
   id: '/staff',
   path: '/staff',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedStudentsRoute = AuthenticatedStudentsRouteImport.update({
-  id: '/students',
-  path: '/students',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedTimetableRoute = AuthenticatedTimetableRouteImport.update({
@@ -156,10 +145,16 @@ const AuthenticatedPrototypeTutorsRoute =
     path: '/prototype/tutors',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedStudentsIndexRoute =
+  AuthenticatedStudentsIndexRouteImport.update({
+    id: '/students/',
+    path: '/students/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedStudentsIdRoute = AuthenticatedStudentsIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => AuthenticatedStudentsRoute,
+  id: '/students/$id',
+  path: '/students/$id',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedPrototypeStudentsIdRoute =
   AuthenticatedPrototypeStudentsIdRouteImport.update({
@@ -172,7 +167,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/access': typeof AccessRoute
   '/auth': typeof AuthRoute
-  '/preview': typeof PreviewRoute
   '/billing': typeof AuthenticatedBillingRoute
   '/enrolments': typeof AuthenticatedEnrolmentsRoute
   '/make-ups': typeof AuthenticatedMakeUpsRoute
@@ -180,7 +174,6 @@ export interface FileRoutesByFullPath {
   '/roll': typeof AuthenticatedRollRoute
   '/setup': typeof AuthenticatedSetupRoute
   '/staff': typeof AuthenticatedStaffRoute
-  '/students': typeof AuthenticatedStudentsRouteWithChildren
   '/timetable': typeof AuthenticatedTimetableRoute
   '/today': typeof AuthenticatedTodayRoute
   '/tutor-pay': typeof AuthenticatedTutorPayRoute
@@ -192,13 +185,13 @@ export interface FileRoutesByFullPath {
   '/prototype/tutors': typeof AuthenticatedPrototypeTutorsRoute
   '/students/$id': typeof AuthenticatedStudentsIdRoute
   '/classes/': typeof AuthenticatedClassesIndexRoute
+  '/students/': typeof AuthenticatedStudentsIndexRoute
   '/prototype/students/$id': typeof AuthenticatedPrototypeStudentsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/access': typeof AccessRoute
   '/auth': typeof AuthRoute
-  '/preview': typeof PreviewRoute
   '/billing': typeof AuthenticatedBillingRoute
   '/enrolments': typeof AuthenticatedEnrolmentsRoute
   '/make-ups': typeof AuthenticatedMakeUpsRoute
@@ -206,7 +199,6 @@ export interface FileRoutesByTo {
   '/roll': typeof AuthenticatedRollRoute
   '/setup': typeof AuthenticatedSetupRoute
   '/staff': typeof AuthenticatedStaffRoute
-  '/students': typeof AuthenticatedStudentsRouteWithChildren
   '/timetable': typeof AuthenticatedTimetableRoute
   '/today': typeof AuthenticatedTodayRoute
   '/tutor-pay': typeof AuthenticatedTutorPayRoute
@@ -218,6 +210,7 @@ export interface FileRoutesByTo {
   '/prototype/tutors': typeof AuthenticatedPrototypeTutorsRoute
   '/students/$id': typeof AuthenticatedStudentsIdRoute
   '/classes': typeof AuthenticatedClassesIndexRoute
+  '/students': typeof AuthenticatedStudentsIndexRoute
   '/prototype/students/$id': typeof AuthenticatedPrototypeStudentsIdRoute
 }
 export interface FileRoutesById {
@@ -226,7 +219,6 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/access': typeof AccessRoute
   '/auth': typeof AuthRoute
-  '/preview': typeof PreviewRoute
   '/_authenticated/billing': typeof AuthenticatedBillingRoute
   '/_authenticated/enrolments': typeof AuthenticatedEnrolmentsRoute
   '/_authenticated/make-ups': typeof AuthenticatedMakeUpsRoute
@@ -234,7 +226,6 @@ export interface FileRoutesById {
   '/_authenticated/roll': typeof AuthenticatedRollRoute
   '/_authenticated/setup': typeof AuthenticatedSetupRoute
   '/_authenticated/staff': typeof AuthenticatedStaffRoute
-  '/_authenticated/students': typeof AuthenticatedStudentsRouteWithChildren
   '/_authenticated/timetable': typeof AuthenticatedTimetableRoute
   '/_authenticated/today': typeof AuthenticatedTodayRoute
   '/_authenticated/tutor-pay': typeof AuthenticatedTutorPayRoute
@@ -246,6 +237,7 @@ export interface FileRoutesById {
   '/_authenticated/prototype/tutors': typeof AuthenticatedPrototypeTutorsRoute
   '/_authenticated/students/$id': typeof AuthenticatedStudentsIdRoute
   '/_authenticated/classes/': typeof AuthenticatedClassesIndexRoute
+  '/_authenticated/students/': typeof AuthenticatedStudentsIndexRoute
   '/_authenticated/prototype/students/$id': typeof AuthenticatedPrototypeStudentsIdRoute
 }
 export interface FileRouteTypes {
@@ -254,7 +246,6 @@ export interface FileRouteTypes {
     | '/'
     | '/access'
     | '/auth'
-    | '/preview'
     | '/billing'
     | '/enrolments'
     | '/make-ups'
@@ -262,7 +253,6 @@ export interface FileRouteTypes {
     | '/roll'
     | '/setup'
     | '/staff'
-    | '/students'
     | '/timetable'
     | '/today'
     | '/tutor-pay'
@@ -274,13 +264,13 @@ export interface FileRouteTypes {
     | '/prototype/tutors'
     | '/students/$id'
     | '/classes/'
+    | '/students/'
     | '/prototype/students/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/access'
     | '/auth'
-    | '/preview'
     | '/billing'
     | '/enrolments'
     | '/make-ups'
@@ -288,7 +278,6 @@ export interface FileRouteTypes {
     | '/roll'
     | '/setup'
     | '/staff'
-    | '/students'
     | '/timetable'
     | '/today'
     | '/tutor-pay'
@@ -300,6 +289,7 @@ export interface FileRouteTypes {
     | '/prototype/tutors'
     | '/students/$id'
     | '/classes'
+    | '/students'
     | '/prototype/students/$id'
   id:
     | '__root__'
@@ -307,7 +297,6 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/access'
     | '/auth'
-    | '/preview'
     | '/_authenticated/billing'
     | '/_authenticated/enrolments'
     | '/_authenticated/make-ups'
@@ -315,7 +304,6 @@ export interface FileRouteTypes {
     | '/_authenticated/roll'
     | '/_authenticated/setup'
     | '/_authenticated/staff'
-    | '/_authenticated/students'
     | '/_authenticated/timetable'
     | '/_authenticated/today'
     | '/_authenticated/tutor-pay'
@@ -327,6 +315,7 @@ export interface FileRouteTypes {
     | '/_authenticated/prototype/tutors'
     | '/_authenticated/students/$id'
     | '/_authenticated/classes/'
+    | '/_authenticated/students/'
     | '/_authenticated/prototype/students/$id'
   fileRoutesById: FileRoutesById
 }
@@ -335,7 +324,6 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AccessRoute: typeof AccessRoute
   AuthRoute: typeof AuthRoute
-  PreviewRoute: typeof PreviewRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -366,13 +354,6 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/preview': {
-      id: '/preview'
-      path: '/preview'
-      fullPath: '/preview'
-      preLoaderRoute: typeof PreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/billing': {
@@ -422,13 +403,6 @@ declare module '@tanstack/react-router' {
       path: '/staff'
       fullPath: '/staff'
       preLoaderRoute: typeof AuthenticatedStaffRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/students': {
-      id: '/_authenticated/students'
-      path: '/students'
-      fullPath: '/students'
-      preLoaderRoute: typeof AuthenticatedStudentsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/timetable': {
@@ -501,12 +475,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPrototypeTutorsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/students/': {
+      id: '/_authenticated/students/'
+      path: '/students'
+      fullPath: '/students/'
+      preLoaderRoute: typeof AuthenticatedStudentsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/students/$id': {
       id: '/_authenticated/students/$id'
-      path: '/$id'
+      path: '/students/$id'
       fullPath: '/students/$id'
       preLoaderRoute: typeof AuthenticatedStudentsIdRouteImport
-      parentRoute: typeof AuthenticatedStudentsRoute
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/prototype/students/$id': {
       id: '/_authenticated/prototype/students/$id'
@@ -517,19 +498,6 @@ declare module '@tanstack/react-router' {
     }
   }
 }
-
-interface AuthenticatedStudentsRouteChildren {
-  AuthenticatedStudentsIdRoute: typeof AuthenticatedStudentsIdRoute
-}
-
-const AuthenticatedStudentsRouteChildren: AuthenticatedStudentsRouteChildren = {
-  AuthenticatedStudentsIdRoute: AuthenticatedStudentsIdRoute,
-}
-
-const AuthenticatedStudentsRouteWithChildren =
-  AuthenticatedStudentsRoute._addFileChildren(
-    AuthenticatedStudentsRouteChildren,
-  )
 
 interface AuthenticatedPrototypeStudentsRouteChildren {
   AuthenticatedPrototypeStudentsIdRoute: typeof AuthenticatedPrototypeStudentsIdRoute
@@ -554,7 +522,6 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedRollRoute: typeof AuthenticatedRollRoute
   AuthenticatedSetupRoute: typeof AuthenticatedSetupRoute
   AuthenticatedStaffRoute: typeof AuthenticatedStaffRoute
-  AuthenticatedStudentsRoute: typeof AuthenticatedStudentsRouteWithChildren
   AuthenticatedTimetableRoute: typeof AuthenticatedTimetableRoute
   AuthenticatedTodayRoute: typeof AuthenticatedTodayRoute
   AuthenticatedTutorPayRoute: typeof AuthenticatedTutorPayRoute
@@ -564,7 +531,9 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedPrototypeSessionsRoute: typeof AuthenticatedPrototypeSessionsRoute
   AuthenticatedPrototypeStudentsRoute: typeof AuthenticatedPrototypeStudentsRouteWithChildren
   AuthenticatedPrototypeTutorsRoute: typeof AuthenticatedPrototypeTutorsRoute
+  AuthenticatedStudentsIdRoute: typeof AuthenticatedStudentsIdRoute
   AuthenticatedClassesIndexRoute: typeof AuthenticatedClassesIndexRoute
+  AuthenticatedStudentsIndexRoute: typeof AuthenticatedStudentsIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -575,7 +544,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedRollRoute: AuthenticatedRollRoute,
   AuthenticatedSetupRoute: AuthenticatedSetupRoute,
   AuthenticatedStaffRoute: AuthenticatedStaffRoute,
-  AuthenticatedStudentsRoute: AuthenticatedStudentsRouteWithChildren,
   AuthenticatedTimetableRoute: AuthenticatedTimetableRoute,
   AuthenticatedTodayRoute: AuthenticatedTodayRoute,
   AuthenticatedTutorPayRoute: AuthenticatedTutorPayRoute,
@@ -586,7 +554,9 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedPrototypeStudentsRoute:
     AuthenticatedPrototypeStudentsRouteWithChildren,
   AuthenticatedPrototypeTutorsRoute: AuthenticatedPrototypeTutorsRoute,
+  AuthenticatedStudentsIdRoute: AuthenticatedStudentsIdRoute,
   AuthenticatedClassesIndexRoute: AuthenticatedClassesIndexRoute,
+  AuthenticatedStudentsIndexRoute: AuthenticatedStudentsIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -597,7 +567,6 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AccessRoute: AccessRoute,
   AuthRoute: AuthRoute,
-  PreviewRoute: PreviewRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
