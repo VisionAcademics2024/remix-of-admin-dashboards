@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { meQueryOptions } from "@/lib/vision/me";
 
@@ -31,25 +31,35 @@ function AuthenticatedLayout() {
   if (!me.staff) return null;
 
   return (
-    <SidebarProvider>
-      <div className="flex min-h-screen w-full">
-        <AppSidebar role={me.staff.role} name={me.staff.full_name} />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4 lg:px-6">
-            <SidebarTrigger />
-            <span className="text-sm font-medium text-muted-foreground">Vision Admin</span>
-            <span className="ml-auto text-sm text-muted-foreground">
-              {me.staff.full_name}
-              <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-xs capitalize text-secondary-foreground">
-                {me.staff.role}
-              </span>
+    <SidebarProvider className="bg-transparent">
+      <AppSidebar role={me.staff.role} name={me.staff.full_name} />
+      <SidebarInset className="min-w-0 bg-transparent md:pr-2">
+        <header className="spatial-topbar sticky top-3 z-30 mx-3 mt-3 flex h-14 shrink-0 items-center gap-3 rounded-2xl px-3.5 sm:px-4 lg:mx-4">
+          <SidebarTrigger className="h-9 w-9 rounded-full border border-white/35 bg-background/25 shadow-sm backdrop-blur-xl" />
+          <div className="hidden items-center gap-2 sm:flex">
+            <span className="h-2 w-2 rounded-full bg-success shadow-[0_0_0_4px_color-mix(in_oklab,var(--color-success)_14%,transparent)]" />
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              Operations workspace
             </span>
-          </header>
-          <main className="min-w-0 flex-1 p-4 lg:p-6">
+          </div>
+          <div className="ml-auto flex items-center gap-3">
+            <div className="hidden text-right sm:block">
+              <p className="text-xs font-semibold leading-tight">{me.staff.full_name}</p>
+              <p className="mt-0.5 text-[0.68rem] capitalize text-muted-foreground">
+                {me.staff.role}
+              </p>
+            </div>
+            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/45 bg-secondary/75 text-xs font-bold text-secondary-foreground shadow-sm backdrop-blur-xl">
+              {me.staff.full_name.charAt(0).toUpperCase()}
+            </div>
+          </div>
+        </header>
+        <main className="min-w-0 flex-1 px-4 pb-8 pt-7 lg:px-8 lg:pb-10 lg:pt-9">
+          <div className="mx-auto w-full max-w-[100rem]">
             <Outlet />
-          </main>
-        </div>
-      </div>
+          </div>
+        </main>
+      </SidebarInset>
     </SidebarProvider>
   );
 }
