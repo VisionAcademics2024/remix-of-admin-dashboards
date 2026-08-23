@@ -1,116 +1,136 @@
-# Migrating Vision Admin V2 into the app
+# Migrating Vision Admin V2 (Jah Copy) into the app
 
-Written against your **actual** base, not the generic plan in
-`docs/spec/07-data-migration.md`. I read the schema and record counts directly
-through the Airtable connector on 23 Aug 2026.
+Written against your **actual** base. I read the schema and record counts
+directly through the Airtable connector.
 
-Read section 2 before doing anything — there are three decisions that have to be
-made first, and one of them affects what families see on invoices.
+Base: **Vision Admin V2 (Jah Copy)** — `appEobvB14kpW8hHw`, confirmed by you as
+the live one.
+
+The runnable part lives in `scripts/airtable-import/`. Read section 2 first —
+there is one blocker that has to be settled before any of it runs.
 
 ---
 
 ## 1. What is actually there
 
-Base: **Vision Admin V2** — `appAquMtznlUgsPBw`.
-
 | Airtable table | Records | Becomes |
 |---|---:|---|
-| Parents / Guardians | 26 | `guardians` |
-| Students | 29 | `students` + `student_guardians` |
-| Tutors | small | `tutors` |
+| Parents / Guardians | 28 | `guardians` |
+| Students | 33 | `students` + `student_guardians` |
+| Tutors | 5 | `tutors` + `tutor_pay_rates` |
 | Operating Periods | small | `operating_periods` |
 | Standard Prices | small | `standard_prices` |
 | Programs | small | `programs` |
-| Class Offerings | 20 | `class_offerings` |
-| **Billing** | 38 | **`enrolments`** |
-| **Hours** | 26 | **`hours_packages`** + `package_eligibility` |
-| Sessions | 166 | `sessions` |
-| Attendance | 340 | `attendance` |
+| Class Offerings | 23 | `class_offerings` |
+| **Billing** | 40 | **`enrolments`** |
+| **Hours** | 24 | **`hours_packages`** + `package_eligibility` |
+| Sessions | 216 | `sessions` + `session_pay_adjustments` |
+| Attendance | 391 | `attendance` |
 | Charges | 28 | `charges` |
+| Tutor Payouts | 0 | `tutor_payouts` |
 
-**Roughly 680 records in total.** That number matters more than anything else in
-this document: this is not an ETL project. It is one careful pass that fits in
-an afternoon, and it can be re-run from scratch as many times as you like.
+**About 790 records.** Small enough that the whole thing is one careful pass
+that can be re-run from scratch as often as you like.
 
-The good news is that your V2 base is a close match for the schema — the field
-names line up, the select options line up, and you already keep `Legacy Record
-ID` on most tables. Whoever designed V2 did the hard part.
+### Two corrections to what I told you earlier
 
-### Where there is nothing to migrate
+I originally read **Vision Admin V2**, not the Jah Copy. The Jah Copy is a
+later, more developed base, and two things I said about V2 are wrong for it:
 
-**Tutor pay does not exist in Airtable.** The Tutors table says so explicitly:
-*"No pay rates or payroll fields."* So `tutor_pay_rates`, `session_pay_adjustments`
-and `tutor_payouts` all start empty. Before your first payroll run in the new
-app you will need to enter each tutor's hourly rate on **Tutor Pay → Rates**,
-with an `effective_from` date early enough to cover the lessons you migrated —
-otherwise historical lessons compute at $0.
+**Tutor pay does exist.** The Jah Copy added it. `Tutors.Hourly Rate` is
+populated (Harrison Liu $45, Irene Park $35, Alice Park $35; Joshua Chan and
+Justin Cho both $0), there is a `Tutor Payouts` table, and `Sessions` carries
+`Pay Adjustment` and `Pay Note`. All three now migrate:
+
+- `Tutors.Hourly Rate` → one `tutor_pay_rates` row per tutor, effective from
+  before the earliest imported lesson so history prices correctly instead of
+  computing at zero.
+- `Sessions.Pay Adjustment` + `Pay Note` → `session_pay_adjustments`.
+- `Tutor Payouts` → `tutor_payouts`. Currently empty, so nothing moves.
+
+The two $0 rates import as $0. If Joshua and Justin are owners rather than
+hourly staff that is correct; if not, fix the rate in Airtable before importing
+or on the Tutor Pay screen after.
+
+**There are no draft Billing records.** All 40 are `Active`, so the decision
+about excluding drafts is moot — everything comes across. The exclusion is still
+in the transform in case a draft appears before cutover.
+
+### Codes
+
+Your Class Offering codes are a **mix** — 17 in the old
+`OFF-2026T3-Y5-PRI-GEN-01` format and 6 in the newer `OFF-0021` format. That is
+what you were getting at with "change all of them": they are now regenerated
+consistently as `OFF-0001`…`OFF-0023` in Airtable creation order, and Billing
+becomes `ENR-nnnn` in `BILL-nnnn` order.
+
+Every other table keeps codes that match what Airtable already had. Originals
+are preserved in `airtable_id` on every row, forever.
 
 ### Fields with no home
 
-`Students.Gender` and `Students.Exam Targets` have no column in the new schema.
-Tell me if you want them and I will add them; otherwise they are dropped.
+`Students.Gender` and `Students.Exam Targets` have no column in the schema. Say
+the word and I will add them; otherwise they are dropped.
 
 ---
 
-## 2. Three decisions to make first
+## 2. The blocker: which schema is actually live
 
-### Decision 1 — codes
+**This has to be settled before anything runs, and I cannot settle it from
+here** — it needs one query against your Supabase database.
 
-In the new database, `code` is a **generated column**. It is computed from a
-sequence and cannot be written to. Most of your codes already match the shape it
-produces, so they will come out identical if the rows are loaded in code order:
+The repo contains **two migrations that both create the Vision schema**, and
+they disagree:
 
-| Table | Your code | Generated | Match? |
-|---|---|---|---|
-| Students | `STU-0019` | `STU-nnnn` | ✅ |
-| Guardians | `GUA-0024` | `GUA-nnnn` | ✅ |
-| Hours | `HRS-0001` | `HRS-nnnn` | ✅ |
-| Sessions | `SES-0051` | `SES-nnnn` | ✅ |
-| Attendance | `ATT-0115` | `ATT-nnnn` | ✅ |
-| Charges | `CHG-2026-0008` | `CHG-yyyy-nnnn` | ✅ |
-| **Class Offerings** | `OFF-2026T3-Y6-PRI-GEN-01` | `OFF-nnnn` | ❌ |
-| **Billing** | `BILL-0038` | `ENR-0038` | ❌ prefix |
+| | `20260823074753_ed256d3c…` | `20260823090100_vision_crm_core` |
+|---|---|---|
+| `airtable_id` | absent | on every table |
+| `code` | plain column + per-table sequence | generated column |
+| Guardian codes | `GDN-0001` | `GUA-0001` |
+| Hours package codes | `PKG-00001` | `HRS-0001` |
+| Charge codes | `CHG-00001` | `CHG-2026-0001` |
+| `charge_one_source` | **missing** | present |
+| Default-payer trigger | **missing** | present |
+| `enrolment_method_required` | **missing** | present |
+| `make_up_has_source` | **missing** | present |
 
-So two tables cannot keep their codes.
+Applied in filename order the first wins and the second fails outright with
+`type "staff_role" already exists`. Which one your database actually has depends
+on the order Supabase ran them, and that is not knowable from the repo.
 
-- **Recommended:** let both be regenerated. The originals are preserved forever
-  in `airtable_id`, and neither `OFF-` nor `BILL-` codes are the sort of thing
-  you quote to a parent.
-- **If those codes appear on anything you have already sent families**, say so
-  and I will convert `code` on those two tables to a plain unique column with a
-  trigger for new rows. It is a small change but it must be decided before the
-  load, not after.
+It matters for two reasons:
 
-### Decision 2 — Draft billing records
+1. **`airtable_id` is what makes the import re-runnable and reconcilable.**
+   Without it there is no way to say "this Postgres row came from that Airtable
+   record", so a second run duplicates everything and the hours-balance check in
+   section 6 cannot be written at all.
+2. **`charge_one_source` is the constraint that makes double-billing
+   impossible** — the single most load-bearing rule in `04-business-logic.md`.
+   If it is missing, so is the guarantee.
 
-Your Billing table has a **`Draft`** status. The new `enrolment_status` enum only
-has `trial`, `active` and `closed`, so drafts have nowhere to go.
+### What to do
 
-Drafts are, by definition, incomplete — they are the half-filled records the
-Draft-first interface produces. **My recommendation is to exclude them** and
-re-create any that are still wanted directly in the new app, where Class Builder
-makes it a 30-second job.
+Run this against your Supabase database and send me the output:
 
-Before you decide, run this in Airtable to see how many there are: filter Billing
-by Status is Draft, and also by Status is empty (blank counts as draft too).
-
-### Decision 3 — which base is live
-
-You have six bases. I used **Vision Admin V2** (`appAquMtznlUgsPBw`). The other
-five look like snapshots and copies:
-
-```
-Vision Admin                                   apptzUOQ9GOn09pHj
-Vision Admin V1 Snapshot - 2026-07-28          apptScLjoccF9pCvY
-Vision Admin V2                                appAquMtznlUgsPBw   ← assumed live
-Vision Admin V2 Pre-Test - 2026-07-28          appJkYG9NBOlc0hiu
-Vision Admin V2 — Step 6 UAT — 2026-08-05      appIU3t9XzwZzcmdv
-Vision Admin V2 (Jah Copy)                     appEobvB14kpW8hHw
+```sh
+psql "$DATABASE_URL" -f scripts/airtable-import/00-preflight.sql
 ```
 
-Confirm V2 is the one with your real current data. If it is actually the Jah Copy
-or the UAT base, tell me and everything below still applies — only the base ID
-changes.
+`DATABASE_URL` is in Supabase under Project Settings → Database → Connection
+string → URI. Or paste the file into the Supabase SQL editor.
+
+It prints one of three verdicts:
+
+- **SPEC SCHEMA** — the import runs exactly as written. Nothing else needed.
+- **ALTERNATE SCHEMA** — I write a small alignment migration first that adds
+  `airtable_id`, the missing constraints and the default-payer trigger. Half an
+  hour of work, and it needs doing regardless of the migration because those
+  constraints are the app's correctness guarantees.
+- **NO VISION SCHEMA** — the core migration never applied; that gets fixed
+  first.
+
+It also reports whether the target already holds data, because importing on top
+of real rows is not safe.
 
 ---
 
