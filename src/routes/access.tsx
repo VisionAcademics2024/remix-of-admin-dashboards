@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { claimFirstOwner, getMe, requestAccess } from "@/lib/vision/session.functions";
+import { claimFirstOwner, requestAccess } from "@/lib/vision/session.functions";
 import { meQueryOptions } from "@/lib/vision/me";
 
 /**
@@ -162,4 +162,4 @@ function AccessPage() {
   );
 }
 
-export type Me = Awaited<ReturnType<typeof getMe>>;
+
