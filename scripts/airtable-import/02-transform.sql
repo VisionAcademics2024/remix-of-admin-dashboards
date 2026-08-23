@@ -354,15 +354,23 @@ where coalesce(staging.num(s.fields, 'Pay Adjustment'), 0) <> 0
   and not exists (select 1 from session_pay_adjustments spa where spa.session_id = se.id);
 
 -- -------------------------------------------------------------- 13. attendance
+-- Two inserts, not one, because a make-up must carry its source absence in the
+-- same statement that names it a make-up — make_up_has_source is an immediate
+-- check. The first pass lays down every ordinary roll entry, which is also
+-- where the absences live; the second pass can then resolve each make-up's
+-- source by lookup.
+--
+-- Doing it the other way round — insert everything as 'regular' and promote
+-- afterwards — collides with attendance_unique whenever a make-up sits on the
+-- same lesson as that student's ordinary roll entry, which the real data does
+-- contain. The final state is legal; the intermediate one is not.
+
 insert into attendance (
   session_id, enrolment_id, att_type, status, package_id, correction_note,
   airtable_id
 )
 select
   se.id, e.id,
-  -- Make-ups land as 'regular' and are promoted in the second pass below.
-  -- make_up_has_source is an immediate check, so the type and the source have
-  -- to be set in the same statement — they cannot be filled in afterwards.
   case staging.txt(a.fields, 'Attendance Type')
     when 'Trial' then 'trial'
     else 'regular'
@@ -383,28 +391,67 @@ select
 from staging.at_attendance a
 join sessions   se on se.airtable_id = staging.link1(a.fields, 'Session')
 join enrolments e  on e.airtable_id  = staging.link1(a.fields, 'Billing')
+where coalesce(staging.txt(a.fields, 'Attendance Type'), 'Regular') <> 'Make-up'
 order by staging.txt(a.fields, 'Attendance Code'), a.created_time
-on conflict (airtable_id) do nothing;
+on conflict do nothing;
 
--- Second pass: promote the make-ups, setting type and source together so the
--- check constraint is satisfied by the same statement.
-update attendance tgt
-set att_type = 'make_up',
-    source_attendance_id = src.id
+-- Second pass: the make-ups, each one naming the absence it settles.
+insert into attendance (
+  session_id, enrolment_id, att_type, status, package_id, source_attendance_id,
+  correction_note, airtable_id
+)
+select
+  se.id, e.id,
+  'make_up'::attendance_type,
+  case staging.txt(a.fields, 'Attendance Status')
+    when 'Present'  then 'present'
+    when 'Absent'   then 'absent'
+    else 'not_marked'
+  end::attendance_status,
+  (select hp.id from hours_packages hp
+    where hp.airtable_id = staging.link1(a.fields, 'Hours')
+      and exists (select 1 from package_eligibility pe
+                  where pe.package_id = hp.id and pe.enrolment_id = e.id)),
+  src.id,
+  staging.txt(a.fields, 'Admin Correction Note'),
+  a.id
 from staging.at_attendance a
+join sessions   se  on se.airtable_id  = staging.link1(a.fields, 'Session')
+join enrolments e   on e.airtable_id   = staging.link1(a.fields, 'Billing')
 join attendance src on src.airtable_id = staging.link1(a.fields, 'Source Absence')
-where tgt.airtable_id = a.id
-  and staging.txt(a.fields, 'Attendance Type') = 'Make-up';
+where staging.txt(a.fields, 'Attendance Type') = 'Make-up'
+order by staging.txt(a.fields, 'Attendance Code'), a.created_time
+on conflict do nothing;
 
--- A make-up whose source absence did not come across stays 'regular' rather
--- than being lost, with a note saying what happened.
-update attendance tgt
-set correction_note = concat_ws(' ', tgt.correction_note,
-      '[Import] Recorded as a make-up in Airtable, but its source absence did not come across.')
+-- A make-up whose source absence did not come across is still a lesson that
+-- happened, so it lands as an ordinary roll entry rather than being dropped,
+-- with a note saying what it was.
+insert into attendance (
+  session_id, enrolment_id, att_type, status, package_id, correction_note,
+  airtable_id
+)
+select
+  se.id, e.id,
+  'regular'::attendance_type,
+  case staging.txt(a.fields, 'Attendance Status')
+    when 'Present'  then 'present'
+    when 'Absent'   then 'absent'
+    else 'not_marked'
+  end::attendance_status,
+  (select hp.id from hours_packages hp
+    where hp.airtable_id = staging.link1(a.fields, 'Hours')
+      and exists (select 1 from package_eligibility pe
+                  where pe.package_id = hp.id and pe.enrolment_id = e.id)),
+  concat_ws(' ', staging.txt(a.fields, 'Admin Correction Note'),
+    '[Import] Recorded as a make-up in Airtable, but its source absence did not come across.'),
+  a.id
 from staging.at_attendance a
-where tgt.airtable_id = a.id
-  and staging.txt(a.fields, 'Attendance Type') = 'Make-up'
-  and tgt.att_type <> 'make_up';
+join sessions   se on se.airtable_id = staging.link1(a.fields, 'Session')
+join enrolments e  on e.airtable_id  = staging.link1(a.fields, 'Billing')
+where staging.txt(a.fields, 'Attendance Type') = 'Make-up'
+  and not exists (select 1 from attendance x where x.airtable_id = a.id)
+order by staging.txt(a.fields, 'Attendance Code'), a.created_time
+on conflict do nothing;
 
 -- ----------------------------------------------------------------- 14. charges
 insert into charges (
@@ -427,11 +474,18 @@ select
     when 'Internal Cash/Bank' then 'internal'
     else 'parent'
   end::charge_route,
-  case staging.txt(c.fields, 'Charge Status')
-    when 'To Invoice' then 'to_invoice'
-    when 'Invoiced'   then 'invoiced'
-    when 'Paid'       then 'paid'
-    when 'Cancelled'  then 'cancelled'
+  -- 'Paid' is only honoured when the payment is actually evidenced. Airtable
+  -- carries 19 charges marked Paid with neither a date nor a method, and their
+  -- own migration notes say the status was meant to read Invoiced. Landing
+  -- those as paid would put unevidenced money in the ledger, so they come
+  -- across as invoiced and are named individually by 03-verify.
+  case
+    when staging.txt(c.fields, 'Charge Status') = 'Paid'
+     and staging.dt(c.fields, 'Paid Date') is not null
+     and staging.txt(c.fields, 'Payment Method') is not null then 'paid'
+    when staging.txt(c.fields, 'Charge Status') = 'Paid'       then 'invoiced'
+    when staging.txt(c.fields, 'Charge Status') = 'Invoiced'   then 'invoiced'
+    when staging.txt(c.fields, 'Charge Status') = 'Cancelled'  then 'cancelled'
     else 'to_invoice'
   end::charge_status,
   staging.dt(c.fields, 'Invoice Date'),
@@ -443,7 +497,15 @@ select
     when 'Other'         then 'other'
   end::payment_method,
   staging.txt(c.fields, 'Payment Reference'),
-  staging.txt(c.fields, 'Notes'),
+  case
+    when staging.txt(c.fields, 'Charge Status') = 'Paid'
+     and (staging.dt(c.fields, 'Paid Date') is null
+          or staging.txt(c.fields, 'Payment Method') is null)
+    then concat_ws(' ', staging.txt(c.fields, 'Notes'),
+      '[Import] Airtable marked this Paid with no payment date or method. '
+      'Brought across as Invoiced; mark it paid once the payment is confirmed.')
+    else staging.txt(c.fields, 'Notes')
+  end,
   c.id
 from staging.at_charges c
 join      students       st on st.airtable_id = staging.link1(c.fields, 'Student')

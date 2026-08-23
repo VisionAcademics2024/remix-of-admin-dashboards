@@ -352,6 +352,38 @@ begin
   end loop;
 end $$;
 
+-- ------------------------------------------------- one roll entry per lesson
+-- The spec allows a student exactly one attendance row per lesson. The other
+-- variant keys the same index on att_type as well, which lets a make-up sit on
+-- the same lesson as that student's ordinary roll entry — two records of one
+-- attendance, and two claims on the same hour.
+--
+-- Tightening is only safe when nothing already violates it, so a database that
+-- does keeps the looser index and says so rather than failing the migration.
+do $$
+declare dupes int;
+begin
+  if to_regclass('public.attendance') is null then
+    return;
+  end if;
+
+  select count(*) into dupes from (
+    select 1 from public.attendance
+    group by session_id, enrolment_id having count(*) > 1
+  ) d;
+
+  if dupes > 0 then
+    raise notice
+      'align: attendance_unique left as-is — % lesson(s) already carry more than '
+      'one roll entry for the same student. Resolve those, then re-run.', dupes;
+    return;
+  end if;
+
+  drop index if exists public.attendance_unique;
+  create unique index attendance_unique
+    on public.attendance (session_id, enrolment_id);
+end $$;
+
 -- ------------------------------------------------------- views, rebuilt to spec
 -- Copied verbatim from 20260823090100_vision_crm_core.sql so there is exactly
 -- one definition of each derivation, whichever variant this database started as.
