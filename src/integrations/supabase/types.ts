@@ -14,7 +14,7 @@ export type Database = {
   }
   public: {
     Tables: {
-      proto_packages: {
+      packages: {
         Row: {
           created_at: string
           description: string | null
@@ -50,7 +50,7 @@ export type Database = {
         }
         Relationships: []
       }
-      proto_session_students: {
+      session_students: {
         Row: {
           attendance_status: string
           created_at: string
@@ -83,19 +83,19 @@ export type Database = {
             foreignKeyName: "session_students_session_id_fkey"
             columns: ["session_id"]
             isOneToOne: false
-            referencedRelation: "proto_sessions"
+            referencedRelation: "sessions"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "session_students_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
-            referencedRelation: "proto_students"
+            referencedRelation: "students"
             referencedColumns: ["id"]
           },
         ]
       }
-      proto_sessions: {
+      sessions: {
         Row: {
           created_at: string
           end_time: string
@@ -140,12 +140,12 @@ export type Database = {
             foreignKeyName: "sessions_tutor_id_fkey"
             columns: ["tutor_id"]
             isOneToOne: false
-            referencedRelation: "proto_tutors"
+            referencedRelation: "tutors"
             referencedColumns: ["id"]
           },
         ]
       }
-      proto_student_packages: {
+      student_packages: {
         Row: {
           created_at: string
           expiry_date: string | null
@@ -190,19 +190,19 @@ export type Database = {
             foreignKeyName: "student_packages_package_id_fkey"
             columns: ["package_id"]
             isOneToOne: false
-            referencedRelation: "proto_packages"
+            referencedRelation: "packages"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "student_packages_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
-            referencedRelation: "proto_students"
+            referencedRelation: "students"
             referencedColumns: ["id"]
           },
         ]
       }
-      proto_students: {
+      students: {
         Row: {
           created_at: string
           date_of_birth: string | null
@@ -256,7 +256,7 @@ export type Database = {
         }
         Relationships: []
       }
-      proto_tutors: {
+      tutors: {
         Row: {
           created_at: string
           email: string | null
@@ -295,7 +295,7 @@ export type Database = {
         }
         Relationships: []
       }
-      proto_user_roles: {
+      user_roles: {
         Row: {
           id: string
           role: Database["public"]["Enums"]["app_role"]
