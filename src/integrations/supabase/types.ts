@@ -671,6 +671,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          notes: string | null
           standard_duration_hours: number
           subject: string | null
           year_level: string | null
@@ -687,6 +688,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          notes?: string | null
           standard_duration_hours?: number
           subject?: string | null
           year_level?: string | null
@@ -703,6 +705,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          notes?: string | null
           standard_duration_hours?: number
           subject?: string | null
           year_level?: string | null
