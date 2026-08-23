@@ -192,6 +192,50 @@ export const linkGuardian = createServerFn({ method: "POST" })
     return { success: true };
   });
 
+/**
+ * Create a parent and attach them to a student in one call, optionally making
+ * them the payer. Students come first and the family is built onto them, so
+ * this is the path taken almost every time; doing it as three separate calls
+ * from the browser can leave a guardian on file attached to nobody.
+ */
+export const addGuardianToStudent = createServerFn({ method: "POST" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    guardianInput
+      .extend({
+        student_id: z.string().uuid(),
+        relationship: z.string().optional().or(z.literal("")),
+        make_payer: z.boolean().default(false),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const { student_id, relationship, make_payer, ...guardian } = data;
+    const client = db(context.supabase);
+
+    const { data: row, error } = await client
+      .from("guardians")
+      .insert(blankToNull(guardian))
+      .select(GUARDIAN_FIELDS)
+      .single();
+    if (error) throw error;
+
+    const { error: linkError } = await client
+      .from("student_guardians")
+      .insert({ student_id, guardian_id: row.id, relationship: relationship || null });
+    if (linkError) throw linkError;
+
+    if (make_payer) {
+      const { error: payerError } = await client
+        .from("students")
+        .update({ default_payer_id: row.id })
+        .eq("id", student_id);
+      if (payerError) throw payerError;
+    }
+
+    return row;
+  });
+
 export const unlinkGuardian = createServerFn({ method: "POST" })
   .middleware([requireStaff])
   .inputValidator((data) =>
@@ -264,12 +308,34 @@ export const getStudentDetail = createServerFn({ method: "GET" })
         .order("created_at", { ascending: false }),
     ]);
 
+    const family = (guardians.data ?? []).map((g: Row) => ({
+      ...g.guardians,
+      relationship: g.relationship,
+    }));
+
+    // Siblings are anyone sharing one of these guardians. Worth surfacing:
+    // a parent ringing about one child usually means all of theirs.
+    const siblings = family.length
+      ? ((
+          await client
+            .from("student_guardians")
+            .select("students(id, code, full_name, status)")
+            .in(
+              "guardian_id",
+              family.map((g: Row) => g.id),
+            )
+        ).data ?? [])
+      : [];
+
+    const byId = new Map<string, Row>();
+    for (const row of siblings as Row[]) {
+      if (row.students && row.students.id !== id) byId.set(row.students.id, row.students);
+    }
+
     return {
       student,
-      guardians: (guardians.data ?? []).map((g: Row) => ({
-        ...g.guardians,
-        relationship: g.relationship,
-      })),
+      guardians: family,
+      siblings: [...byId.values()].sort((a, b) => a.full_name.localeCompare(b.full_name)),
       enrolments: enrolments.data ?? [],
       packages: packages.data ?? [],
       attendance: attendance.data ?? [],

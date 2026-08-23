@@ -16,16 +16,27 @@
  * linked records arrive as {id, name} pairs where the import wants bare IDs.
  *
  * Usage:
- *   node scripts/airtable-import/from-mcp.mjs [pagesDir] [outFile]
+ *   node scripts/airtable-import/from-mcp.mjs [pagesDir] [outFile] [--only a,b]
  *
  * Defaults: airtable-export/pages → airtable-export/00-data.sql
+ *
+ * --only limits the output to the named staging tables, for importing one part
+ * of the base at a time:
+ *
+ *   node scripts/airtable-import/from-mcp.mjs --only at_guardians,at_students \
+ *     airtable-export/pages airtable-export/people.sql
  */
 
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-const PAGES = process.argv[2] ?? "airtable-export/pages";
-const OUT = process.argv[3] ?? "airtable-export/00-data.sql";
+const argv = process.argv.slice(2);
+const onlyAt = argv.indexOf("--only");
+const only = onlyAt === -1 ? null : new Set(argv[onlyAt + 1].split(",").map((t) => t.trim()));
+const positional = argv.filter((a, i) => !a.startsWith("--") && i !== onlyAt + 1);
+
+const PAGES = positional[0] ?? "airtable-export/pages";
+const OUT = positional[1] ?? "airtable-export/00-data.sql";
 
 /** Staging table → label, in the dependency order 02-transform.sql expects. */
 const TABLES = [
@@ -60,8 +71,8 @@ function normalise(value) {
 
   if (typeof value === "object") {
     if (typeof value.id === "string" && value.id.startsWith("rec")) return value.id;
-    if (typeof value.name === "string") return value.name;   // sel..., usr...
-    return value;                                             // attachments etc.
+    if (typeof value.name === "string") return value.name; // sel..., usr...
+    return value; // attachments etc.
   }
 
   if (typeof value === "string" && value.trim() === "") return undefined;
@@ -103,6 +114,8 @@ let total = 0;
 const counts = [];
 
 for (const [stagingTable, label] of TABLES) {
+  if (only && !only.has(stagingTable)) continue;
+
   const pages = files.filter((f) => f.startsWith(`${stagingTable}.`));
   if (!pages.length) {
     throw new Error(`no pages found for ${stagingTable} in ${PAGES}`);

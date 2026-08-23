@@ -420,7 +420,44 @@ they land as **invoiced** with a note on each saying why, and `03-verify.sql`
 lists every one by code, payer and student. Confirm them in the app and mark
 them paid, or leave them if the payments never happened.
 
+### People first
+
+If you want the family side in and usable before the rest, there is a smaller
+path that imports only guardians, students and who belongs to whom. Nothing in
+it depends on classes, lessons, hours or money.
+
+```sh
+psql "$DATABASE_URL" -f supabase/migrations/20260823130000_align_vision_schema.sql
+psql "$DATABASE_URL" -f scripts/airtable-import/01-staging.sql
+psql "$DATABASE_URL" -f airtable-export/people.sql
+psql "$DATABASE_URL" -f scripts/airtable-import/02a-transform-people.sql
+psql "$DATABASE_URL" -f scripts/airtable-import/03a-verify-people.sql
+```
+
+That brings across **28 parents and 33 students**, every student attached to at
+least one parent and every one of them with a default payer set. Running the
+full import afterwards picks up where this left off — it skips these rows and
+goes on to the rest, so this is not a fork in the road.
+
+Two things the verification will show you:
+
+- **Five parents cover two students each** — Andre Chen, Andrew Oh, Jiae Kim, S
+  and Whitney. That is the sibling relationship, and it is why parents are
+  shared records rather than copied onto each child.
+- **Seven records need a human.** Five parents have a one-character name in
+  Airtable's Full Name field (GUA-0023 through GUA-0028) even though the
+  Guardian Label beside them reads in full, and three have neither an email nor
+  a mobile. `03a-verify-people.sql` lists them; fix them in Airtable and re-run,
+  or fix them in the app now that they are in it.
+
+Codes are regenerated rather than carried across, which was agreed. Where
+Airtable's numbering has no gaps they come out identical: 24 of 28 parent codes
+and 27 of 33 student codes match exactly, and the rest shift up because the
+Airtable sequence skips numbers where records were deleted. The original
+Airtable record ID is kept on every row either way.
+
 ### To run it
+
 
 ```sh
 psql "$DATABASE_URL" -f supabase/migrations/20260823130000_align_vision_schema.sql
