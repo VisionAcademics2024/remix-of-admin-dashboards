@@ -1,15 +1,22 @@
 import type { ReactNode } from "react";
-import { AlertTriangle, Inbox, Sparkles } from "lucide-react";
+import { AlertTriangle, Inbox } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Glass } from "@/components/vision/glass";
+
+/**
+ * The shared surfaces every screen is built from.
+ *
+ * Rule of thumb for material: chrome is sheer, data is solid. A table over
+ * thin glass looks extraordinary in a screenshot and is unreadable after ten
+ * minutes of marking a roll, so anything carrying rows gets `solid`.
+ */
 
 export function PageHeader({
   title,
   description,
   actions,
-  eyebrow = "Vision Admin",
+  eyebrow,
 }: {
   title: string;
   description?: string | undefined;
@@ -17,25 +24,24 @@ export function PageHeader({
   eyebrow?: string | undefined;
 }) {
   return (
-    <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+    <header className="mb-7 flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
         {eyebrow && (
-          <div className="spatial-kicker mb-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-primary">
-            <Sparkles className="h-3 w-3" />
+          <p className="mb-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             {eyebrow}
-          </div>
+          </p>
         )}
-        <h1 className="text-3xl font-semibold tracking-[-0.035em] text-foreground sm:text-4xl">
+        <h1 className="text-[2rem] font-semibold leading-[1.1] text-foreground sm:text-[2.5rem]">
           {title}
         </h1>
         {description && (
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground sm:text-[0.95rem]">
+          <p className="mt-2.5 max-w-3xl text-[0.95rem] leading-relaxed text-muted-foreground">
             {description}
           </p>
         )}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
-    </div>
+    </header>
   );
 }
 
@@ -57,30 +63,33 @@ export function Section({
   className?: string | undefined;
 }) {
   return (
-    <Card
+    <Glass
+      material="regular"
       className={cn(
-        "group/section overflow-hidden",
+        "p-5 sm:p-6",
         tone === "warning" && "border-warning/40",
         tone === "success" && "border-success/35",
         className,
       )}
     >
-      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 p-5 pb-4 sm:p-6 sm:pb-4">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-base font-semibold">
+      <div className="mb-4 flex flex-row items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="flex items-center gap-2 text-[1.0625rem] font-semibold tracking-[-0.015em]">
             {title}
             {count !== undefined && (
-              <span className="rounded-full border border-white/30 bg-muted/65 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground shadow-sm">
+              <span className="rounded-full bg-[var(--mat-thick)] px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
                 {count}
               </span>
             )}
-          </CardTitle>
-          {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+          </h2>
+          {description && (
+            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{description}</p>
+          )}
         </div>
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
-      </CardHeader>
-      <CardContent className="p-5 pt-0 sm:p-6 sm:pt-0">{children}</CardContent>
-    </Card>
+      </div>
+      {children}
+    </Glass>
   );
 }
 
@@ -97,13 +106,15 @@ export function EmptyState({
   action?: ReactNode | undefined;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-foreground/15 bg-background/20 px-6 py-10 text-center">
-      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-white/35 bg-muted/55 shadow-sm backdrop-blur-xl">
-        <Icon className="h-5 w-5 text-muted-foreground/70" />
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--edge)] px-6 py-12 text-center">
+      <div className="mb-3.5 flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--mat-thick)]">
+        <Icon className="h-5 w-5 text-muted-foreground" strokeWidth={1.6} />
       </div>
       <p className="text-sm font-medium">{title}</p>
-      {hint && <p className="mt-1 max-w-sm text-sm text-muted-foreground">{hint}</p>}
-      {action && <div className="mt-4">{action}</div>}
+      {hint && (
+        <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-muted-foreground">{hint}</p>
+      )}
+      {action && <div className="mt-5">{action}</div>}
     </div>
   );
 }
@@ -127,52 +138,41 @@ export function StatCard({
     success: "text-success",
     danger: "text-destructive",
   }[tone];
-  const glowClass = {
-    default: "bg-primary/20",
-    warning: "bg-warning/25",
-    success: "bg-success/20",
-    danger: "bg-destructive/20",
-  }[tone];
 
   return (
-    <Card className="group relative overflow-hidden">
-      <div
-        className={cn(
-          "pointer-events-none absolute -right-7 -top-9 h-28 w-28 rounded-full blur-2xl transition-transform duration-500 group-hover:scale-125",
-          glowClass,
-        )}
-      />
-      <CardContent className="relative flex items-start justify-between gap-3 p-5 sm:p-6">
+    <Glass material="regular" interactive className="p-5">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            {label}
-          </p>
+          <p className="text-[0.8rem] font-medium text-muted-foreground">{label}</p>
           <p
-            className={cn("mt-2 text-3xl font-semibold tabular-nums tracking-[-0.04em]", toneClass)}
+            className={cn(
+              "mt-1.5 text-[2rem] font-semibold leading-none tabular-nums tracking-[-0.03em]",
+              toneClass,
+            )}
           >
             {value}
           </p>
-          {hint && <p className="mt-1.5 truncate text-xs text-muted-foreground">{hint}</p>}
+          {hint && <p className="mt-2 truncate text-xs text-muted-foreground">{hint}</p>}
         </div>
         {Icon && (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/40 bg-background/35 text-primary shadow-sm backdrop-blur-xl transition-transform duration-300 group-hover:scale-105">
-            <Icon className="h-5 w-5" />
-          </div>
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--mat-thick)]">
+            <Icon className="h-4 w-4 text-muted-foreground" strokeWidth={1.6} />
+          </span>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </Glass>
   );
 }
 
 type BadgeTone = "neutral" | "success" | "warning" | "danger" | "info" | "muted";
 
 const TONE_CLASS: Record<BadgeTone, string> = {
-  neutral: "bg-secondary text-secondary-foreground",
-  success: "bg-success/15 text-success border-success/30",
-  warning: "bg-warning/20 text-warning-foreground border-warning/40",
-  danger: "bg-destructive/15 text-destructive border-destructive/30",
-  info: "bg-info/15 text-info border-info/30",
-  muted: "bg-muted text-muted-foreground",
+  neutral: "bg-[var(--mat-thick)] text-foreground/85 border-[var(--edge)]",
+  success: "bg-success/16 text-success border-success/30",
+  warning: "bg-warning/18 text-warning border-warning/35",
+  danger: "bg-destructive/16 text-destructive border-destructive/32",
+  info: "bg-info/16 text-info border-info/30",
+  muted: "bg-[var(--mat-thin)] text-muted-foreground border-[var(--edge)]",
 };
 
 export function StatusPill({
@@ -185,19 +185,21 @@ export function StatusPill({
   className?: string | undefined;
 }) {
   return (
-    <Badge
-      variant="outline"
-      className={cn("rounded-full px-2.5 py-1 font-medium shadow-sm", TONE_CLASS[tone], className)}
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[0.7rem] font-medium capitalize leading-5",
+        TONE_CLASS[tone],
+        className,
+      )}
     >
       {children}
-    </Badge>
+    </span>
   );
 }
 
 /** One place decides what colour a status is, so the whole app agrees. */
 export function toneForStatus(kind: string, value: string | null | undefined): BadgeTone {
   if (!value) return "muted";
-  const key = `${kind}:${value}`;
   const map: Record<string, BadgeTone> = {
     "attendance:present": "success",
     "attendance:absent": "danger",
@@ -231,7 +233,7 @@ export function toneForStatus(kind: string, value: string | null | undefined): B
     "makeup:scheduled": "info",
     "makeup:completed": "success",
   };
-  return map[key] ?? "neutral";
+  return map[`${kind}:${value}`] ?? "neutral";
 }
 
 export function TutorDot({
@@ -244,8 +246,11 @@ export function TutorDot({
   return (
     <span className="inline-flex items-center gap-1.5">
       <span
-        className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border border-white/60 shadow-sm"
-        style={{ backgroundColor: colour ?? "transparent" }}
+        className="inline-block h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset ring-white/25"
+        style={{
+          backgroundColor: colour ?? "transparent",
+          boxShadow: colour ? `0 0 10px -1px ${colour}` : undefined,
+        }}
         aria-hidden
       />
       <span className="truncate">{name ?? "Unassigned"}</span>
@@ -259,16 +264,20 @@ export function Code({ children }: { children: ReactNode }) {
 
 export function WarningNote({ children }: { children: ReactNode }) {
   return (
-    <div className="flex items-start gap-2 rounded-2xl border border-warning/35 bg-warning/10 px-4 py-3 text-sm backdrop-blur-xl">
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-      <div className="text-warning-foreground">{children}</div>
+    <div className="flex items-start gap-2.5 rounded-2xl border border-warning/35 bg-warning/10 px-4 py-3 text-sm">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" strokeWidth={1.8} />
+      <div className="leading-relaxed text-foreground/90">{children}</div>
     </div>
   );
 }
 
+/**
+ * Tables sit on their own near-opaque surface. This is the deliberate
+ * exception to the glass rule — see the note at the top of this file.
+ */
 export function TableShell({ children }: { children: ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-white/45 bg-background/18 shadow-[inset_0_1px_0_oklch(1_0_0/22%)]">
+    <div className="glass glass--solid overflow-x-auto rounded-2xl">
       <table className="table-zebra w-full text-sm">{children}</table>
     </div>
   );
@@ -284,7 +293,7 @@ export function Th({
   return (
     <th
       className={cn(
-        "whitespace-nowrap border-b border-white/35 bg-muted/35 px-3.5 py-2.5 text-left text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground",
+        "whitespace-nowrap border-b border-[var(--edge)] px-3.5 py-2.5 text-left text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground",
         className,
       )}
     >
@@ -301,7 +310,12 @@ export function Td({
   className?: string | undefined;
 }) {
   return (
-    <td className={cn("border-b border-white/30 px-3.5 py-3 align-middle", className)}>
+    <td
+      className={cn(
+        "border-b border-[var(--edge)] px-3.5 py-2.5 align-middle last:border-b-0",
+        className,
+      )}
+    >
       {children}
     </td>
   );

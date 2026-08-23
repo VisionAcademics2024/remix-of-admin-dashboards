@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth";
+import { EnvironmentProvider } from "@/components/vision/environment";
 
 function NotFoundComponent() {
   return (
@@ -113,7 +114,7 @@ function RootShell({ children }: { children: ReactNode }) {
       <head>
         <HeadContent />
       </head>
-      <body className="vision-canvas">
+      <body>
         {children}
         <Scripts />
       </body>
@@ -124,17 +125,13 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
-  useEffect(() => {
-    const stored = window.localStorage.getItem("vision-theme");
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    document.documentElement.classList.toggle("dark", stored ? stored === "dark" : prefersDark);
-  }, []);
-
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Outlet />
-        <Toaster />
+        <EnvironmentProvider>
+          <Outlet />
+          <Toaster />
+        </EnvironmentProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

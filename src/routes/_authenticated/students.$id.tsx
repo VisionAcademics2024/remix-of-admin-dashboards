@@ -56,7 +56,7 @@ function StudentDetailPage() {
   const absencesOwed = attendance.filter((a: Row) => a.make_up_state === "outstanding").length;
 
   return (
-    <div className="space-y-6">
+    <div className="stagger space-y-6">
       <Button asChild variant="ghost" size="sm" className="-ml-2">
         <Link to="/students">
           <ArrowLeft className="mr-1 h-4 w-4" /> All students

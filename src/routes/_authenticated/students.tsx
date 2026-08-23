@@ -86,7 +86,7 @@ function StudentsPage() {
   const missingPayer = students.filter((s: Row) => s.status === "active" && !s.default_payer_id);
 
   return (
-    <div className="space-y-5">
+    <div className="stagger space-y-5">
       <PageHeader
         title="Students & Families"
         description="One guardian can cover several students — that is how siblings work. Every student needs exactly one default payer, drawn from their own guardians."

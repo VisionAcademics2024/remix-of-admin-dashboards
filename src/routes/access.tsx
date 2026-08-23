@@ -90,15 +90,10 @@ function AccessPage() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-8">
-      <div className="spatial-auth-glow -left-48 -top-40" aria-hidden />
-      <div
-        className="spatial-auth-glow -bottom-52 -right-44 [background:radial-gradient(circle,var(--canvas-glow-b),transparent_68%)]"
-        aria-hidden
-      />
       <Card className="relative w-full max-w-md rounded-[2rem]">
         <CardHeader>
           <div className="mb-3 flex items-center gap-3">
-            <div className="spatial-orb flex h-11 w-11 items-center justify-center rounded-2xl text-primary-foreground">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-chart-4 text-primary-foreground shadow-[inset_0_1px_0_0_var(--edge-top),0_10px_26px_-14px_var(--color-primary)]">
               <span className="text-sm font-bold">V</span>
             </div>
             <div>

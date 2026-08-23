@@ -53,15 +53,9 @@ function AuthPage() {
 
   return (
     <div className="relative flex min-h-screen overflow-hidden px-4 py-8 sm:px-6">
-      <div className="spatial-auth-glow -left-40 -top-28" aria-hidden />
-      <div
-        className="spatial-auth-glow -bottom-52 -right-36 [background:radial-gradient(circle,var(--canvas-glow-b),transparent_68%)]"
-        aria-hidden
-      />
-
       <div className="relative mx-auto grid w-full max-w-6xl items-center gap-12 lg:grid-cols-[minmax(0,1fr)_27rem]">
         <section className="hidden lg:block">
-          <div className="spatial-kicker mb-6 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold text-primary">
+          <div className="glass glass--thin mb-6 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold text-primary">
             <ShieldCheck className="h-3.5 w-3.5" />
             Private operations workspace
           </div>
@@ -79,7 +73,7 @@ function AuthPage() {
               { icon: GraduationCap, label: "Students & classes" },
               { icon: WalletCards, label: "Hours & billing" },
             ].map(({ icon: Icon, label }) => (
-              <div key={label} className="spatial-panel rounded-2xl px-4 py-4 text-sm font-medium">
+              <div key={label} className="glass rounded-2xl px-4 py-4 text-sm font-medium">
                 <Icon className="mb-3 h-5 w-5 text-primary" />
                 {label}
               </div>
@@ -87,9 +81,9 @@ function AuthPage() {
           </div>
         </section>
 
-        <div className="spatial-panel mx-auto w-full max-w-md rounded-[2rem] p-6 sm:p-8">
+        <div className="glass glass--thick animate-spatial-in mx-auto w-full max-w-md rounded-[2rem] p-6 sm:p-8">
           <div className="mb-7 flex items-center gap-3">
-            <div className="spatial-orb flex h-11 w-11 items-center justify-center rounded-2xl text-primary-foreground">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-chart-4 text-primary-foreground shadow-[inset_0_1px_0_0_var(--edge-top),0_10px_26px_-14px_var(--color-primary)]">
               <GraduationCap className="h-5 w-5" />
             </div>
             <div>

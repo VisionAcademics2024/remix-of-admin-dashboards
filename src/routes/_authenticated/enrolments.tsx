@@ -71,7 +71,7 @@ function EnrolmentsPage() {
   );
 
   return (
-    <div className="space-y-5">
+    <div className="stagger space-y-5">
       <PageHeader
         title="Enrolments & Hours"
         description="The commercial view: every enrolment with its agreed price, every package with its balance."

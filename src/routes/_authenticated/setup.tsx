@@ -65,7 +65,7 @@ function SetupPage() {
   >(null);
 
   return (
-    <div className="space-y-5">
+    <div className="stagger space-y-5">
       <PageHeader
         title="Setup"
         description="Terms, programs, prices and tutors. Slow-changing, high-consequence."

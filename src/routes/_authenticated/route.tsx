@@ -2,9 +2,11 @@ import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { meQueryOptions } from "@/lib/vision/me";
+import { formatDay, sydToday } from "@/lib/format";
+import { DataModeBadge } from "@/components/vision/data-mode-badge";
+import { EnvironmentButton } from "@/components/vision/environment";
 
 export { meQueryOptions };
 
@@ -26,40 +28,60 @@ export const Route = createFileRoute("/_authenticated")({
   component: AuthenticatedLayout,
 });
 
+/**
+ * The window.
+ *
+ * visionOS floats a single pane in space with its navigation hung alongside,
+ * so there is no full-height chrome column here — the ornament is absolutely
+ * positioned and the content simply keeps clear of it.
+ */
 function AuthenticatedLayout() {
   const { data: me } = useSuspenseQuery(meQueryOptions());
   if (!me.staff) return null;
 
+  const initials = me.staff.full_name
+    .split(" ")
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
   return (
-    <SidebarProvider className="bg-transparent">
+    <div className="min-h-screen pl-[5.5rem] pr-3 lg:pl-[6.25rem] lg:pr-5">
       <AppSidebar role={me.staff.role} name={me.staff.full_name} />
-      <SidebarInset className="min-w-0 bg-transparent md:pr-2">
-        <header className="spatial-topbar sticky top-3 z-30 mx-3 mt-3 flex h-14 shrink-0 items-center gap-3 rounded-2xl px-3.5 sm:px-4 lg:mx-4">
-          <SidebarTrigger className="h-9 w-9 rounded-full border border-white/35 bg-background/25 shadow-sm backdrop-blur-xl" />
-          <div className="hidden items-center gap-2 sm:flex">
-            <span className="h-2 w-2 rounded-full bg-success shadow-[0_0_0_4px_color-mix(in_oklab,var(--color-success)_14%,transparent)]" />
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              Operations workspace
+
+      <header className="glass glass--thick animate-spatial-in sticky top-3 z-30 mt-3 flex h-14 items-center gap-3 rounded-full px-4">
+        <span className="hidden items-baseline gap-2.5 sm:flex">
+          <span className="text-[0.82rem] font-semibold tracking-[-0.01em]">
+            {formatDay(sydToday())}
+          </span>
+          <span className="text-[0.72rem] text-muted-foreground">Sydney</span>
+        </span>
+
+        <span className="ml-auto flex items-center gap-3">
+          <DataModeBadge />
+          <EnvironmentButton />
+        </span>
+
+        <span className="flex items-center gap-2.5">
+          <span className="hidden text-right sm:block">
+            <span className="block text-[0.78rem] font-semibold leading-tight">
+              {me.staff.full_name}
             </span>
-          </div>
-          <div className="ml-auto flex items-center gap-3">
-            <div className="hidden text-right sm:block">
-              <p className="text-xs font-semibold leading-tight">{me.staff.full_name}</p>
-              <p className="mt-0.5 text-[0.68rem] capitalize text-muted-foreground">
-                {me.staff.role}
-              </p>
-            </div>
-            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/45 bg-secondary/75 text-xs font-bold text-secondary-foreground shadow-sm backdrop-blur-xl">
-              {me.staff.full_name.charAt(0).toUpperCase()}
-            </div>
-          </div>
-        </header>
-        <main className="min-w-0 flex-1 px-4 pb-8 pt-7 lg:px-8 lg:pb-10 lg:pt-9">
-          <div className="mx-auto w-full max-w-[100rem]">
-            <Outlet />
-          </div>
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+            <span className="block text-[0.68rem] capitalize leading-tight text-muted-foreground">
+              {me.staff.role}
+            </span>
+          </span>
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--mat-thick)] text-[0.72rem] font-semibold shadow-[inset_0_1px_0_0_var(--edge-top)]">
+            {initials}
+          </span>
+        </span>
+      </header>
+
+      <main className="mx-auto w-full max-w-[104rem] pb-14 pt-7">
+        <Outlet />
+      </main>
+    </div>
   );
 }
