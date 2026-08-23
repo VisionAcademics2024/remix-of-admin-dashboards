@@ -34,7 +34,16 @@ select 'session', staging.txt(s.fields,'Session Code'), 'Missing or invalid sche
 from staging.at_sessions s
 where not exists (select 1 from sessions x where x.airtable_id = s.id)
 union all
-select 'attendance', staging.txt(a.fields,'Attendance Code'), 'Session or Billing link did not resolve'
+select 'attendance', staging.txt(a.fields,'Attendance Code'),
+       case
+         when not exists (select 1 from sessions x
+                          where x.airtable_id = staging.link1(a.fields,'Session'))
+           then 'Session link did not resolve'
+         when not exists (select 1 from enrolments x
+                          where x.airtable_id = staging.link1(a.fields,'Billing'))
+           then 'Billing link did not resolve'
+         else 'Duplicate roll entry: this student already has one for this lesson'
+       end
 from staging.at_attendance a
 where not exists (select 1 from attendance x where x.airtable_id = a.id)
 union all
@@ -42,6 +51,20 @@ select 'charge', staging.txt(c.fields,'Charge Code'), 'Source (Hours or Attendan
 from staging.at_charges c
 where not exists (select 1 from charges x where x.airtable_id = c.id)
 order by kind, code;
+
+-- 
+-- === 2b. CHARGES WHOSE STATUS WAS DOWNGRADED ===
+-- Airtable marked these Paid but recorded no payment date or method. They came
+-- across as Invoiced so that 'paid' still means evidenced. Confirm each one and
+-- mark it paid in the app, or leave it if the payment never happened.
+select c.code, c.final_amount, g.full_name as payer, st.full_name as student
+from v_charges c
+join students st on st.id = c.student_id
+left join guardians g on g.id = c.payer_id
+join staging.at_charges a on a.id = c.airtable_id
+where staging.txt(a.fields,'Charge Status') = 'Paid'
+  and c.status <> 'paid'
+order by c.code;
 
 -- 
 -- === 3. THE ONE THAT MATTERS: hours balances vs Airtable ===

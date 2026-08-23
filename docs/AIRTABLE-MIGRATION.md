@@ -74,10 +74,7 @@ the word and I will add them; otherwise they are dropped.
 
 ---
 
-## 2. The blocker: which schema is actually live
-
-**This has to be settled before anything runs, and I cannot settle it from
-here** — it needs one query against your Supabase database.
+## 2. The schema question, and why it no longer blocks you
 
 The repo contains **two migrations that both create the Vision schema**, and
 they disagree:
@@ -89,48 +86,48 @@ they disagree:
 | Guardian codes | `GDN-0001` | `GUA-0001` |
 | Hours package codes | `PKG-00001` | `HRS-0001` |
 | Charge codes | `CHG-00001` | `CHG-2026-0001` |
+| `app_settings` (fortnight anchor) | **missing** | present |
+| `updated_at` | **missing** | on every table |
 | `charge_one_source` | **missing** | present |
 | Default-payer trigger | **missing** | present |
 | `enrolment_method_required` | **missing** | present |
 | `make_up_has_source` | **missing** | present |
+| One roll entry per lesson | per lesson **and type** | per lesson |
 
 Applied in filename order the first wins and the second fails outright with
 `type "staff_role" already exists`. Which one your database actually has depends
 on the order Supabase ran them, and that is not knowable from the repo.
 
-It matters for two reasons:
+Rather than have you find out and tell me, there is now a migration that works
+either way: **`20260823130000_align_vision_schema.sql`**. It adds only what is
+missing, so on a database that is already correct it does nothing, and on the
+other variant it brings across every one of the rows in that table. Run it and
+the question stops mattering.
 
-1. **`airtable_id` is what makes the import re-runnable and reconcilable.**
-   Without it there is no way to say "this Postgres row came from that Airtable
-   record", so a second run duplicates everything and the hours-balance check in
-   section 6 cannot be written at all.
-2. **`charge_one_source` is the constraint that makes double-billing
-   impossible** — the single most load-bearing rule in `04-business-logic.md`.
-   If it is missing, so is the guarantee.
+I verified that by building both variants from their own migrations, applying
+the alignment to each, and diffing every column of every table and view. They
+come out identical apart from a `user_roles` table in the alternate one that
+nothing reads. The importer then produces the same result on both.
 
-### What to do
+Two of those rows are worth knowing about:
 
-Run this against your Supabase database and send me the output:
+- **`charge_one_source`** is the constraint that makes double-billing
+  impossible — the single most load-bearing rule in `04-business-logic.md`.
+  Without it, it is a convention rather than a guarantee.
+- **One roll entry per lesson** is the spec's rule and the alignment enforces
+  it. Your base currently has one lesson carrying two (see section 6); the
+  alignment declines to tighten the index while that is true, and says so.
+
+You can still run the preflight if you want to see what you are starting from:
 
 ```sh
 psql "$DATABASE_URL" -f scripts/airtable-import/00-preflight.sql
 ```
 
 `DATABASE_URL` is in Supabase under Project Settings → Database → Connection
-string → URI. Or paste the file into the Supabase SQL editor.
-
-It prints one of three verdicts:
-
-- **SPEC SCHEMA** — the import runs exactly as written. Nothing else needed.
-- **ALTERNATE SCHEMA** — I write a small alignment migration first that adds
-  `airtable_id`, the missing constraints and the default-payer trigger. Half an
-  hour of work, and it needs doing regardless of the migration because those
-  constraints are the app's correctness guarantees.
-- **NO VISION SCHEMA** — the core migration never applied; that gets fixed
-  first.
-
-It also reports whether the target already holds data, because importing on top
-of real rows is not safe.
+string → URI. Or paste the file into the Supabase SQL editor. It reports which
+variant you have and whether the target already holds data — importing on top of
+real rows is not safe.
 
 ---
 
@@ -383,17 +380,70 @@ set"* if you skipped any Airtable cleanup. Those are the same rules Airtable's
 
 ---
 
-## 5. If you want me to do it
+## 5. What is already done
 
-Say the word and I will:
+The data is extracted and the import is written. `airtable-export/00-data.sql`
+holds all **807 records** from the Jah Copy, with Airtable's record IDs intact.
+It is deliberately **not** committed — it is real student and guardian data.
 
-1. Pull all twelve tables through the connector.
-2. Generate `supabase/migrations/<ts>_airtable_import.sql` — staging tables, the
-   raw data, the full transform, sequence resets and the verification queries,
-   as one file you run in the Supabase SQL editor.
-3. Run it against a throwaway Postgres here first and show you the verification
-   output before it goes anywhere near your live database.
+I ran the whole pipeline against a throwaway Postgres here, on **both** schema
+variants, three times over. Results:
 
-At 680 records that is a genuinely small job. What I need from you first is
-**Decision 1 (codes), Decision 2 (drafts) and Decision 3 (which base)** — all
-three change the SQL, and none of them can be sensibly guessed.
+| | |
+|---|---|
+| Records loaded | 807 of 807 |
+| Rows skipped | 1 (named below) |
+| Hours balances reconciling to Airtable | 23 of 24 exactly, 1 off by the skipped row |
+| Re-running the import | no duplicates, no drift |
+
+### The one row that needs a decision from you
+
+**ATT-0384** — a Make-up marked Present, sitting on the same lesson
+(`recaYYeYfHeVwSyzJ`) as **ATT-0381**, Limlao Kang's ordinary roll entry for that
+lesson, which is Not Marked. The spec allows one roll entry per student per
+lesson, so only the first lands and the make-up is skipped and named by
+`03-verify.sql`. That is also why Limlao Kang's HRS-0018 balance reads 16.00
+here against 15 in Airtable — one hour of consumption is sitting in the skipped
+row.
+
+Fix it in Airtable, whichever way is true: if that lesson *was* the make-up,
+delete the unmarked ATT-0381; if it was an ordinary lesson, mark ATT-0381 and
+move the make-up to its own lesson. Then re-run the import — it is re-runnable,
+so nothing else changes.
+
+### Nineteen charges came across as Invoiced, not Paid
+
+Airtable marks 19 charges Paid while recording no payment date and no payment
+method — and those rows' own notes say the status was *meant* to read Invoiced.
+Importing them as paid would put $16,285 of unevidenced money in the ledger, so
+they land as **invoiced** with a note on each saying why, and `03-verify.sql`
+lists every one by code, payer and student. Confirm them in the app and mark
+them paid, or leave them if the payments never happened.
+
+### To run it
+
+```sh
+psql "$DATABASE_URL" -f supabase/migrations/20260823130000_align_vision_schema.sql
+psql "$DATABASE_URL" -f scripts/airtable-import/01-staging.sql
+psql "$DATABASE_URL" -f airtable-export/00-data.sql
+psql "$DATABASE_URL" -f scripts/airtable-import/02-transform.sql
+psql "$DATABASE_URL" -f scripts/airtable-import/03-verify.sql
+```
+
+All five work in the Supabase SQL editor too — paste one file at a time, in that
+order. The transform runs as a single transaction: either all of it lands or
+none of it does.
+
+### To re-extract later
+
+If the base moves on and you want a fresh pull, there are two ways:
+
+- **With a personal access token** — `AIRTABLE_PAT=pat… node
+  scripts/airtable-import/extract.mjs`. This is the better path: it pulls the
+  base itself, unattended.
+- **Through the connector** — what I used, because this environment has no
+  token and cannot reach `api.airtable.com`. The connector hands back pages of
+  JSON; those go in `airtable-export/pages/` and
+  `scripts/airtable-import/from-mcp.mjs` turns them into the same
+  `00-data.sql`. Nothing is retyped by hand, so a damaged page fails as a JSON
+  parse error rather than as a plausible wrong value.
