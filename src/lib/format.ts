@@ -190,3 +190,29 @@ export function instantToSydneyLocal(iso: string): string {
   const hour = p["hour"] === "24" ? "00" : p["hour"];
   return `${p["year"]}-${p["month"]}-${p["day"]}T${hour}:${p["minute"]}`;
 }
+
+/**
+ * Minutes since Sydney midnight, which is what positions a lesson on a time
+ * grid. Derived from the wall-clock string rather than from the raw instant so
+ * a lesson sits where the tutor thinks it does, whatever the viewer's own
+ * timezone or the daylight-saving offset on the day.
+ */
+export function sydneyMinutesOfDay(iso: string): number {
+  const [, timePart = "00:00"] = instantToSydneyLocal(iso).split("T");
+  const [h = "0", m = "0"] = timePart.split(":");
+  return Number(h) * 60 + Number(m);
+}
+
+/** The same, for right now. Drives the current-time line. */
+export function sydneyMinutesNow(): number {
+  return sydneyMinutesOfDay(new Date().toISOString());
+}
+
+/** "9 am", "2:30 pm" — the time-gutter and chip label form. */
+export function formatClock(minutes: number): string {
+  const h24 = Math.floor(minutes / 60) % 24;
+  const m = minutes % 60;
+  const suffix = h24 < 12 ? "am" : "pm";
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return m === 0 ? `${h12} ${suffix}` : `${h12}:${String(m).padStart(2, "0")} ${suffix}`;
+}

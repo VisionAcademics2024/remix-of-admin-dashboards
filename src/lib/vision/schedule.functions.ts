@@ -62,6 +62,64 @@ export const listWeek = createServerFn({ method: "GET" })
     }));
   });
 
+/**
+ * Any span of days, for the calendar's day, week and month views. Same shape
+ * and same roll counts as listWeek; only the window differs.
+ */
+export const listRange = createServerFn({ method: "GET" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    z
+      .object({
+        from: z.string().min(1),
+        to: z.string().min(1),
+        tutor_id: z.string().uuid().nullish(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+
+    let query = client
+      .from("v_sessions")
+      .select(SESSION_SELECT)
+      // Widened by a day either side, then filtered on session_date, so nothing
+      // is lost to the UTC offset at the edges of the window.
+      .gte("starts_at", `${shiftDate(data.from, -1)}T00:00:00Z`)
+      .lte("starts_at", `${shiftDate(data.to, 2)}T00:00:00Z`)
+      .order("starts_at");
+
+    if (data.tutor_id) query = query.eq("tutor_id", data.tutor_id);
+
+    const { data: sessions, error } = await query;
+    if (error) throw error;
+
+    const inRange = (sessions ?? []).filter(
+      (s: Row) => s.session_date >= data.from && s.session_date <= data.to,
+    );
+
+    const ids = inRange.map((s: Row) => s.id);
+    const counts = new Map<string, { marked: number; total: number }>();
+    if (ids.length) {
+      const { data: roll } = await client
+        .from("attendance")
+        .select("session_id, status")
+        .in("session_id", ids);
+      for (const r of roll ?? []) {
+        const c = counts.get(r.session_id) ?? { marked: 0, total: 0 };
+        c.total += 1;
+        if (r.status !== "not_marked") c.marked += 1;
+        counts.set(r.session_id, c);
+      }
+    }
+
+    return inRange.map((s: Row) => ({
+      ...s,
+      roll_marked: counts.get(s.id)?.marked ?? 0,
+      roll_total: counts.get(s.id)?.total ?? 0,
+    }));
+  });
+
 function shiftDate(date: string, days: number): string {
   const d = new Date(`${date}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
