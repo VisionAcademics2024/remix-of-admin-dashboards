@@ -154,25 +154,11 @@ export function AppSidebar({ role, name }: { role: StaffRole; name: string }) {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel>Reference</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={currentPath.startsWith("/prototype")}
-                  tooltip="Original prototype"
-                >
-                  <Link to="/prototype/dashboard">
-                    <FlaskConical />
-                    {!collapsed && <span>Prototype</span>}
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* The legacy /prototype/* screens are no longer linked from the
+            navigation: they read renamed proto_* tables that are not present
+            in the database. The code is retained for reference pending a
+            separately reviewed cleanup. */}
+
       </SidebarContent>
 
       <SidebarFooter>
