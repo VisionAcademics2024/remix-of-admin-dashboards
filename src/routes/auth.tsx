@@ -13,7 +13,7 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
   beforeLoad: async () => {
     const { data } = await supabase.auth.getUser();
-    if (data.user) throw redirect({ to: "/dashboard" });
+    if (data.user) throw redirect({ to: "/today" });
   },
 });
 
@@ -33,15 +33,15 @@ function AuthPage() {
       if (error) {
         toast.error(error.message);
       } else {
-        navigate({ to: "/dashboard", replace: true });
+        navigate({ to: "/today", replace: true });
       }
     } else {
       const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) {
         toast.error(error.message);
       } else if (data.session) {
-        toast.success("Account created. Welcome!");
-        navigate({ to: "/dashboard", replace: true });
+        toast.success("Account created. An owner needs to approve your access.");
+        navigate({ to: "/today", replace: true });
       } else {
         toast.success("Account created. Please check your email to confirm.");
         setMode("signin");
@@ -56,8 +56,13 @@ function AuthPage() {
       <div className="w-full max-w-sm rounded-xl border bg-card p-6 shadow-sm">
         <div className="mb-6 flex items-center justify-center gap-2">
           <GraduationCap className="h-8 w-8 text-primary" />
-          <h1 className="text-2xl font-semibold tracking-tight">TutorHub</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Vision CRM</h1>
         </div>
+
+        <p className="mb-4 rounded-md border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+          Signing in does not grant access on its own — an owner has to approve your account. The
+          very first account to sign in sets itself up as the owner.
+        </p>
 
         <Tabs value={mode} onValueChange={(v) => setMode(v as "signin" | "signup")}>
           <TabsList className="grid w-full grid-cols-2">

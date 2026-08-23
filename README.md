@@ -1,6 +1,18 @@
-# Tutor Connect
+# Tutor Connect — Vision CRM
 
-student management system for tutoring college
+The Vision Academics admin system: students and families, classes and lessons,
+the roll, hours packages, billing, and tutor pay.
+
+## Start here
+
+| Document | What it covers |
+|---|---|
+| [`docs/BUILD-GUIDE.md`](docs/BUILD-GUIDE.md) | **Read this first.** How to get in, where every screen lives, what is built and what is not. |
+| [`docs/spec/`](docs/spec/) | The build specification. `01-domain-model.md` explains the business; the rest follows from it. |
+| [`docs/spec/08-CUSTOMISE-ME.md`](docs/spec/08-CUSTOMISE-ME.md) | Branding, naming and settings. Overrides every other spec file. |
+| [`supabase/tests/`](supabase/tests/) | The schema verification suite and how to run it. |
+
+The original Lovable prototype is kept, working, at `/prototype/*`.
 
 This project was built with [Lovable](https://lovable.dev).
 

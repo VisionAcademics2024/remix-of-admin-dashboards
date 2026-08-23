@@ -15,7 +15,7 @@ export const listPackages = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { data, error } = await context.supabase
-      .from("packages")
+      .from("proto_packages")
       .select("*")
       .order("name", { ascending: true });
     if (error) throw error;
@@ -27,7 +27,7 @@ export const getPackage = createServerFn({ method: "GET" })
   .inputValidator((data) => z.object({ id: z.string() }).parse(data))
   .handler(async ({ context, data }) => {
     const { data: pkg, error } = await context.supabase
-      .from("packages")
+      .from("proto_packages")
       .select("*")
       .eq("id", data.id)
       .single();
@@ -45,7 +45,11 @@ export const createPackage = createServerFn({ method: "POST" })
       price: data.price ?? null,
       validity_days: data.validity_days ?? null,
     };
-    const { data: pkg, error } = await context.supabase.from("packages").insert(payload).select().single();
+    const { data: pkg, error } = await context.supabase
+      .from("proto_packages")
+      .insert(payload)
+      .select()
+      .single();
     if (error) throw error;
     return pkg;
   });
@@ -58,7 +62,7 @@ export const updatePackage = createServerFn({ method: "POST" })
         id: z.string(),
         ...packageSchema.shape,
       })
-      .parse(data)
+      .parse(data),
   )
   .handler(async ({ context, data }) => {
     const { id, ...rest } = data;
@@ -69,7 +73,7 @@ export const updatePackage = createServerFn({ method: "POST" })
       validity_days: rest.validity_days ?? null,
     };
     const { data: pkg, error } = await context.supabase
-      .from("packages")
+      .from("proto_packages")
       .update(payload)
       .eq("id", id)
       .select()
@@ -82,7 +86,7 @@ export const deletePackage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: z.string() }).parse(data))
   .handler(async ({ context, data }) => {
-    const { error } = await context.supabase.from("packages").delete().eq("id", data.id);
+    const { error } = await context.supabase.from("proto_packages").delete().eq("id", data.id);
     if (error) throw error;
     return { success: true };
   });

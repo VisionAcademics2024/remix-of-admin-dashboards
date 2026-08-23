@@ -12,12 +12,26 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
-import { Route as AuthenticatedPackagesRouteImport } from './routes/_authenticated/packages'
-import { Route as AuthenticatedSessionsRouteImport } from './routes/_authenticated/sessions'
+import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
+import { Route as AuthenticatedEnrolmentsRouteImport } from './routes/_authenticated/enrolments'
+import { Route as AuthenticatedMakeUpsRouteImport } from './routes/_authenticated/make-ups'
+import { Route as AuthenticatedNeedsAttentionRouteImport } from './routes/_authenticated/needs-attention'
+import { Route as AuthenticatedRollRouteImport } from './routes/_authenticated/roll'
+import { Route as AuthenticatedSetupRouteImport } from './routes/_authenticated/setup'
+import { Route as AuthenticatedStaffRouteImport } from './routes/_authenticated/staff'
 import { Route as AuthenticatedStudentsRouteImport } from './routes/_authenticated/students'
-import { Route as AuthenticatedTutorsRouteImport } from './routes/_authenticated/tutors'
+import { Route as AuthenticatedTimetableRouteImport } from './routes/_authenticated/timetable'
+import { Route as AuthenticatedTodayRouteImport } from './routes/_authenticated/today'
+import { Route as AuthenticatedTutorPayRouteImport } from './routes/_authenticated/tutor-pay'
+import { Route as AuthenticatedClassesIndexRouteImport } from './routes/_authenticated/classes.index'
+import { Route as AuthenticatedClassesNewRouteImport } from './routes/_authenticated/classes.new'
+import { Route as AuthenticatedPrototypeDashboardRouteImport } from './routes/_authenticated/prototype.dashboard'
+import { Route as AuthenticatedPrototypePackagesRouteImport } from './routes/_authenticated/prototype.packages'
+import { Route as AuthenticatedPrototypeSessionsRouteImport } from './routes/_authenticated/prototype.sessions'
+import { Route as AuthenticatedPrototypeStudentsRouteImport } from './routes/_authenticated/prototype.students'
+import { Route as AuthenticatedPrototypeTutorsRouteImport } from './routes/_authenticated/prototype.tutors'
 import { Route as AuthenticatedStudentsIdRouteImport } from './routes/_authenticated/students.$id'
+import { Route as AuthenticatedPrototypeStudentsIdRouteImport } from './routes/_authenticated/prototype.students.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -33,19 +47,40 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
+const AuthenticatedBillingRoute = AuthenticatedBillingRouteImport.update({
+  id: '/billing',
+  path: '/billing',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedPackagesRoute = AuthenticatedPackagesRouteImport.update({
-  id: '/packages',
-  path: '/packages',
+const AuthenticatedEnrolmentsRoute = AuthenticatedEnrolmentsRouteImport.update({
+  id: '/enrolments',
+  path: '/enrolments',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedSessionsRoute = AuthenticatedSessionsRouteImport.update({
-  id: '/sessions',
-  path: '/sessions',
+const AuthenticatedMakeUpsRoute = AuthenticatedMakeUpsRouteImport.update({
+  id: '/make-ups',
+  path: '/make-ups',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedNeedsAttentionRoute =
+  AuthenticatedNeedsAttentionRouteImport.update({
+    id: '/needs-attention',
+    path: '/needs-attention',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedRollRoute = AuthenticatedRollRouteImport.update({
+  id: '/roll',
+  path: '/roll',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSetupRoute = AuthenticatedSetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedStaffRoute = AuthenticatedStaffRouteImport.update({
+  id: '/staff',
+  path: '/staff',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedStudentsRoute = AuthenticatedStudentsRouteImport.update({
@@ -53,81 +88,222 @@ const AuthenticatedStudentsRoute = AuthenticatedStudentsRouteImport.update({
   path: '/students',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedTutorsRoute = AuthenticatedTutorsRouteImport.update({
-  id: '/tutors',
-  path: '/tutors',
+const AuthenticatedTimetableRoute = AuthenticatedTimetableRouteImport.update({
+  id: '/timetable',
+  path: '/timetable',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedTodayRoute = AuthenticatedTodayRouteImport.update({
+  id: '/today',
+  path: '/today',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedTutorPayRoute = AuthenticatedTutorPayRouteImport.update({
+  id: '/tutor-pay',
+  path: '/tutor-pay',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedClassesIndexRoute =
+  AuthenticatedClassesIndexRouteImport.update({
+    id: '/classes/',
+    path: '/classes/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedClassesNewRoute = AuthenticatedClassesNewRouteImport.update({
+  id: '/classes/new',
+  path: '/classes/new',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedPrototypeDashboardRoute =
+  AuthenticatedPrototypeDashboardRouteImport.update({
+    id: '/prototype/dashboard',
+    path: '/prototype/dashboard',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPrototypePackagesRoute =
+  AuthenticatedPrototypePackagesRouteImport.update({
+    id: '/prototype/packages',
+    path: '/prototype/packages',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPrototypeSessionsRoute =
+  AuthenticatedPrototypeSessionsRouteImport.update({
+    id: '/prototype/sessions',
+    path: '/prototype/sessions',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPrototypeStudentsRoute =
+  AuthenticatedPrototypeStudentsRouteImport.update({
+    id: '/prototype/students',
+    path: '/prototype/students',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPrototypeTutorsRoute =
+  AuthenticatedPrototypeTutorsRouteImport.update({
+    id: '/prototype/tutors',
+    path: '/prototype/tutors',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedStudentsIdRoute = AuthenticatedStudentsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => AuthenticatedStudentsRoute,
 } as any)
+const AuthenticatedPrototypeStudentsIdRoute =
+  AuthenticatedPrototypeStudentsIdRouteImport.update({
+    id: '/$id',
+    path: '/$id',
+    getParentRoute: () => AuthenticatedPrototypeStudentsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/dashboard': typeof AuthenticatedDashboardRoute
-  '/packages': typeof AuthenticatedPackagesRoute
-  '/sessions': typeof AuthenticatedSessionsRoute
+  '/billing': typeof AuthenticatedBillingRoute
+  '/enrolments': typeof AuthenticatedEnrolmentsRoute
+  '/make-ups': typeof AuthenticatedMakeUpsRoute
+  '/needs-attention': typeof AuthenticatedNeedsAttentionRoute
+  '/roll': typeof AuthenticatedRollRoute
+  '/setup': typeof AuthenticatedSetupRoute
+  '/staff': typeof AuthenticatedStaffRoute
   '/students': typeof AuthenticatedStudentsRouteWithChildren
-  '/tutors': typeof AuthenticatedTutorsRoute
+  '/timetable': typeof AuthenticatedTimetableRoute
+  '/today': typeof AuthenticatedTodayRoute
+  '/tutor-pay': typeof AuthenticatedTutorPayRoute
+  '/classes/new': typeof AuthenticatedClassesNewRoute
+  '/prototype/dashboard': typeof AuthenticatedPrototypeDashboardRoute
+  '/prototype/packages': typeof AuthenticatedPrototypePackagesRoute
+  '/prototype/sessions': typeof AuthenticatedPrototypeSessionsRoute
+  '/prototype/students': typeof AuthenticatedPrototypeStudentsRouteWithChildren
+  '/prototype/tutors': typeof AuthenticatedPrototypeTutorsRoute
   '/students/$id': typeof AuthenticatedStudentsIdRoute
+  '/classes/': typeof AuthenticatedClassesIndexRoute
+  '/prototype/students/$id': typeof AuthenticatedPrototypeStudentsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/dashboard': typeof AuthenticatedDashboardRoute
-  '/packages': typeof AuthenticatedPackagesRoute
-  '/sessions': typeof AuthenticatedSessionsRoute
+  '/billing': typeof AuthenticatedBillingRoute
+  '/enrolments': typeof AuthenticatedEnrolmentsRoute
+  '/make-ups': typeof AuthenticatedMakeUpsRoute
+  '/needs-attention': typeof AuthenticatedNeedsAttentionRoute
+  '/roll': typeof AuthenticatedRollRoute
+  '/setup': typeof AuthenticatedSetupRoute
+  '/staff': typeof AuthenticatedStaffRoute
   '/students': typeof AuthenticatedStudentsRouteWithChildren
-  '/tutors': typeof AuthenticatedTutorsRoute
+  '/timetable': typeof AuthenticatedTimetableRoute
+  '/today': typeof AuthenticatedTodayRoute
+  '/tutor-pay': typeof AuthenticatedTutorPayRoute
+  '/classes/new': typeof AuthenticatedClassesNewRoute
+  '/prototype/dashboard': typeof AuthenticatedPrototypeDashboardRoute
+  '/prototype/packages': typeof AuthenticatedPrototypePackagesRoute
+  '/prototype/sessions': typeof AuthenticatedPrototypeSessionsRoute
+  '/prototype/students': typeof AuthenticatedPrototypeStudentsRouteWithChildren
+  '/prototype/tutors': typeof AuthenticatedPrototypeTutorsRoute
   '/students/$id': typeof AuthenticatedStudentsIdRoute
+  '/classes': typeof AuthenticatedClassesIndexRoute
+  '/prototype/students/$id': typeof AuthenticatedPrototypeStudentsIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
-  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
-  '/_authenticated/packages': typeof AuthenticatedPackagesRoute
-  '/_authenticated/sessions': typeof AuthenticatedSessionsRoute
+  '/_authenticated/billing': typeof AuthenticatedBillingRoute
+  '/_authenticated/enrolments': typeof AuthenticatedEnrolmentsRoute
+  '/_authenticated/make-ups': typeof AuthenticatedMakeUpsRoute
+  '/_authenticated/needs-attention': typeof AuthenticatedNeedsAttentionRoute
+  '/_authenticated/roll': typeof AuthenticatedRollRoute
+  '/_authenticated/setup': typeof AuthenticatedSetupRoute
+  '/_authenticated/staff': typeof AuthenticatedStaffRoute
   '/_authenticated/students': typeof AuthenticatedStudentsRouteWithChildren
-  '/_authenticated/tutors': typeof AuthenticatedTutorsRoute
+  '/_authenticated/timetable': typeof AuthenticatedTimetableRoute
+  '/_authenticated/today': typeof AuthenticatedTodayRoute
+  '/_authenticated/tutor-pay': typeof AuthenticatedTutorPayRoute
+  '/_authenticated/classes/new': typeof AuthenticatedClassesNewRoute
+  '/_authenticated/prototype/dashboard': typeof AuthenticatedPrototypeDashboardRoute
+  '/_authenticated/prototype/packages': typeof AuthenticatedPrototypePackagesRoute
+  '/_authenticated/prototype/sessions': typeof AuthenticatedPrototypeSessionsRoute
+  '/_authenticated/prototype/students': typeof AuthenticatedPrototypeStudentsRouteWithChildren
+  '/_authenticated/prototype/tutors': typeof AuthenticatedPrototypeTutorsRoute
   '/_authenticated/students/$id': typeof AuthenticatedStudentsIdRoute
+  '/_authenticated/classes/': typeof AuthenticatedClassesIndexRoute
+  '/_authenticated/prototype/students/$id': typeof AuthenticatedPrototypeStudentsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/auth'
-    | '/dashboard'
-    | '/packages'
-    | '/sessions'
+    | '/billing'
+    | '/enrolments'
+    | '/make-ups'
+    | '/needs-attention'
+    | '/roll'
+    | '/setup'
+    | '/staff'
     | '/students'
-    | '/tutors'
+    | '/timetable'
+    | '/today'
+    | '/tutor-pay'
+    | '/classes/new'
+    | '/prototype/dashboard'
+    | '/prototype/packages'
+    | '/prototype/sessions'
+    | '/prototype/students'
+    | '/prototype/tutors'
     | '/students/$id'
+    | '/classes/'
+    | '/prototype/students/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
-    | '/dashboard'
-    | '/packages'
-    | '/sessions'
+    | '/billing'
+    | '/enrolments'
+    | '/make-ups'
+    | '/needs-attention'
+    | '/roll'
+    | '/setup'
+    | '/staff'
     | '/students'
-    | '/tutors'
+    | '/timetable'
+    | '/today'
+    | '/tutor-pay'
+    | '/classes/new'
+    | '/prototype/dashboard'
+    | '/prototype/packages'
+    | '/prototype/sessions'
+    | '/prototype/students'
+    | '/prototype/tutors'
     | '/students/$id'
+    | '/classes'
+    | '/prototype/students/$id'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
-    | '/_authenticated/dashboard'
-    | '/_authenticated/packages'
-    | '/_authenticated/sessions'
+    | '/_authenticated/billing'
+    | '/_authenticated/enrolments'
+    | '/_authenticated/make-ups'
+    | '/_authenticated/needs-attention'
+    | '/_authenticated/roll'
+    | '/_authenticated/setup'
+    | '/_authenticated/staff'
     | '/_authenticated/students'
-    | '/_authenticated/tutors'
+    | '/_authenticated/timetable'
+    | '/_authenticated/today'
+    | '/_authenticated/tutor-pay'
+    | '/_authenticated/classes/new'
+    | '/_authenticated/prototype/dashboard'
+    | '/_authenticated/prototype/packages'
+    | '/_authenticated/prototype/sessions'
+    | '/_authenticated/prototype/students'
+    | '/_authenticated/prototype/tutors'
     | '/_authenticated/students/$id'
+    | '/_authenticated/classes/'
+    | '/_authenticated/prototype/students/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -159,25 +335,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/dashboard': {
-      id: '/_authenticated/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+    '/_authenticated/billing': {
+      id: '/_authenticated/billing'
+      path: '/billing'
+      fullPath: '/billing'
+      preLoaderRoute: typeof AuthenticatedBillingRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/packages': {
-      id: '/_authenticated/packages'
-      path: '/packages'
-      fullPath: '/packages'
-      preLoaderRoute: typeof AuthenticatedPackagesRouteImport
+    '/_authenticated/enrolments': {
+      id: '/_authenticated/enrolments'
+      path: '/enrolments'
+      fullPath: '/enrolments'
+      preLoaderRoute: typeof AuthenticatedEnrolmentsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/sessions': {
-      id: '/_authenticated/sessions'
-      path: '/sessions'
-      fullPath: '/sessions'
-      preLoaderRoute: typeof AuthenticatedSessionsRouteImport
+    '/_authenticated/make-ups': {
+      id: '/_authenticated/make-ups'
+      path: '/make-ups'
+      fullPath: '/make-ups'
+      preLoaderRoute: typeof AuthenticatedMakeUpsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/needs-attention': {
+      id: '/_authenticated/needs-attention'
+      path: '/needs-attention'
+      fullPath: '/needs-attention'
+      preLoaderRoute: typeof AuthenticatedNeedsAttentionRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/roll': {
+      id: '/_authenticated/roll'
+      path: '/roll'
+      fullPath: '/roll'
+      preLoaderRoute: typeof AuthenticatedRollRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/setup': {
+      id: '/_authenticated/setup'
+      path: '/setup'
+      fullPath: '/setup'
+      preLoaderRoute: typeof AuthenticatedSetupRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/staff': {
+      id: '/_authenticated/staff'
+      path: '/staff'
+      fullPath: '/staff'
+      preLoaderRoute: typeof AuthenticatedStaffRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/students': {
@@ -187,11 +391,74 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStudentsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/tutors': {
-      id: '/_authenticated/tutors'
-      path: '/tutors'
-      fullPath: '/tutors'
-      preLoaderRoute: typeof AuthenticatedTutorsRouteImport
+    '/_authenticated/timetable': {
+      id: '/_authenticated/timetable'
+      path: '/timetable'
+      fullPath: '/timetable'
+      preLoaderRoute: typeof AuthenticatedTimetableRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/today': {
+      id: '/_authenticated/today'
+      path: '/today'
+      fullPath: '/today'
+      preLoaderRoute: typeof AuthenticatedTodayRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/tutor-pay': {
+      id: '/_authenticated/tutor-pay'
+      path: '/tutor-pay'
+      fullPath: '/tutor-pay'
+      preLoaderRoute: typeof AuthenticatedTutorPayRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/classes/': {
+      id: '/_authenticated/classes/'
+      path: '/classes'
+      fullPath: '/classes/'
+      preLoaderRoute: typeof AuthenticatedClassesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/classes/new': {
+      id: '/_authenticated/classes/new'
+      path: '/classes/new'
+      fullPath: '/classes/new'
+      preLoaderRoute: typeof AuthenticatedClassesNewRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/prototype/dashboard': {
+      id: '/_authenticated/prototype/dashboard'
+      path: '/prototype/dashboard'
+      fullPath: '/prototype/dashboard'
+      preLoaderRoute: typeof AuthenticatedPrototypeDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/prototype/packages': {
+      id: '/_authenticated/prototype/packages'
+      path: '/prototype/packages'
+      fullPath: '/prototype/packages'
+      preLoaderRoute: typeof AuthenticatedPrototypePackagesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/prototype/sessions': {
+      id: '/_authenticated/prototype/sessions'
+      path: '/prototype/sessions'
+      fullPath: '/prototype/sessions'
+      preLoaderRoute: typeof AuthenticatedPrototypeSessionsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/prototype/students': {
+      id: '/_authenticated/prototype/students'
+      path: '/prototype/students'
+      fullPath: '/prototype/students'
+      preLoaderRoute: typeof AuthenticatedPrototypeStudentsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/prototype/tutors': {
+      id: '/_authenticated/prototype/tutors'
+      path: '/prototype/tutors'
+      fullPath: '/prototype/tutors'
+      preLoaderRoute: typeof AuthenticatedPrototypeTutorsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/students/$id': {
@@ -200,6 +467,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/students/$id'
       preLoaderRoute: typeof AuthenticatedStudentsIdRouteImport
       parentRoute: typeof AuthenticatedStudentsRoute
+    }
+    '/_authenticated/prototype/students/$id': {
+      id: '/_authenticated/prototype/students/$id'
+      path: '/$id'
+      fullPath: '/prototype/students/$id'
+      preLoaderRoute: typeof AuthenticatedPrototypeStudentsIdRouteImport
+      parentRoute: typeof AuthenticatedPrototypeStudentsRoute
     }
   }
 }
@@ -217,20 +491,62 @@ const AuthenticatedStudentsRouteWithChildren =
     AuthenticatedStudentsRouteChildren,
   )
 
+interface AuthenticatedPrototypeStudentsRouteChildren {
+  AuthenticatedPrototypeStudentsIdRoute: typeof AuthenticatedPrototypeStudentsIdRoute
+}
+
+const AuthenticatedPrototypeStudentsRouteChildren: AuthenticatedPrototypeStudentsRouteChildren =
+  {
+    AuthenticatedPrototypeStudentsIdRoute:
+      AuthenticatedPrototypeStudentsIdRoute,
+  }
+
+const AuthenticatedPrototypeStudentsRouteWithChildren =
+  AuthenticatedPrototypeStudentsRoute._addFileChildren(
+    AuthenticatedPrototypeStudentsRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
-  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
-  AuthenticatedPackagesRoute: typeof AuthenticatedPackagesRoute
-  AuthenticatedSessionsRoute: typeof AuthenticatedSessionsRoute
+  AuthenticatedBillingRoute: typeof AuthenticatedBillingRoute
+  AuthenticatedEnrolmentsRoute: typeof AuthenticatedEnrolmentsRoute
+  AuthenticatedMakeUpsRoute: typeof AuthenticatedMakeUpsRoute
+  AuthenticatedNeedsAttentionRoute: typeof AuthenticatedNeedsAttentionRoute
+  AuthenticatedRollRoute: typeof AuthenticatedRollRoute
+  AuthenticatedSetupRoute: typeof AuthenticatedSetupRoute
+  AuthenticatedStaffRoute: typeof AuthenticatedStaffRoute
   AuthenticatedStudentsRoute: typeof AuthenticatedStudentsRouteWithChildren
-  AuthenticatedTutorsRoute: typeof AuthenticatedTutorsRoute
+  AuthenticatedTimetableRoute: typeof AuthenticatedTimetableRoute
+  AuthenticatedTodayRoute: typeof AuthenticatedTodayRoute
+  AuthenticatedTutorPayRoute: typeof AuthenticatedTutorPayRoute
+  AuthenticatedClassesNewRoute: typeof AuthenticatedClassesNewRoute
+  AuthenticatedPrototypeDashboardRoute: typeof AuthenticatedPrototypeDashboardRoute
+  AuthenticatedPrototypePackagesRoute: typeof AuthenticatedPrototypePackagesRoute
+  AuthenticatedPrototypeSessionsRoute: typeof AuthenticatedPrototypeSessionsRoute
+  AuthenticatedPrototypeStudentsRoute: typeof AuthenticatedPrototypeStudentsRouteWithChildren
+  AuthenticatedPrototypeTutorsRoute: typeof AuthenticatedPrototypeTutorsRoute
+  AuthenticatedClassesIndexRoute: typeof AuthenticatedClassesIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
-  AuthenticatedPackagesRoute: AuthenticatedPackagesRoute,
-  AuthenticatedSessionsRoute: AuthenticatedSessionsRoute,
+  AuthenticatedBillingRoute: AuthenticatedBillingRoute,
+  AuthenticatedEnrolmentsRoute: AuthenticatedEnrolmentsRoute,
+  AuthenticatedMakeUpsRoute: AuthenticatedMakeUpsRoute,
+  AuthenticatedNeedsAttentionRoute: AuthenticatedNeedsAttentionRoute,
+  AuthenticatedRollRoute: AuthenticatedRollRoute,
+  AuthenticatedSetupRoute: AuthenticatedSetupRoute,
+  AuthenticatedStaffRoute: AuthenticatedStaffRoute,
   AuthenticatedStudentsRoute: AuthenticatedStudentsRouteWithChildren,
-  AuthenticatedTutorsRoute: AuthenticatedTutorsRoute,
+  AuthenticatedTimetableRoute: AuthenticatedTimetableRoute,
+  AuthenticatedTodayRoute: AuthenticatedTodayRoute,
+  AuthenticatedTutorPayRoute: AuthenticatedTutorPayRoute,
+  AuthenticatedClassesNewRoute: AuthenticatedClassesNewRoute,
+  AuthenticatedPrototypeDashboardRoute: AuthenticatedPrototypeDashboardRoute,
+  AuthenticatedPrototypePackagesRoute: AuthenticatedPrototypePackagesRoute,
+  AuthenticatedPrototypeSessionsRoute: AuthenticatedPrototypeSessionsRoute,
+  AuthenticatedPrototypeStudentsRoute:
+    AuthenticatedPrototypeStudentsRouteWithChildren,
+  AuthenticatedPrototypeTutorsRoute: AuthenticatedPrototypeTutorsRoute,
+  AuthenticatedClassesIndexRoute: AuthenticatedClassesIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -244,3 +560,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

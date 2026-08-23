@@ -22,7 +22,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { listTutors, createTutor, updateTutor, deleteTutor } from "@/lib/tutors.functions";
+import {
+  listTutors,
+  createTutor,
+  updateTutor,
+  deleteTutor,
+} from "@/lib/prototype/tutors.functions";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { queryOptions, useQueryClient } from "@tanstack/react-query";
@@ -33,7 +38,7 @@ const tutorsQueryOptions = () =>
     queryFn: () => listTutors(),
   });
 
-export const Route = createFileRoute("/_authenticated/tutors")({
+export const Route = createFileRoute("/_authenticated/prototype/tutors")({
   loader: ({ context }) => context.queryClient.ensureQueryData(tutorsQueryOptions()),
   component: TutorsPage,
 });
@@ -241,7 +246,10 @@ function TutorsPage() {
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="status">Status</Label>
-              <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as typeof emptyForm.status })}>
+              <Select
+                value={form.status}
+                onValueChange={(v) => setForm({ ...form, status: v as typeof emptyForm.status })}
+              >
                 <SelectTrigger id="status">
                   <SelectValue />
                 </SelectTrigger>

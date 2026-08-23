@@ -22,7 +22,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { listPackages, createPackage, updatePackage, deletePackage } from "@/lib/packages.functions";
+import {
+  listPackages,
+  createPackage,
+  updatePackage,
+  deletePackage,
+} from "@/lib/prototype/packages.functions";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { queryOptions, useQueryClient } from "@tanstack/react-query";
@@ -33,7 +38,7 @@ const packagesQueryOptions = () =>
     queryFn: () => listPackages(),
   });
 
-export const Route = createFileRoute("/_authenticated/packages")({
+export const Route = createFileRoute("/_authenticated/prototype/packages")({
   loader: ({ context }) => context.queryClient.ensureQueryData(packagesQueryOptions()),
   component: PackagesPage,
 });
@@ -60,10 +65,7 @@ function PackagesPage() {
 
   const filtered = packages.filter((p) => {
     const q = search.toLowerCase();
-    return (
-      p.name.toLowerCase().includes(q) ||
-      (p.description?.toLowerCase().includes(q) ?? false)
-    );
+    return p.name.toLowerCase().includes(q) || (p.description?.toLowerCase().includes(q) ?? false);
   });
 
   function openNew() {
@@ -226,7 +228,10 @@ function PackagesPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="status">Status</Label>
-              <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as typeof emptyForm.status })}>
+              <Select
+                value={form.status}
+                onValueChange={(v) => setForm({ ...form, status: v as typeof emptyForm.status })}
+              >
                 <SelectTrigger id="status">
                   <SelectValue />
                 </SelectTrigger>

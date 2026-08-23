@@ -17,12 +17,24 @@ export const getDashboardStats = createServerFn({ method: "GET" })
       { count: attendanceThisWeek },
       { data: packageRows },
     ] = await Promise.all([
-      supabase.from("students").select("id", { count: "exact", head: true }).eq("status", "active"),
-      supabase.from("tutors").select("id", { count: "exact", head: true }).eq("status", "active"),
-      supabase.from("sessions").select("id", { count: "exact", head: true }).gte("start_time", now),
-      supabase.from("student_packages").select("id", { count: "exact", head: true }),
-      supabase.from("session_students").select("id", { count: "exact", head: true }).gte("created_at", weekAgo),
-      supabase.from("student_packages").select("total_sessions, sessions_used"),
+      supabase
+        .from("proto_students")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "active"),
+      supabase
+        .from("proto_tutors")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "active"),
+      supabase
+        .from("proto_sessions")
+        .select("id", { count: "exact", head: true })
+        .gte("start_time", now),
+      supabase.from("proto_student_packages").select("id", { count: "exact", head: true }),
+      supabase
+        .from("proto_session_students")
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", weekAgo),
+      supabase.from("proto_student_packages").select("total_sessions, sessions_used"),
     ]);
 
     const classesRemaining =
