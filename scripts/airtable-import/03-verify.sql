@@ -2,9 +2,13 @@
 -- Airtable import — step 3 of 3: verification
 --
 -- Read-only. Run it after every load, including the final one at cutover.
+--
+-- With psql:  psql "$DATABASE_URL" -f 03-verify.sql   — runs the lot.
+-- In the Supabase SQL editor: run one numbered section at a time. The editor
+-- only shows the last result set, so running the whole file hides most of it.
 -- =============================================================================
 
-\echo '=== 1. Row counts: live vs Airtable ==='
+-- === 1. Row counts: live vs Airtable ===
 select 'guardians'       as table_name, (select count(*) from guardians)       as loaded, (select count(*) from staging.at_guardians)  as airtable
 union all select 'students',        (select count(*) from students),        (select count(*) from staging.at_students)
 union all select 'tutors',          (select count(*) from tutors),          (select count(*) from staging.at_tutors)
@@ -19,8 +23,8 @@ union all select 'attendance',      (select count(*) from attendance),      (sel
 union all select 'charges',         (select count(*) from charges),         (select count(*) from staging.at_charges)
 union all select 'tutor_payouts',   (select count(*) from tutor_payouts),   (select count(*) from staging.at_payouts);
 
-\echo ''
-\echo '=== 2. Anything that did NOT come across, and why ==='
+-- 
+-- === 2. Anything that did NOT come across, and why ===
 select 'enrolment' as kind, staging.txt(b.fields,'Billing Code') as code,
        'Billing status: ' || coalesce(staging.txt(b.fields,'Status'),'(blank)') as reason
 from staging.at_billing b
@@ -39,9 +43,9 @@ from staging.at_charges c
 where not exists (select 1 from charges x where x.airtable_id = c.id)
 order by kind, code;
 
-\echo ''
-\echo '=== 3. THE ONE THAT MATTERS: hours balances vs Airtable ==='
-\echo 'Every family account depends on this. difference must be 0.00 on every row.'
+-- 
+-- === 3. THE ONE THAT MATTERS: hours balances vs Airtable ===
+-- Every family account depends on this. difference must be 0.00 on every row.
 select
   p.code,
   s.full_name                                       as student,
@@ -58,13 +62,13 @@ join students s on s.id = p.student_id
 join staging.at_hours h on h.id = p.airtable_id
 order by abs(coalesce(p.hours_remaining - staging.num(h.fields,'Hours Remaining'), 0)) desc, p.code;
 
-\echo ''
-\echo '=== 4. Money reconciles ==='
+-- 
+-- === 4. Money reconciles ===
 select status, count(*) as charges, sum(final_amount) as total
 from v_charges group by status order by status;
 
-\echo ''
-\echo '=== 5. Nothing lost its link ==='
+-- 
+-- === 5. Nothing lost its link ===
 select 'attendance with no session'  as check_name, count(*) as should_be_zero
   from attendance a left join sessions s on s.id = a.session_id where s.id is null
 union all
@@ -78,13 +82,13 @@ select 'hours enrolments with no eligible package', count(*)
   from enrolments e where e.method = 'hours' and e.status = 'active'
     and not exists (select 1 from package_eligibility pe where pe.enrolment_id = e.id);
 
-\echo ''
-\echo '=== 6. The exception list — expect a sane length, not zero ==='
+-- 
+-- === 6. The exception list — expect a sane length, not zero ===
 select entity, issue, count(*) from v_needs_attention
 group by entity, issue order by count(*) desc;
 
-\echo ''
-\echo '=== 7. Tutor pay sanity ==='
+-- 
+-- === 7. Tutor pay sanity ===
 select t.code, t.full_name, r.hourly_rate, r.effective_from,
        (select count(*) from sessions s where s.tutor_id = t.id) as lessons
 from tutors t

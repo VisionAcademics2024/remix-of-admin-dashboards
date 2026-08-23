@@ -30,15 +30,15 @@ re-run and inspected without going back to Airtable.
 # 1. Preflight — does the live schema support the import?
 psql "$DATABASE_URL" -f scripts/airtable-import/00-preflight.sql
 
-# 2. Extract. Token needs data.records:read + schema.bases:read on the base.
+# Extract. Token needs data.records:read + schema.bases:read on the base.
 AIRTABLE_PAT=pat... node scripts/airtable-import/extract.mjs
 
-# 3. Load and transform
+# Load and transform
 psql "$DATABASE_URL" -f scripts/airtable-import/01-staging.sql
 psql "$DATABASE_URL" -f airtable-export/00-data.sql
 psql "$DATABASE_URL" -f scripts/airtable-import/02-transform.sql
 
-# 4. Check
+# Check
 psql "$DATABASE_URL" -f scripts/airtable-import/03-verify.sql
 ```
 
