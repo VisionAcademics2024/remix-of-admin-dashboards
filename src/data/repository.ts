@@ -25,7 +25,7 @@ export interface VisionRepository {
   getTodayBoard(date: SydneyDate): Promise<ViewRow>;
   getTodaySessions(date: SydneyDate): Promise<ViewRows>;
   getWeekSessions(params: WeekParams): Promise<ViewRow>;
-  getSessionRoll(sessionId: string): Promise<ViewRows>;
+  getSessionRoll(sessionId: string): Promise<ViewRow>;
 
   /* classes */
   getOfferingList(): Promise<ViewRows>;
