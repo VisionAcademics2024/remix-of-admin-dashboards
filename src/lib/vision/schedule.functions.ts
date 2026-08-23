@@ -1,0 +1,224 @@
+import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+
+import { db, requireStaff } from "./guard";
+import type { Row } from "./types";
+
+const SESSION_SELECT =
+  "*, tutors(id, full_name, colour), class_offerings(id, code, room, capacity, programs(name, code), operating_periods(name, code))";
+
+/**
+ * A week of lessons. Bounds are Sydney calendar dates; the query widens them by
+ * a day on each side and filters on session_date so no lesson is lost to the
+ * UTC offset at the edges of the window.
+ */
+export const listWeek = createServerFn({ method: "GET" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    z.object({ week_start: z.string().min(1), tutor_id: z.string().uuid().nullish() }).parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+
+    const from = shiftDate(data.week_start, -1);
+    const to = shiftDate(data.week_start, 8);
+
+    let query = client
+      .from("v_sessions")
+      .select(SESSION_SELECT)
+      .gte("starts_at", `${from}T00:00:00Z`)
+      .lte("starts_at", `${to}T00:00:00Z`)
+      .order("starts_at");
+
+    if (data.tutor_id) query = query.eq("tutor_id", data.tutor_id);
+
+    const { data: sessions, error } = await query;
+    if (error) throw error;
+
+    const weekEnd = shiftDate(data.week_start, 6);
+    const inWeek = (sessions ?? []).filter(
+      (s: Row) => s.session_date >= data.week_start && s.session_date <= weekEnd,
+    );
+
+    const ids = inWeek.map((s: Row) => s.id);
+    const counts = new Map<string, { marked: number; total: number }>();
+    if (ids.length) {
+      const { data: roll } = await client
+        .from("attendance")
+        .select("session_id, status")
+        .in("session_id", ids);
+      for (const r of roll ?? []) {
+        const c = counts.get(r.session_id) ?? { marked: 0, total: 0 };
+        c.total += 1;
+        if (r.status !== "not_marked") c.marked += 1;
+        counts.set(r.session_id, c);
+      }
+    }
+
+    return inWeek.map((s: Row) => ({
+      ...s,
+      roll_marked: counts.get(s.id)?.marked ?? 0,
+      roll_total: counts.get(s.id)?.total ?? 0,
+    }));
+  });
+
+function shiftDate(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Today's lessons, in Sydney. */
+export const listToday = createServerFn({ method: "GET" })
+  .middleware([requireStaff])
+  .inputValidator((data) => z.object({ date: z.string().min(1) }).parse(data))
+  .handler(async ({ context, data }) => {
+    const { data: sessions, error } = await db(context.supabase)
+      .from("v_sessions")
+      .select(SESSION_SELECT)
+      .gte("starts_at", `${shiftDate(data.date, -1)}T00:00:00Z`)
+      .lte("starts_at", `${shiftDate(data.date, 2)}T00:00:00Z`)
+      .order("starts_at");
+    if (error) throw error;
+    return (sessions ?? []).filter((s: Row) => s.session_date === data.date);
+  });
+
+const sessionPatch = z.object({
+  id: z.string().uuid(),
+  tutor_id: z.string().uuid().nullish(),
+  room: z.string().optional().or(z.literal("")),
+  status: z.enum(["scheduled", "completed", "cancelled", "rescheduled"]).optional(),
+  starts_at: z.string().optional(),
+  ends_at: z.string().optional(),
+  notes: z.string().optional().or(z.literal("")),
+});
+
+/**
+ * Edit lesson times in place. Never delete and regenerate — that orphans the
+ * roll and loses attendance marks.
+ */
+export const updateSession = createServerFn({ method: "POST" })
+  .middleware([requireStaff])
+  .inputValidator((data) => sessionPatch.parse(data))
+  .handler(async ({ context, data }) => {
+    const { id, ...patch } = data;
+    const payload = Object.fromEntries(
+      Object.entries(patch)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, v === "" ? null : v]),
+    );
+    const { error } = await db(context.supabase).from("sessions").update(payload).eq("id", id);
+    if (error) throw error;
+    return { success: true };
+  });
+
+/** Cancelling preserves the roll. Cancelled lessons pay nobody and consume nothing. */
+export const cancelSession = createServerFn({ method: "POST" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    z.object({ id: z.string().uuid(), notes: z.string().optional().or(z.literal("")) }).parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const { error } = await db(context.supabase)
+      .from("sessions")
+      .update({ status: "cancelled", notes: data.notes || null })
+      .eq("id", data.id);
+    if (error) throw error;
+    return { success: true };
+  });
+
+/**
+ * Hard delete, deliberately hard to reach: allowed only while the lesson has no
+ * roll at all. Anything that has run gets cancelled instead.
+ */
+export const deleteSession = createServerFn({ method: "POST" })
+  .middleware([requireStaff])
+  .inputValidator((data) => z.object({ id: z.string().uuid() }).parse(data))
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+
+    const { count } = await client
+      .from("attendance")
+      .select("id", { count: "exact", head: true })
+      .eq("session_id", data.id);
+    if ((count ?? 0) > 0) {
+      throw new Error(
+        "This lesson has a roll. Cancel it instead — deleting would erase the attendance record.",
+      );
+    }
+
+    const { error } = await client.from("sessions").delete().eq("id", data.id);
+    if (error) throw error;
+    return { success: true };
+  });
+
+/** A one-off lesson added by hand, seeded straight away. */
+export const createSession = createServerFn({ method: "POST" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    z
+      .object({
+        class_offering_id: z.string().uuid(),
+        tutor_id: z.string().uuid().nullish(),
+        starts_at: z.string().min(1),
+        ends_at: z.string().min(1),
+        room: z.string().optional().or(z.literal("")),
+        session_type: z.enum(["regular", "dedicated_make_up"]).default("regular"),
+        notes: z.string().optional().or(z.literal("")),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+
+    const { data: row, error } = await client
+      .from("sessions")
+      .insert({
+        ...data,
+        tutor_id: data.tutor_id || null,
+        room: data.room || null,
+        notes: data.notes || null,
+      })
+      .select("id, code")
+      .single();
+    if (error) throw error;
+
+    await client.rpc("seed_roll", { p_session_id: row.id });
+    return row;
+  });
+
+/** The roll for one lesson, ready to mark. */
+export const getSessionRoll = createServerFn({ method: "GET" })
+  .middleware([requireStaff])
+  .inputValidator((data) => z.object({ session_id: z.string().uuid() }).parse(data))
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+
+    const [session, roll] = await Promise.all([
+      client.from("v_sessions").select(SESSION_SELECT).eq("id", data.session_id).maybeSingle(),
+      client
+        .from("v_attendance")
+        .select("*, enrolments(code, method, students(id, code, full_name))")
+        .eq("session_id", data.session_id),
+    ]);
+
+    const entries = (roll.data ?? []).sort((a: Row, b: Row) =>
+      (a.enrolments?.students?.full_name ?? "").localeCompare(
+        b.enrolments?.students?.full_name ?? "",
+      ),
+    );
+
+    return { session: session.data, roll: entries };
+  });
+
+/** Seeding is idempotent, so this is safe to offer as a button on every lesson. */
+export const seedRoll = createServerFn({ method: "POST" })
+  .middleware([requireStaff])
+  .inputValidator((data) => z.object({ session_id: z.string().uuid() }).parse(data))
+  .handler(async ({ context, data }) => {
+    const { data: created, error } = await db(context.supabase).rpc("seed_roll", {
+      p_session_id: data.session_id,
+    });
+    if (error) throw error;
+    return { created: created ?? 0 };
+  });

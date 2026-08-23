@@ -17,22 +17,24 @@ export const listSessions = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { data, error } = await context.supabase
-      .from("sessions")
+      .from("proto_sessions")
       .select(
-        "*, tutors(first_name, last_name), session_students(id, student_id, attendance_status, students(id, first_name, last_name))"
+        "*, proto_tutors(first_name, last_name), proto_session_students(id, student_id, attendance_status, proto_students(id, first_name, last_name))",
       )
       .order("start_time", { ascending: true });
     if (error) throw error;
     return (data ?? []).map((s: any) => ({
       ...s,
-      tutor_name: s.tutors ? `${s.tutors.first_name} ${s.tutors.last_name}` : null,
-      student_count: s.session_students?.length ?? 0,
-      students: (s.session_students ?? []).map((ss: any) => ({
+      tutor_name: s.proto_tutors
+        ? `${s.proto_tutors.first_name} ${s.proto_tutors.last_name}`
+        : null,
+      student_count: s.proto_session_students?.length ?? 0,
+      students: (s.proto_session_students ?? []).map((ss: any) => ({
         session_student_id: ss.id,
         student_id: ss.student_id,
         attendance_status: ss.attendance_status,
-        first_name: ss.students?.first_name,
-        last_name: ss.students?.last_name,
+        first_name: ss.proto_students?.first_name,
+        last_name: ss.proto_students?.last_name,
       })),
     }));
   });
@@ -42,20 +44,24 @@ export const getSession = createServerFn({ method: "GET" })
   .inputValidator((data) => z.object({ id: z.string() }).parse(data))
   .handler(async ({ context, data }) => {
     const { data: session, error } = await context.supabase
-      .from("sessions")
-      .select("*, tutors(first_name, last_name), session_students(id, student_id, attendance_status, students(id, first_name, last_name))")
+      .from("proto_sessions")
+      .select(
+        "*, proto_tutors(first_name, last_name), proto_session_students(id, student_id, attendance_status, proto_students(id, first_name, last_name))",
+      )
       .eq("id", data.id)
       .single();
     if (error) throw error;
     return {
       ...session,
-      tutor_name: session.tutors ? `${session.tutors.first_name} ${session.tutors.last_name}` : null,
-      students: (session.session_students ?? []).map((ss: any) => ({
+      tutor_name: session.proto_tutors
+        ? `${session.proto_tutors.first_name} ${session.proto_tutors.last_name}`
+        : null,
+      students: (session.proto_session_students ?? []).map((ss: any) => ({
         session_student_id: ss.id,
         student_id: ss.student_id,
         attendance_status: ss.attendance_status,
-        first_name: ss.students?.first_name,
-        last_name: ss.students?.last_name,
+        first_name: ss.proto_students?.first_name,
+        last_name: ss.proto_students?.last_name,
       })),
     };
   });
@@ -72,11 +78,17 @@ export const createSession = createServerFn({ method: "POST" })
       location: rest.location || null,
       notes: rest.notes || null,
     };
-    const { data: session, error } = await context.supabase.from("sessions").insert(payload).select().single();
+    const { data: session, error } = await context.supabase
+      .from("proto_sessions")
+      .insert(payload)
+      .select()
+      .single();
     if (error) throw error;
     if (student_ids.length > 0) {
       const rows = student_ids.map((student_id) => ({ session_id: session.id, student_id }));
-      const { error: enrollError } = await context.supabase.from("session_students").insert(rows);
+      const { error: enrollError } = await context.supabase
+        .from("proto_session_students")
+        .insert(rows);
       if (enrollError) throw enrollError;
     }
     return session;
@@ -90,7 +102,7 @@ export const updateSession = createServerFn({ method: "POST" })
         id: z.string(),
         ...sessionSchema.shape,
       })
-      .parse(data)
+      .parse(data),
   )
   .handler(async ({ context, data }) => {
     const { id, student_ids, ...rest } = data;
@@ -102,18 +114,23 @@ export const updateSession = createServerFn({ method: "POST" })
       notes: rest.notes || null,
     };
     const { data: session, error } = await context.supabase
-      .from("sessions")
+      .from("proto_sessions")
       .update(payload)
       .eq("id", id)
       .select()
       .single();
     if (error) throw error;
 
-    const { error: deleteError } = await context.supabase.from("session_students").delete().eq("session_id", id);
+    const { error: deleteError } = await context.supabase
+      .from("proto_session_students")
+      .delete()
+      .eq("session_id", id);
     if (deleteError) throw deleteError;
     if (student_ids.length > 0) {
       const rows = student_ids.map((student_id) => ({ session_id: id, student_id }));
-      const { error: enrollError } = await context.supabase.from("session_students").insert(rows);
+      const { error: enrollError } = await context.supabase
+        .from("proto_session_students")
+        .insert(rows);
       if (enrollError) throw enrollError;
     }
     return session;
@@ -123,7 +140,7 @@ export const deleteSession = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: z.string() }).parse(data))
   .handler(async ({ context, data }) => {
-    const { error } = await context.supabase.from("sessions").delete().eq("id", data.id);
+    const { error } = await context.supabase.from("proto_sessions").delete().eq("id", data.id);
     if (error) throw error;
     return { success: true };
   });
@@ -137,11 +154,11 @@ export const markAttendance = createServerFn({ method: "POST" })
         student_id: z.string(),
         attendance_status: z.enum(["pending", "present", "absent", "excused"]),
       })
-      .parse(data)
+      .parse(data),
   )
   .handler(async ({ context, data }) => {
     const { error } = await context.supabase
-      .from("session_students")
+      .from("proto_session_students")
       .update({ attendance_status: data.attendance_status })
       .eq("session_id", data.session_id)
       .eq("student_id", data.student_id);

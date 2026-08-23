@@ -1,14 +1,30 @@
-import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import {
-  LayoutDashboard,
-  Users,
-  GraduationCap,
-  Package,
+  BadgeDollarSign,
   CalendarDays,
+  ClipboardCheck,
+  FlaskConical,
+  GraduationCap,
+  LayoutGrid,
+  ListChecks,
   LogOut,
+  Moon,
+  Receipt,
+  Repeat,
+  Settings,
+  Sun,
+  Sunrise,
+  Users,
+  UserCog,
+  Wallet,
+  Wrench,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { supabase } from "@/integrations/supabase/client";
+import { getNeedsAttentionCount } from "@/lib/vision/overview.functions";
+import type { StaffRole } from "@/lib/vision/types";
 import {
   Sidebar,
   SidebarContent,
@@ -23,71 +39,181 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-const items = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  { title: "Students", url: "/students", icon: GraduationCap },
-  { title: "Tutors", url: "/tutors", icon: Users },
-  { title: "Packages", url: "/packages", icon: Package },
-  { title: "Sessions", url: "/sessions", icon: CalendarDays },
+/** Daily use first, setup last — the order the spec asks for. */
+const DAILY = [
+  { title: "Today", url: "/today", icon: Sunrise },
+  { title: "Timetable", url: "/timetable", icon: CalendarDays },
+  { title: "Roll", url: "/roll", icon: ClipboardCheck },
+  { title: "Class Builder", url: "/classes/new", icon: Wrench },
+  { title: "Make-Ups", url: "/make-ups", icon: Repeat },
+  { title: "Classes", url: "/classes", icon: LayoutGrid },
 ];
 
-export function AppSidebar() {
+const RECORDS = [
+  { title: "Students & Families", url: "/students", icon: GraduationCap },
+  { title: "Enrolments & Hours", url: "/enrolments", icon: Wallet },
+  { title: "Billing", url: "/billing", icon: Receipt },
+];
+
+const ADMIN = [
+  { title: "Needs Attention", url: "/needs-attention", icon: ListChecks, badge: true },
+  { title: "Tutor Pay", url: "/tutor-pay", icon: BadgeDollarSign, ownerOnly: true },
+  { title: "Setup", url: "/setup", icon: Settings },
+  { title: "Staff", url: "/staff", icon: UserCog, ownerOnly: true },
+];
+
+export function AppSidebar({ role, name }: { role: StaffRole; name: string }) {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const navigate = useNavigate();
-  const currentPath = useRouterState({
-    select: (router) => router.location.pathname,
+  const currentPath = useRouterState({ select: (r) => r.location.pathname });
+
+  // An exception count in the nav beats a screen nobody visits.
+  const { data: attention } = useQuery({
+    queryKey: ["needs-attention-count"],
+    queryFn: () => getNeedsAttentionCount(),
+    refetchInterval: 120_000,
   });
 
-  const isActive = (path: string) => currentPath === path || currentPath.startsWith(`${path}/`);
+  const isActive = (path: string) =>
+    path === "/classes"
+      ? currentPath === "/classes"
+      : currentPath === path || currentPath.startsWith(`${path}/`);
 
   async function handleSignOut() {
     await supabase.auth.signOut();
     navigate({ to: "/auth", replace: true });
   }
 
+  const renderItems = (
+    items: {
+      title: string;
+      url: string;
+      icon: typeof Users;
+      badge?: boolean;
+      ownerOnly?: boolean;
+    }[],
+  ) =>
+    items
+      .filter((item) => !item.ownerOnly || role === "owner")
+      .map((item) => (
+        <SidebarMenuItem key={item.url}>
+          <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
+            <Link to={item.url}>
+              <item.icon />
+              {!collapsed && (
+                <span className="flex w-full items-center justify-between gap-2">
+                  <span className="truncate">{item.title}</span>
+                  {item.badge && (attention?.count ?? 0) > 0 && (
+                    <span className="rounded-full bg-warning px-1.5 text-xs font-semibold text-warning-foreground">
+                      {attention!.count}
+                    </span>
+                  )}
+                </span>
+              )}
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      ));
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <div className="flex h-12 items-center px-3">
-          <GraduationCap className="h-6 w-6 shrink-0 text-primary" />
+        <div className="flex h-12 items-center gap-2 px-3">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <span className="text-sm font-bold">V</span>
+          </div>
           {!collapsed && (
-            <span className="ml-2 text-lg font-semibold tracking-tight">TutorHub</span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold leading-tight">Vision CRM</p>
+              <p className="truncate text-xs text-muted-foreground">{name}</p>
+            </div>
           )}
         </div>
       </SidebarHeader>
+
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Management</SidebarGroupLabel>
+          {!collapsed && <SidebarGroupLabel>Every day</SidebarGroupLabel>}
+          <SidebarGroupContent>
+            <SidebarMenu>{renderItems(DAILY)}</SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          {!collapsed && <SidebarGroupLabel>Records</SidebarGroupLabel>}
+          <SidebarGroupContent>
+            <SidebarMenu>{renderItems(RECORDS)}</SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          {!collapsed && <SidebarGroupLabel>Admin</SidebarGroupLabel>}
+          <SidebarGroupContent>
+            <SidebarMenu>{renderItems(ADMIN)}</SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          {!collapsed && <SidebarGroupLabel>Reference</SidebarGroupLabel>}
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                    <Link to={item.url} className="flex items-center gap-2">
-                      <item.icon className="h-4 w-4" />
-                      {!collapsed && <span>{item.title}</span>}
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={currentPath.startsWith("/prototype")}
+                  tooltip="Original prototype"
+                >
+                  <Link to="/prototype/dashboard">
+                    <FlaskConical />
+                    {!collapsed && <span>Prototype</span>}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
       <SidebarFooter>
         <SidebarMenu>
+          <ThemeToggleItem collapsed={collapsed} />
           <SidebarMenuItem>
-            <SidebarMenuButton
-              onClick={handleSignOut}
-              className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
-            >
-              <LogOut className="h-4 w-4" />
+            <SidebarMenuButton onClick={handleSignOut} tooltip="Sign out">
+              <LogOut />
               {!collapsed && <span>Sign out</span>}
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
+  );
+}
+
+function ThemeToggleItem({ collapsed }: { collapsed: boolean }) {
+  const [dark, setDark] = useState(false);
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem("vision-theme");
+    const prefers = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const next = stored ? stored === "dark" : prefers;
+    setDark(next);
+    document.documentElement.classList.toggle("dark", next);
+  }, []);
+
+  function toggle() {
+    const next = !dark;
+    setDark(next);
+    document.documentElement.classList.toggle("dark", next);
+    window.localStorage.setItem("vision-theme", next ? "dark" : "light");
+  }
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton onClick={toggle} tooltip={dark ? "Light mode" : "Dark mode"}>
+        {dark ? <Sun /> : <Moon />}
+        {!collapsed && <span>{dark ? "Light mode" : "Dark mode"}</span>}
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   );
 }

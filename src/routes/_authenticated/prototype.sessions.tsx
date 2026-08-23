@@ -23,9 +23,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { listSessions, createSession, updateSession, deleteSession, markAttendance } from "@/lib/sessions.functions";
-import { listTutors } from "@/lib/tutors.functions";
-import { listStudents } from "@/lib/students.functions";
+import {
+  listSessions,
+  createSession,
+  updateSession,
+  deleteSession,
+  markAttendance,
+} from "@/lib/prototype/sessions.functions";
+import { listTutors } from "@/lib/prototype/tutors.functions";
+import { listStudents } from "@/lib/prototype/students.functions";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { queryOptions, useQueryClient } from "@tanstack/react-query";
@@ -48,7 +54,7 @@ const studentsQueryOptions = () =>
     queryFn: () => listStudents(),
   });
 
-export const Route = createFileRoute("/_authenticated/sessions")({
+export const Route = createFileRoute("/_authenticated/prototype/sessions")({
   loader: ({ context }) => {
     context.queryClient.ensureQueryData(sessionsQueryOptions());
     context.queryClient.ensureQueryData(tutorsQueryOptions());
@@ -162,7 +168,9 @@ function SessionsPage() {
 
   async function handleAttendance(sessionId: string, studentId: string, status: string) {
     try {
-      await markAttendanceFn({ data: { session_id: sessionId, student_id: studentId, attendance_status: status as any } });
+      await markAttendanceFn({
+        data: { session_id: sessionId, student_id: studentId, attendance_status: status as any },
+      });
       queryClient.invalidateQueries({ queryKey: ["sessions"] });
       toast.success("Attendance updated");
     } catch (e: any) {
@@ -243,8 +251,13 @@ function SessionsPage() {
                   <div className="mb-2 text-sm font-medium">Attendance</div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {session.students?.map((s: any) => (
-                      <div key={s.session_student_id} className="flex items-center justify-between rounded-md border p-2">
-                        <span className="text-sm">{s.first_name} {s.last_name}</span>
+                      <div
+                        key={s.session_student_id}
+                        className="flex items-center justify-between rounded-md border p-2"
+                      >
+                        <span className="text-sm">
+                          {s.first_name} {s.last_name}
+                        </span>
                         <Select
                           value={s.attendance_status}
                           onValueChange={(v) => handleAttendance(session.id, s.student_id, v)}
@@ -296,7 +309,10 @@ function SessionsPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="tutor">Tutor</Label>
-              <Select value={form.tutor_id} onValueChange={(v) => setForm({ ...form, tutor_id: v })}>
+              <Select
+                value={form.tutor_id}
+                onValueChange={(v) => setForm({ ...form, tutor_id: v })}
+              >
                 <SelectTrigger id="tutor">
                   <SelectValue placeholder="Select tutor" />
                 </SelectTrigger>
@@ -370,7 +386,10 @@ function SessionsPage() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={!form.title || !form.start_time || !form.end_time}>
+            <Button
+              onClick={handleSave}
+              disabled={!form.title || !form.start_time || !form.end_time}
+            >
               Save
             </Button>
           </DialogFooter>

@@ -16,7 +16,7 @@ export const listTutors = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { data, error } = await context.supabase
-      .from("tutors")
+      .from("proto_tutors")
       .select("*")
       .order("last_name", { ascending: true });
     if (error) throw error;
@@ -28,7 +28,7 @@ export const getTutor = createServerFn({ method: "GET" })
   .inputValidator((data) => z.object({ id: z.string() }).parse(data))
   .handler(async ({ context, data }) => {
     const { data: tutor, error } = await context.supabase
-      .from("tutors")
+      .from("proto_tutors")
       .select("*")
       .eq("id", data.id)
       .single();
@@ -46,7 +46,11 @@ export const createTutor = createServerFn({ method: "POST" })
       phone: data.phone || null,
       notes: data.notes || null,
     };
-    const { data: tutor, error } = await context.supabase.from("tutors").insert(payload).select().single();
+    const { data: tutor, error } = await context.supabase
+      .from("proto_tutors")
+      .insert(payload)
+      .select()
+      .single();
     if (error) throw error;
     return tutor;
   });
@@ -59,7 +63,7 @@ export const updateTutor = createServerFn({ method: "POST" })
         id: z.string(),
         ...tutorSchema.shape,
       })
-      .parse(data)
+      .parse(data),
   )
   .handler(async ({ context, data }) => {
     const { id, ...rest } = data;
@@ -70,7 +74,7 @@ export const updateTutor = createServerFn({ method: "POST" })
       notes: rest.notes || null,
     };
     const { data: tutor, error } = await context.supabase
-      .from("tutors")
+      .from("proto_tutors")
       .update(payload)
       .eq("id", id)
       .select()
@@ -83,7 +87,7 @@ export const deleteTutor = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: z.string() }).parse(data))
   .handler(async ({ context, data }) => {
-    const { error } = await context.supabase.from("tutors").delete().eq("id", data.id);
+    const { error } = await context.supabase.from("proto_tutors").delete().eq("id", data.id);
     if (error) throw error;
     return { success: true };
   });

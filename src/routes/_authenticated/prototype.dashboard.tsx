@@ -10,14 +10,14 @@ import {
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getDashboardStats } from "@/lib/dashboard.functions";
+import { getDashboardStats } from "@/lib/prototype/dashboard.functions";
 
 const dashboardQueryOptions = () => ({
   queryKey: ["dashboard-stats"],
   queryFn: () => getDashboardStats(),
 });
 
-export const Route = createFileRoute("/_authenticated/dashboard")({
+export const Route = createFileRoute("/_authenticated/prototype/dashboard")({
   loader: ({ context }) => context.queryClient.ensureQueryData(dashboardQueryOptions()),
   component: DashboardPage,
 });

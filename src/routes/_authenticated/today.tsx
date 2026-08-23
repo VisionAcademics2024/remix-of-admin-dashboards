@@ -1,0 +1,283 @@
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { queryOptions, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { CalendarDays, CheckCircle2, Clock, Receipt, TrendingDown } from "lucide-react";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import {
+  Code,
+  EmptyState,
+  PageHeader,
+  Section,
+  StatCard,
+  StatusPill,
+  Td,
+  Th,
+  TableShell,
+  TutorDot,
+  toneForStatus,
+} from "@/components/vision/ui";
+import { formatHours, formatMoney, formatTime, sydToday } from "@/lib/format";
+import { getToday } from "@/lib/vision/overview.functions";
+import { markAttendance } from "@/lib/vision/roll.functions";
+import type { Row } from "@/lib/vision/types";
+
+const todayQueryOptions = (date: string) =>
+  queryOptions({ queryKey: ["today", date], queryFn: () => getToday({ data: { date } }) });
+
+export const Route = createFileRoute("/_authenticated/today")({
+  loader: ({ context }) => context.queryClient.ensureQueryData(todayQueryOptions(sydToday())),
+  component: TodayPage,
+});
+
+function TodayPage() {
+  const today = sydToday();
+  const { data } = useSuspenseQuery(todayQueryOptions(today));
+  const queryClient = useQueryClient();
+  const mark = useServerFn(markAttendance);
+
+  async function setStatus(id: string, status: "present" | "absent") {
+    try {
+      await mark({ data: { id, status } });
+      await queryClient.invalidateQueries({ queryKey: ["today"] });
+      await queryClient.invalidateQueries({ queryKey: ["needs-attention-count"] });
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Today"
+        description="Who needs marking, what is on, who is running out of hours, and what is ready to invoice."
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Still to mark"
+          value={data.toMark.length}
+          hint={
+            data.toMark.length === 0 ? "Nothing outstanding" : "Lessons up to and including today"
+          }
+          tone={data.toMark.length === 0 ? "success" : "warning"}
+          icon={Clock}
+        />
+        <StatCard label="Lessons today" value={data.sessions.length} icon={CalendarDays} />
+        <StatCard
+          label="Low or overdrawn"
+          value={data.lowPackages.length}
+          tone={data.lowPackages.length ? "warning" : "default"}
+          icon={TrendingDown}
+        />
+        <StatCard
+          label="Ready to invoice"
+          value={formatMoney(data.toInvoiceValue)}
+          hint={`${data.toInvoiceCount} charges · ${formatMoney(data.unpaidValue)} unpaid`}
+          icon={Receipt}
+        />
+      </div>
+
+      <Section
+        title="Still to mark"
+        count={data.toMark.length}
+        description="Marking a student present is the act that spends their hours."
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link to="/roll">Open the roll</Link>
+          </Button>
+        }
+        tone={data.toMark.length === 0 ? "success" : "warning"}
+      >
+        {data.toMark.length === 0 ? (
+          <EmptyState
+            icon={CheckCircle2}
+            title="Nothing left to mark"
+            hint="Every lesson up to today has a complete roll. This is what done looks like."
+          />
+        ) : (
+          <TableShell>
+            <thead>
+              <tr>
+                <Th>Student</Th>
+                <Th>Lesson</Th>
+                <Th>When</Th>
+                <Th>Type</Th>
+                <Th className="text-right">Mark</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.toMark.slice(0, 25).map((row: Row) => (
+                <tr key={row.id}>
+                  <Td>
+                    <Link
+                      to="/students/$id"
+                      params={{ id: row.student_id }}
+                      className="font-medium hover:underline"
+                    >
+                      {row.enrolments?.students?.full_name ?? "—"}
+                    </Link>
+                    <div>
+                      <Code>{row.enrolments?.students?.code}</Code>
+                    </div>
+                  </Td>
+                  <Td>
+                    <div>{row.sessions?.class_offerings?.programs?.name ?? "—"}</div>
+                    <Code>{row.sessions?.code}</Code>
+                  </Td>
+                  <Td className="whitespace-nowrap">
+                    {row.session_date === today ? "Today" : row.session_date}
+                    <div className="text-xs text-muted-foreground">
+                      {formatTime(row.lesson_starts_at)}
+                    </div>
+                  </Td>
+                  <Td>
+                    <StatusPill tone={row.att_type === "trial" ? "info" : "neutral"}>
+                      {row.att_type === "make_up"
+                        ? "Make-up"
+                        : row.att_type === "trial"
+                          ? "Trial"
+                          : "Regular"}
+                    </StatusPill>
+                  </Td>
+                  <Td className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setStatus(row.id, "present")}
+                      >
+                        Present
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setStatus(row.id, "absent")}>
+                        Absent
+                      </Button>
+                    </div>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </TableShell>
+        )}
+        {data.toMark.length > 25 && (
+          <p className="mt-3 text-sm text-muted-foreground">
+            Showing 25 of {data.toMark.length}.{" "}
+            <Link to="/roll" className="underline">
+              Open the roll
+            </Link>{" "}
+            for the rest.
+          </p>
+        )}
+      </Section>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Section title="Today's timetable" count={data.sessions.length}>
+          {data.sessions.length === 0 ? (
+            <EmptyState
+              icon={CalendarDays}
+              title="No lessons today"
+              hint="Add a one-off lesson from the Timetable, or generate a term's lessons in Class Builder."
+              action={
+                <Button asChild size="sm" variant="outline">
+                  <Link to="/timetable">Go to timetable</Link>
+                </Button>
+              }
+            />
+          ) : (
+            <ul className="divide-y">
+              {data.sessions.map((s: Row) => (
+                <li key={s.id} className="flex items-center gap-3 py-2.5">
+                  <div className="w-28 shrink-0 text-sm tabular-nums">
+                    {formatTime(s.starts_at)}
+                    <div className="text-xs text-muted-foreground">
+                      {formatHours(s.duration_hours)}
+                    </div>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">
+                      {s.class_offerings?.programs?.name ?? "Lesson"}
+                    </div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      <TutorDot colour={s.tutors?.colour} name={s.tutors?.full_name} />
+                      {s.class_offerings?.room && ` · ${s.class_offerings.room}`}
+                    </div>
+                  </div>
+                  <StatusPill tone={toneForStatus("session", s.status)}>{s.status}</StatusPill>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+
+        <Section
+          title="Running out of hours"
+          count={data.lowPackages.length}
+          description="At or below the low-balance threshold."
+          tone={data.lowPackages.length ? "warning" : undefined}
+        >
+          {data.lowPackages.length === 0 ? (
+            <EmptyState
+              icon={CheckCircle2}
+              title="Every package has room"
+              hint="Balances are recalculated from attendance, so this updates itself as rolls are marked."
+            />
+          ) : (
+            <TableShell>
+              <thead>
+                <tr>
+                  <Th>Student</Th>
+                  <Th>Package</Th>
+                  <Th className="text-right">Remaining</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.lowPackages.map((p: Row) => (
+                  <tr key={p.id}>
+                    <Td>
+                      <Link
+                        to="/students/$id"
+                        params={{ id: p.student_id }}
+                        className="font-medium hover:underline"
+                      >
+                        {p.students?.full_name}
+                      </Link>
+                    </Td>
+                    <Td>
+                      <Code>{p.code}</Code>
+                    </Td>
+                    <Td className="text-right">
+                      <StatusPill tone={p.is_overdrawn ? "danger" : "warning"}>
+                        {formatHours(p.hours_remaining)}
+                      </StatusPill>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </TableShell>
+          )}
+        </Section>
+      </div>
+
+      <Section
+        title="Waiting to be charged"
+        description="PAYG lessons attended but not yet billed, plus packages with no invoice raised."
+        actions={
+          <Button asChild size="sm" variant="outline">
+            <Link to="/billing">Open billing</Link>
+          </Button>
+        }
+      >
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard label="PAYG lessons to charge" value={data.unchargedPaygCount} />
+          <StatCard
+            label="Charges to invoice"
+            value={data.toInvoiceCount}
+            hint={formatMoney(data.toInvoiceValue)}
+          />
+          <StatCard label="Invoiced, unpaid" value={formatMoney(data.unpaidValue)} />
+        </div>
+      </Section>
+    </div>
+  );
+}
