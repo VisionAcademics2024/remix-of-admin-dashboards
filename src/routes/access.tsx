@@ -89,10 +89,24 @@ function AccessPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-8">
+      <div className="spatial-auth-glow -left-48 -top-40" aria-hidden />
+      <div
+        className="spatial-auth-glow -bottom-52 -right-44 [background:radial-gradient(circle,var(--canvas-glow-b),transparent_68%)]"
+        aria-hidden
+      />
+      <Card className="relative w-full max-w-md rounded-[2rem]">
         <CardHeader>
-          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+          <div className="mb-3 flex items-center gap-3">
+            <div className="spatial-orb flex h-11 w-11 items-center justify-center rounded-2xl text-primary-foreground">
+              <span className="text-sm font-bold">V</span>
+            </div>
+            <div>
+              <p className="text-sm font-semibold">Vision CRM</p>
+              <p className="text-xs text-muted-foreground">Secure staff access</p>
+            </div>
+          </div>
+          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl border border-white/35 bg-primary/10 shadow-sm">
             {me.needsBootstrap ? (
               <Sparkles className="h-5 w-5 text-primary" />
             ) : (
@@ -109,7 +123,7 @@ function AccessPage() {
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 pb-7">
           {me.needsBootstrap ? (
             <>
               <div className="space-y-1.5">
@@ -126,7 +140,7 @@ function AccessPage() {
               </Button>
             </>
           ) : me.deactivated ? null : me.hasRequested ? (
-            <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+            <p className="rounded-2xl border border-white/35 bg-muted/40 px-3.5 py-3 text-sm text-muted-foreground">
               Your request is waiting for an owner to approve it.
             </p>
           ) : (
@@ -161,5 +175,3 @@ function AccessPage() {
     </div>
   );
 }
-
-

@@ -18,7 +18,7 @@ import {
   TutorDot,
   toneForStatus,
 } from "@/components/vision/ui";
-import { formatHours, formatMoney, formatTime, sydToday } from "@/lib/format";
+import { formatDay, formatHours, formatMoney, formatTime, sydToday } from "@/lib/format";
 import { getToday } from "@/lib/vision/overview.functions";
 import { markAttendance } from "@/lib/vision/roll.functions";
 import type { Row } from "@/lib/vision/types";
@@ -48,10 +48,27 @@ function TodayPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         title="Today"
+        eyebrow={formatDay(today)}
         description="Who needs marking, what is on, who is running out of hours, and what is ready to invoice."
+        actions={
+          <>
+            <Button asChild variant="outline">
+              <Link to="/timetable">
+                <CalendarDays />
+                Timetable
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link to="/roll">
+                <CheckCircle2 />
+                Mark attendance
+              </Link>
+            </Button>
+          </>
+        }
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -171,8 +188,8 @@ function TodayPage() {
         )}
       </Section>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Section title="Today's timetable" count={data.sessions.length}>
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
+        <Section title="Today's timetable" count={data.sessions.length} className="h-full">
           {data.sessions.length === 0 ? (
             <EmptyState
               icon={CalendarDays}
@@ -185,9 +202,12 @@ function TodayPage() {
               }
             />
           ) : (
-            <ul className="divide-y">
+            <ul className="space-y-2">
               {data.sessions.map((s: Row) => (
-                <li key={s.id} className="flex items-center gap-3 py-2.5">
+                <li
+                  key={s.id}
+                  className="flex items-center gap-3 rounded-2xl border border-white/35 bg-background/20 px-3.5 py-3 shadow-sm"
+                >
                   <div className="w-28 shrink-0 text-sm tabular-nums">
                     {formatTime(s.starts_at)}
                     <div className="text-xs text-muted-foreground">
@@ -215,6 +235,7 @@ function TodayPage() {
           count={data.lowPackages.length}
           description="At or below the low-balance threshold."
           tone={data.lowPackages.length ? "warning" : undefined}
+          className="h-full"
         >
           {data.lowPackages.length === 0 ? (
             <EmptyState

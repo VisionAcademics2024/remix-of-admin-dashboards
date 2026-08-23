@@ -4,7 +4,6 @@ import {
   BadgeDollarSign,
   CalendarDays,
   ClipboardCheck,
-  FlaskConical,
   GraduationCap,
   LayoutGrid,
   ListChecks,
@@ -70,7 +69,6 @@ const CONFIGURE = [
   { title: "Staff", url: "/staff", icon: UserCog, ownerOnly: true },
 ];
 
-
 export function AppSidebar({ role, name }: { role: StaffRole; name: string }) {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
@@ -107,7 +105,12 @@ export function AppSidebar({ role, name }: { role: StaffRole; name: string }) {
       .filter((item) => !item.ownerOnly || role === "owner")
       .map((item) => (
         <SidebarMenuItem key={item.url}>
-          <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
+          <SidebarMenuButton
+            asChild
+            isActive={isActive(item.url)}
+            tooltip={item.title}
+            className="h-10 rounded-xl px-3 text-[0.82rem] data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:shadow-[inset_0_1px_0_oklch(1_0_0/34%),0_8px_22px_-14px_var(--color-sidebar-primary)] data-[active=true]:[&>svg]:text-sidebar-primary"
+          >
             <Link to={item.url}>
               <item.icon />
               {!collapsed && (
@@ -126,17 +129,17 @@ export function AppSidebar({ role, name }: { role: StaffRole; name: string }) {
       ));
 
   return (
-    <Sidebar collapsible="icon">
-      <SidebarHeader>
-        <div className="flex h-12 items-center gap-2 px-3">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <span className="text-sm font-bold">V</span>
+    <Sidebar variant="floating" collapsible="icon" className="vision-sidebar">
+      <SidebarHeader className="p-3 pb-2">
+        <div className="flex h-14 items-center gap-3 rounded-2xl border border-white/35 bg-background/25 px-3 shadow-sm backdrop-blur-xl">
+          <div className="spatial-orb flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-primary-foreground">
+            <span className="text-sm font-bold tracking-[-0.04em]">V</span>
           </div>
           {!collapsed && (
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold leading-tight">Vision CRM</p>
+              <p className="truncate text-sm font-semibold tracking-[-0.02em]">Vision CRM</p>
               <div className="flex items-center gap-1.5">
-                <p className="truncate text-xs text-muted-foreground">{name}</p>
+                <p className="truncate text-[0.7rem] text-muted-foreground">Operations · {name}</p>
                 <EnvironmentBadge />
               </div>
             </div>
@@ -144,48 +147,66 @@ export function AppSidebar({ role, name }: { role: StaffRole; name: string }) {
         </div>
       </SidebarHeader>
 
-      <SidebarContent>
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel>Operate</SidebarGroupLabel>}
+      <SidebarContent className="px-1">
+        <SidebarGroup className="py-2">
+          {!collapsed && (
+            <SidebarGroupLabel className="px-3 text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-sidebar-foreground/50">
+              Operate
+            </SidebarGroupLabel>
+          )}
           <SidebarGroupContent>
             <SidebarMenu>{renderItems(OPERATE)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel>Manage</SidebarGroupLabel>}
+        <SidebarGroup className="py-2">
+          {!collapsed && (
+            <SidebarGroupLabel className="px-3 text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-sidebar-foreground/50">
+              Manage
+            </SidebarGroupLabel>
+          )}
           <SidebarGroupContent>
             <SidebarMenu>{renderItems(MANAGE)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel>Understand</SidebarGroupLabel>}
+        <SidebarGroup className="py-2">
+          {!collapsed && (
+            <SidebarGroupLabel className="px-3 text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-sidebar-foreground/50">
+              Understand
+            </SidebarGroupLabel>
+          )}
           <SidebarGroupContent>
             <SidebarMenu>{renderItems(UNDERSTAND)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel>Configure</SidebarGroupLabel>}
+        <SidebarGroup className="py-2">
+          {!collapsed && (
+            <SidebarGroupLabel className="px-3 text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-sidebar-foreground/50">
+              Configure
+            </SidebarGroupLabel>
+          )}
           <SidebarGroupContent>
             <SidebarMenu>{renderItems(CONFIGURE)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-
         {/* The legacy /prototype/* screens are no longer linked from the
             navigation: they read renamed proto_* tables that are not present
             in the database. The code is retained for reference pending a
             separately reviewed cleanup. */}
-
       </SidebarContent>
 
-      <SidebarFooter>
+      <SidebarFooter className="border-t border-white/30 p-3">
         <SidebarMenu>
           <ThemeToggleItem collapsed={collapsed} />
           <SidebarMenuItem>
-            <SidebarMenuButton onClick={handleSignOut} tooltip="Sign out">
+            <SidebarMenuButton
+              onClick={handleSignOut}
+              tooltip="Sign out"
+              className="h-10 rounded-xl px-3"
+            >
               <LogOut />
               {!collapsed && <span>Sign out</span>}
             </SidebarMenuButton>
@@ -216,7 +237,11 @@ function ThemeToggleItem({ collapsed }: { collapsed: boolean }) {
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton onClick={toggle} tooltip={dark ? "Light mode" : "Dark mode"}>
+      <SidebarMenuButton
+        onClick={toggle}
+        tooltip={dark ? "Light mode" : "Dark mode"}
+        className="h-10 rounded-xl px-3"
+      >
         {dark ? <Sun /> : <Moon />}
         {!collapsed && <span>{dark ? "Light mode" : "Dark mode"}</span>}
       </SidebarMenuButton>
