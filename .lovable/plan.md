@@ -135,7 +135,9 @@ Deterministic IDs and dates relative to one mock `today` provider: 12 students (
 
 ## Checkpoints
 
+0. **Unblock the build** — the leftover `/prototype/*` screens and `src/lib/prototype/*` functions query `proto_*` tables that do not exist in the database, so the typecheck currently fails. Delete those routes, their data functions and the sidebar "Reference → Prototype" entry. They are superseded by the Vision screens and are not part of this plan.
 1. **Foundations** — `src/domain`, `src/data` interfaces + `ActionResult`, live adapters over existing server functions, mock adapter skeleton + mock clock, mode switch, environment badge, sidebar regrouping, redirects. No visual regressions.
+
 2. **Shared components + states** — component library above, table/filter/state primitives, global search and quick-create shells.
 3. **Home, People** — command centre, tabbed People, three detail routes, New Student wizard.
 4. **Classes & Schedule** — tabs, offering and session detail, Offering wizard, generation preview/commit, reschedule.
