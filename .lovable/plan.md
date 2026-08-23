@@ -133,10 +133,30 @@ Route guards plus capability checks: owner (everything), admin (operational page
 
 Deterministic IDs and dates relative to one mock `today` provider: 12 students (siblings sharing a guardian, one trial, one inactive, one low-hours), 8 guardians, 5 tutors (one zero-rate), 2 operating periods, 5 programs, 5 standard prices, 6 offerings (group, private, weekly, one-off, ad hoc), 18 sessions across last/this/next week including cancelled and rescheduled/replacement, 30 attendance rows across all outcomes, 7 hour allocations (normal, low, zero, courtesy, insufficient), 9 charges across every queue and both routes, 2 clearly synthetic draft payouts, 10 needs-attention issues. Synthetic names only. Owner settings gets a Reset Mock Data action, available in mock mode only.
 
+## Backend freeze during interface checkpoints
+
+No live server function, database view, table, migration, RLS policy or seed is created or modified in Checkpoints 0–9. Adapters compose only the server functions and views that already exist; where a needed read or write is missing, the adapter derives what it can client-side (or the mock adapter covers it) and the shortfall is recorded in a running **Backend gaps** list — one entry per gap with the screen affected, the capability needed and the workaround in use. That list is presented for separate approval as its own backend change; nothing in it is implemented inside an interface checkpoint.
+
+## Exit gate (applies after every checkpoint)
+
+A checkpoint is not finished, and the next one does not begin, until all of these are delivered and the owner approves:
+
+1. **Existing-route regression check** — every pre-existing route still loads, authenticates and renders its data without new console or network errors.
+2. **Typecheck and tests green** — `tsgo` clean, existing tests plus any tests added in the checkpoint passing.
+3. **Change summary** — the list of files added, modified, moved and removed, with one line of rationale each.
+4. **Visual evidence** — screenshots (or a preview walkthrough) of every screen touched, at 1440px and, where relevant, 1024px/tablet.
+5. **Backend gaps** — any additions to the gaps list, stated explicitly.
+6. **Owner approval** — explicit go-ahead before the next checkpoint starts.
+
 ## Checkpoints
 
-0. **Unblock the build** — the leftover `/prototype/*` screens and `src/lib/prototype/*` functions query `proto_*` tables that do not exist in the database, so the typecheck currently fails. Delete those routes, their data functions and the sidebar "Reference → Prototype" entry. They are superseded by the Vision screens and are not part of this plan.
-1. **Foundations** — `src/domain`, `src/data` interfaces + `ActionResult`, live adapters over existing server functions, mock adapter skeleton + mock clock, mode switch, environment badge, sidebar regrouping, redirects. No visual regressions.
+0. **Unblock the build, audit `/prototype/*` (no deletion)** — the leftover `/prototype/*` screens and `src/lib/prototype/*` functions query `proto_*` tables that do not exist in the database, so the typecheck currently fails. Work in this order:
+   - **Read-only audit first.** Enumerate every import of `src/lib/prototype/*`, every link or navigation reference to `/prototype/*`, every route-tree entry, and every test or fixture that touches them. Confirm against the database which of `proto_*` / the current `students`, `tutors`, `packages`, `sessions`, `session_students`, `student_packages` tables actually exist, and whether any Vision screen shares those functions. Report the findings.
+   - **Only if the audit confirms nothing else depends on them:** remove the sidebar "Reference → Prototype" entry and take the routes out of the app's reachable surface, and make the typecheck pass with the smallest possible change to those files (correcting table references or excluding the modules from the typed build) — not by deleting them.
+   - **If the audit finds live dependencies:** stop, report them, and propose options instead of proceeding.
+   - **Permanent deletion of `src/lib/prototype/*` and the prototype routes is out of scope here.** It is proposed as a separate cleanup change with its own review and approval.
+1. **Foundations** — `src/domain`, `src/data` interfaces + `ActionResult`, live adapters over existing server functions, mock adapter skeleton + mock clock, mode switch, environment badge, sidebar regrouping, redirects. No visual regressions, no backend changes.
+
 
 2. **Shared components + states** — component library above, table/filter/state primitives, global search and quick-create shells.
 3. **Home, People** — command centre, tabbed People, three detail routes, New Student wizard.
