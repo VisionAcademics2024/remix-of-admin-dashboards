@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { EnvironmentBadge } from "@/components/vision/environment-badge";
 import { supabase } from "@/integrations/supabase/client";
 import { getNeedsAttentionCount } from "@/lib/vision/overview.functions";
 import type { StaffRole } from "@/lib/vision/types";
