@@ -38,27 +38,6 @@ export type Database = {
         }
         Relationships: []
       }
-      at_raw: {
-        Row: {
-          created_time: string | null
-          fields: Json
-          id: string
-          tbl: string
-        }
-        Insert: {
-          created_time?: string | null
-          fields: Json
-          id: string
-          tbl: string
-        }
-        Update: {
-          created_time?: string | null
-          fields?: Json
-          id?: string
-          tbl?: string
-        }
-        Relationships: []
-      }
       attendance: {
         Row: {
           airtable_id: string | null
@@ -2007,7 +1986,6 @@ export type Database = {
       }
       fortnight_start: { Args: { d: string }; Returns: string }
       generate_sessions: { Args: { p_offering_id: string }; Returns: number }
-      import_exec: { Args: { sql: string }; Returns: undefined }
       increment_sessions_used: {
         Args: { _amount?: number; _student_package_id: string }
         Returns: undefined
