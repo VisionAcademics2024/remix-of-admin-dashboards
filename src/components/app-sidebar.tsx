@@ -142,25 +142,33 @@ export function AppSidebar({ role, name }: { role: StaffRole; name: string }) {
 
       <SidebarContent>
         <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel>Every day</SidebarGroupLabel>}
+          {!collapsed && <SidebarGroupLabel>Operate</SidebarGroupLabel>}
           <SidebarGroupContent>
-            <SidebarMenu>{renderItems(DAILY)}</SidebarMenu>
+            <SidebarMenu>{renderItems(OPERATE)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel>Records</SidebarGroupLabel>}
+          {!collapsed && <SidebarGroupLabel>Manage</SidebarGroupLabel>}
           <SidebarGroupContent>
-            <SidebarMenu>{renderItems(RECORDS)}</SidebarMenu>
+            <SidebarMenu>{renderItems(MANAGE)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel>Admin</SidebarGroupLabel>}
+          {!collapsed && <SidebarGroupLabel>Understand</SidebarGroupLabel>}
           <SidebarGroupContent>
-            <SidebarMenu>{renderItems(ADMIN)}</SidebarMenu>
+            <SidebarMenu>{renderItems(UNDERSTAND)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        <SidebarGroup>
+          {!collapsed && <SidebarGroupLabel>Configure</SidebarGroupLabel>}
+          <SidebarGroupContent>
+            <SidebarMenu>{renderItems(CONFIGURE)}</SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
 
         {/* The legacy /prototype/* screens are no longer linked from the
             navigation: they read renamed proto_* tables that are not present
