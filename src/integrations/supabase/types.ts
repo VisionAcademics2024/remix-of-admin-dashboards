@@ -2004,6 +2004,7 @@ export type Database = {
       }
       fortnight_start: { Args: { d: string }; Returns: string }
       generate_sessions: { Args: { p_offering_id: string }; Returns: number }
+      import_exec: { Args: { sql: string }; Returns: undefined }
       increment_sessions_used: {
         Args: { _amount?: number; _student_package_id: string }
         Returns: undefined
