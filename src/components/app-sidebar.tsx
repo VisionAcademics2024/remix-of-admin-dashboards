@@ -134,7 +134,10 @@ export function AppSidebar({ role, name }: { role: StaffRole; name: string }) {
           {!collapsed && (
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold leading-tight">Vision CRM</p>
-              <p className="truncate text-xs text-muted-foreground">{name}</p>
+              <div className="flex items-center gap-1.5">
+                <p className="truncate text-xs text-muted-foreground">{name}</p>
+                <EnvironmentBadge />
+              </div>
             </div>
           )}
         </div>
