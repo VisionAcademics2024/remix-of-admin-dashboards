@@ -48,7 +48,7 @@ function TodayPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="stagger space-y-5">
       <PageHeader
         title="Today"
         eyebrow={formatDay(today)}

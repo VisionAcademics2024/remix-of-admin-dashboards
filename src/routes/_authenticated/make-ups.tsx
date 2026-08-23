@@ -63,7 +63,7 @@ function MakeUpsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="stagger space-y-6">
       <PageHeader
         title="Make-Ups"
         description="A student who missed a lesson is owed a make-up. Tutor swaps and rescheduled classes are edits to the lesson itself, not make-ups."

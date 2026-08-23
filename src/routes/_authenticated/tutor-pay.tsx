@@ -99,7 +99,7 @@ function TutorPayPage() {
   const grandHours = data.totals.reduce((sum: number, t: Row) => sum + Number(t.hours ?? 0), 0);
 
   return (
-    <div className="space-y-5">
+    <div className="stagger space-y-5">
       <PageHeader
         title="Tutor Pay"
         description="Owners only. Pay is computed from lessons, not enrolments — a lesson pays its own tutor at the rate in force on its own date."

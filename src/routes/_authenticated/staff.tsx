@@ -58,7 +58,7 @@ function StaffPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="stagger space-y-6">
       <PageHeader
         title="Staff"
         description="Two roles, one hard boundary: money paid to tutors. Owners see everything; admins see everything except tutor pay."

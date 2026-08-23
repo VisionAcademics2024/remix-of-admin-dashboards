@@ -1,50 +1,52 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   BadgeDollarSign,
   CalendarDays,
   ClipboardCheck,
+  FlaskConical,
   GraduationCap,
   LayoutGrid,
   ListChecks,
   LogOut,
-  Moon,
   Receipt,
   Repeat,
   Settings,
-  Sun,
   Sunrise,
-  Users,
   UserCog,
   Wallet,
   Wrench,
+  type LucideIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
 
-import { EnvironmentBadge } from "@/components/vision/environment-badge";
 import { supabase } from "@/integrations/supabase/client";
 import { getNeedsAttentionCount } from "@/lib/vision/overview.functions";
 import type { StaffRole } from "@/lib/vision/types";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  useSidebar,
-} from "@/components/ui/sidebar";
+import { cn } from "@/lib/utils";
 
 /**
- * Four groups: what you do all day, what you manage, what you check, what you
- * configure. Paths stay as they are — the specified sub-route hierarchy arrives
- * with the screens that need it.
+ * The ornament.
+ *
+ * visionOS hangs navigation beside a window rather than inside it: a floating
+ * glass rail, icons only, that widens to show labels when you look at it. A
+ * pointer replaces the gaze, so it widens on hover instead.
+ *
+ * Icons are Lucide, already in the project. SF Symbols is the obvious visual
+ * match but its licence does not permit use outside Apple platforms, so the
+ * stroke weight here is tuned to sit close to it instead — see
+ * docs/DESIGN-SYSTEM.md.
  */
-const OPERATE = [
+
+interface NavItem {
+  title: string;
+  url: string;
+  icon: LucideIcon;
+  ownerOnly?: boolean;
+  badge?: boolean;
+}
+
+const OPERATE: NavItem[] = [
   { title: "Today", url: "/today", icon: Sunrise },
   { title: "Timetable", url: "/timetable", icon: CalendarDays },
   { title: "Attendance", url: "/roll", icon: ClipboardCheck },
@@ -52,7 +54,7 @@ const OPERATE = [
   { title: "Class Builder", url: "/classes/new", icon: Wrench },
 ];
 
-const MANAGE = [
+const MANAGE: NavItem[] = [
   { title: "Students & Families", url: "/students", icon: GraduationCap },
   { title: "Classes", url: "/classes", icon: LayoutGrid },
   { title: "Enrolments & Hours", url: "/enrolments", icon: Wallet },
@@ -60,22 +62,28 @@ const MANAGE = [
   { title: "Tutor Pay", url: "/tutor-pay", icon: BadgeDollarSign, ownerOnly: true },
 ];
 
-const UNDERSTAND = [
+const UNDERSTAND: NavItem[] = [
   { title: "Needs Attention", url: "/needs-attention", icon: ListChecks, badge: true },
 ];
 
-const CONFIGURE = [
+const CONFIGURE: NavItem[] = [
   { title: "Setup", url: "/setup", icon: Settings },
   { title: "Staff", url: "/staff", icon: UserCog, ownerOnly: true },
+  { title: "Prototype", url: "/prototype/dashboard", icon: FlaskConical },
+];
+
+const GROUPS: { label: string; items: NavItem[] }[] = [
+  { label: "Operate", items: OPERATE },
+  { label: "Manage", items: MANAGE },
+  { label: "Understand", items: UNDERSTAND },
+  { label: "Configure", items: CONFIGURE },
 ];
 
 export function AppSidebar({ role, name }: { role: StaffRole; name: string }) {
-  const { state } = useSidebar();
-  const collapsed = state === "collapsed";
   const navigate = useNavigate();
   const currentPath = useRouterState({ select: (r) => r.location.pathname });
+  const [expanded, setExpanded] = useState(false);
 
-  // An exception count in the nav beats a screen nobody visits.
   const { data: attention } = useQuery({
     queryKey: ["needs-attention-count"],
     queryFn: () => getNeedsAttentionCount(),
@@ -92,159 +100,133 @@ export function AppSidebar({ role, name }: { role: StaffRole; name: string }) {
     navigate({ to: "/auth", replace: true });
   }
 
-  const renderItems = (
-    items: {
-      title: string;
-      url: string;
-      icon: typeof Users;
-      badge?: boolean;
-      ownerOnly?: boolean;
-    }[],
-  ) =>
-    items
-      .filter((item) => !item.ownerOnly || role === "owner")
-      .map((item) => (
-        <SidebarMenuItem key={item.url}>
-          <SidebarMenuButton
-            asChild
-            isActive={isActive(item.url)}
-            tooltip={item.title}
-            className="h-10 rounded-xl px-3 text-[0.82rem] data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:shadow-[inset_0_1px_0_oklch(1_0_0/34%),0_8px_22px_-14px_var(--color-sidebar-primary)] data-[active=true]:[&>svg]:text-sidebar-primary"
-          >
-            <Link to={item.url}>
-              <item.icon />
-              {!collapsed && (
-                <span className="flex w-full items-center justify-between gap-2">
-                  <span className="truncate">{item.title}</span>
-                  {item.badge && (attention?.count ?? 0) > 0 && (
-                    <span className="rounded-full bg-warning px-1.5 text-xs font-semibold text-warning-foreground">
-                      {attention!.count}
-                    </span>
-                  )}
-                </span>
+  return (
+    <nav
+      aria-label="Primary"
+      onPointerEnter={() => setExpanded(true)}
+      onPointerLeave={() => setExpanded(false)}
+      onFocusCapture={() => setExpanded(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node)) setExpanded(false);
+      }}
+      data-expanded={expanded}
+      style={{ transitionTimingFunction: "var(--ease-spatial)" }}
+      className={cn(
+        "ornament animate-ornament-in fixed left-3 top-1/2 z-40 flex max-h-[calc(100vh-1.5rem)] -translate-y-1/2 flex-col gap-1 overflow-y-auto overflow-x-hidden rounded-[2rem] p-2.5 transition-[width] duration-[320ms] lg:left-4",
+        expanded ? "w-[15.5rem]" : "w-[4.25rem]",
+      )}
+    >
+      {/* Identity */}
+      <div className="mb-1 flex h-10 shrink-0 items-center gap-2.5 px-1.5">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-chart-4 text-[0.8rem] font-bold text-primary-foreground shadow-[inset_0_1px_0_0_var(--edge-top)]">
+          V
+        </span>
+        <span
+          className={cn(
+            "min-w-0 transition-opacity duration-200",
+            expanded ? "opacity-100" : "pointer-events-none opacity-0",
+          )}
+        >
+          <span className="block truncate text-[0.82rem] font-semibold leading-tight">
+            Vision CRM
+          </span>
+          <span className="block truncate text-[0.68rem] capitalize text-muted-foreground">
+            {name} · {role}
+          </span>
+        </span>
+      </div>
+
+      {GROUPS.map((group) => {
+        const items = group.items.filter((item) => !item.ownerOnly || role === "owner");
+        if (items.length === 0) return null;
+
+        return (
+          <div key={group.label} className="shrink-0">
+            <p
+              className={cn(
+                "overflow-hidden px-3 text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground transition-all duration-200",
+                expanded ? "mb-0.5 mt-1.5 h-3.5 opacity-100" : "mt-1 h-0 opacity-0",
               )}
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      ));
-
-  return (
-    <Sidebar variant="floating" collapsible="icon" className="vision-sidebar">
-      <SidebarHeader className="p-3 pb-2">
-        <div className="flex h-14 items-center gap-3 rounded-2xl border border-white/35 bg-background/25 px-3 shadow-sm backdrop-blur-xl">
-          <div className="spatial-orb flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-primary-foreground">
-            <span className="text-sm font-bold tracking-[-0.04em]">V</span>
-          </div>
-          {!collapsed && (
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold tracking-[-0.02em]">Vision CRM</p>
-              <div className="flex items-center gap-1.5">
-                <p className="truncate text-[0.7rem] text-muted-foreground">Operations · {name}</p>
-                <EnvironmentBadge />
-              </div>
-            </div>
-          )}
-        </div>
-      </SidebarHeader>
-
-      <SidebarContent className="px-1">
-        <SidebarGroup className="py-2">
-          {!collapsed && (
-            <SidebarGroupLabel className="px-3 text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-sidebar-foreground/50">
-              Operate
-            </SidebarGroupLabel>
-          )}
-          <SidebarGroupContent>
-            <SidebarMenu>{renderItems(OPERATE)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup className="py-2">
-          {!collapsed && (
-            <SidebarGroupLabel className="px-3 text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-sidebar-foreground/50">
-              Manage
-            </SidebarGroupLabel>
-          )}
-          <SidebarGroupContent>
-            <SidebarMenu>{renderItems(MANAGE)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup className="py-2">
-          {!collapsed && (
-            <SidebarGroupLabel className="px-3 text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-sidebar-foreground/50">
-              Understand
-            </SidebarGroupLabel>
-          )}
-          <SidebarGroupContent>
-            <SidebarMenu>{renderItems(UNDERSTAND)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup className="py-2">
-          {!collapsed && (
-            <SidebarGroupLabel className="px-3 text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-sidebar-foreground/50">
-              Configure
-            </SidebarGroupLabel>
-          )}
-          <SidebarGroupContent>
-            <SidebarMenu>{renderItems(CONFIGURE)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        {/* The legacy /prototype/* screens are no longer linked from the
-            navigation: they read renamed proto_* tables that are not present
-            in the database. The code is retained for reference pending a
-            separately reviewed cleanup. */}
-      </SidebarContent>
-
-      <SidebarFooter className="border-t border-white/30 p-3">
-        <SidebarMenu>
-          <ThemeToggleItem collapsed={collapsed} />
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              onClick={handleSignOut}
-              tooltip="Sign out"
-              className="h-10 rounded-xl px-3"
             >
-              <LogOut />
-              {!collapsed && <span>Sign out</span>}
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
-    </Sidebar>
-  );
-}
+              {group.label}
+            </p>
 
-function ThemeToggleItem({ collapsed }: { collapsed: boolean }) {
-  const [dark, setDark] = useState(false);
+            <ul className="space-y-0.5">
+              {items.map((item) => {
+                const active = isActive(item.url);
+                const count = item.badge ? (attention?.count ?? 0) : 0;
 
-  useEffect(() => {
-    const stored = window.localStorage.getItem("vision-theme");
-    const prefers = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const next = stored ? stored === "dark" : prefers;
-    setDark(next);
-    document.documentElement.classList.toggle("dark", next);
-  }, []);
+                return (
+                  <li key={item.url}>
+                    <Link
+                      to={item.url}
+                      data-active={active}
+                      title={expanded ? undefined : item.title}
+                      className="ornament-item focus-spatial flex h-10 items-center gap-3 px-[0.6875rem]"
+                    >
+                      <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+                        <item.icon
+                          className={cn(
+                            "h-[1.15rem] w-[1.15rem] transition-colors",
+                            active ? "text-primary" : "text-foreground/70",
+                          )}
+                          strokeWidth={active ? 2.1 : 1.7}
+                        />
+                        {/* Collapsed, the badge becomes a dot on the icon. */}
+                        {count > 0 && !expanded && (
+                          <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-warning ring-2 ring-[var(--mat-thick)]" />
+                        )}
+                      </span>
 
-  function toggle() {
-    const next = !dark;
-    setDark(next);
-    document.documentElement.classList.toggle("dark", next);
-    window.localStorage.setItem("vision-theme", next ? "dark" : "light");
-  }
+                      <span
+                        className={cn(
+                          "flex min-w-0 flex-1 items-center justify-between gap-2 transition-opacity duration-200",
+                          expanded ? "opacity-100" : "pointer-events-none opacity-0",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "truncate text-[0.83rem]",
+                            active ? "font-semibold text-foreground" : "text-foreground/80",
+                          )}
+                        >
+                          {item.title}
+                        </span>
+                        {count > 0 && (
+                          <span className="shrink-0 rounded-full bg-warning px-1.5 text-[0.68rem] font-semibold tabular-nums text-warning-foreground">
+                            {count}
+                          </span>
+                        )}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      })}
 
-  return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        onClick={toggle}
-        tooltip={dark ? "Light mode" : "Dark mode"}
-        className="h-10 rounded-xl px-3"
-      >
-        {dark ? <Sun /> : <Moon />}
-        {!collapsed && <span>{dark ? "Light mode" : "Dark mode"}</span>}
-      </SidebarMenuButton>
-    </SidebarMenuItem>
+      <div className="mt-auto shrink-0 pt-2">
+        <button
+          type="button"
+          onClick={handleSignOut}
+          title={expanded ? undefined : "Sign out"}
+          className="ornament-item focus-spatial flex h-10 w-full items-center gap-3 px-[0.6875rem]"
+        >
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+            <LogOut className="h-[1.15rem] w-[1.15rem] text-foreground/70" strokeWidth={1.7} />
+          </span>
+          <span
+            className={cn(
+              "truncate text-[0.83rem] text-foreground/80 transition-opacity duration-200",
+              expanded ? "opacity-100" : "pointer-events-none opacity-0",
+            )}
+          >
+            Sign out
+          </span>
+        </button>
+      </div>
+    </nav>
   );
 }

@@ -48,7 +48,7 @@ function ClassBuilderPage() {
   const lessonCount = built?.sessions.length ?? 0;
 
   return (
-    <div className="space-y-6">
+    <div className="stagger space-y-6">
       <Button asChild variant="ghost" size="sm" className="-ml-2">
         <Link to="/classes">
           <ArrowLeft className="mr-1 h-4 w-4" /> All classes

@@ -96,7 +96,7 @@ function TimetablePage() {
   const today = sydToday();
 
   return (
-    <div className="space-y-6">
+    <div className="stagger space-y-6">
       <PageHeader
         title="Timetable"
         description="The week, coloured by tutor. Times, tutors, rooms and cancellations happen here."

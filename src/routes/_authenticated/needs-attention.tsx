@@ -51,7 +51,7 @@ function NeedsAttentionPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="stagger space-y-6">
       <PageHeader
         title="Needs Attention"
         description="Every exception in the system, as one query. Empty is the goal."

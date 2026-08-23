@@ -10,6 +10,7 @@ the roll, hours packages, billing, and tutor pay.
 | [`docs/BUILD-GUIDE.md`](docs/BUILD-GUIDE.md) | **Read this first.** How to get in, where every screen lives, what is built and what is not. |
 | [`docs/spec/`](docs/spec/) | The build specification. `01-domain-model.md` explains the business; the rest follows from it. |
 | [`docs/spec/08-CUSTOMISE-ME.md`](docs/spec/08-CUSTOMISE-ME.md) | Branding, naming and settings. Overrides every other spec file. |
+| [`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md) | The spatial (visionOS-style) design system — materials, motion, environments, and what to send for fonts, icons and backgrounds. |
 | [`supabase/tests/`](supabase/tests/) | The schema verification suite and how to run it. |
 
 The original Lovable prototype is kept, working, at `/prototype/*`.

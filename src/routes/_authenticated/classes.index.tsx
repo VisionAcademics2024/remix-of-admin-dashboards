@@ -67,7 +67,7 @@ function ClassesPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="stagger space-y-5">
       <PageHeader
         title="Classes"
         description="Capacity against enrolled, per term. Classes are closed or cancelled, not deleted."

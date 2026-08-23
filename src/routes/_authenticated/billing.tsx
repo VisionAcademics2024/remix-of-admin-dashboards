@@ -73,7 +73,7 @@ function BillingPage() {
   const total = (rows: Row[]) => rows.reduce((sum, r) => sum + Number(r.final_amount ?? 0), 0);
 
   return (
-    <div className="space-y-5">
+    <div className="stagger space-y-5">
       <PageHeader
         title="Billing"
         description="Money in, as a pipeline. One charge per lesson, always — the database will not allow a second."

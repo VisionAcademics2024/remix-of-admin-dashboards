@@ -104,7 +104,7 @@ function RollPage() {
   const unmarkedIds = visible.filter((r: Row) => r.status === "not_marked").map((r: Row) => r.id);
 
   return (
-    <div className="space-y-5">
+    <div className="stagger space-y-5">
       <PageHeader
         title="Roll"
         description="The full attendance record — corrections, history and make-up links."
