@@ -304,12 +304,19 @@ export const cancelSession = createServerFn({ method: "POST" })
   });
 
 /**
- * Hard delete, deliberately hard to reach: allowed only while the lesson has no
- * roll at all. Anything that has run gets cancelled instead.
+ * Delete a lesson.
+ *
+ * Without `force` this stays deliberately hard to reach — allowed only while the
+ * lesson has no roll, so a lesson that has run is cancelled instead. With
+ * `force` (an explicit "delete anyway" from the lesson panel) it removes the
+ * roll first and then the lesson, for clearing out a spare or duplicate lesson
+ * off the calendar even when it carries a roll.
  */
 export const deleteSession = createServerFn({ method: "POST" })
   .middleware([requireStaff])
-  .inputValidator((data) => z.object({ id: z.string().uuid() }).parse(data))
+  .inputValidator((data) =>
+    z.object({ id: z.string().uuid(), force: z.boolean().default(false) }).parse(data),
+  )
   .handler(async ({ context, data }) => {
     const client = db(context.supabase);
 
@@ -318,9 +325,16 @@ export const deleteSession = createServerFn({ method: "POST" })
       .select("id", { count: "exact", head: true })
       .eq("session_id", data.id);
     if ((count ?? 0) > 0) {
-      throw new Error(
-        "This lesson has a roll. Cancel it instead — deleting would erase the attendance record.",
-      );
+      if (!data.force) {
+        throw new Error(
+          "This lesson has a roll. Cancel it instead — deleting would erase the attendance record.",
+        );
+      }
+      const { error: rollError } = await client
+        .from("attendance")
+        .delete()
+        .eq("session_id", data.id);
+      if (rollError) throw rollError;
     }
 
     const { error } = await client.from("sessions").delete().eq("id", data.id);
