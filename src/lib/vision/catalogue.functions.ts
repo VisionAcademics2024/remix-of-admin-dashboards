@@ -75,11 +75,13 @@ export const saveProgram = createServerFn({ method: "POST" })
     const { id, ...values } = data;
     const client = db(context.supabase);
     const payload = nullify(values);
-    const { error } = id
-      ? await client.from("programs").update(payload).eq("id", id)
-      : await client.from("programs").insert(payload);
+    // Return the id so a caller creating a program on the fly (Class Builder)
+    // can select it straight away.
+    const { data: row, error } = id
+      ? await client.from("programs").update(payload).eq("id", id).select("id, code").single()
+      : await client.from("programs").insert(payload).select("id, code").single();
     if (error) throw error;
-    return { success: true };
+    return { success: true, id: row?.id as string, code: row?.code as string };
   });
 
 /* ----------------------------------------------------------------------- Prices */

@@ -1,8 +1,8 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
-import { ArrowLeft, Check, CircleDashed, Info } from "lucide-react";
+import { ArrowLeft, Check, CircleDashed } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -15,16 +15,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Code, PageHeader, StatusPill, TableShell, Td, Th } from "@/components/vision/ui";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Code, PageHeader, StatusPill, Td, Th } from "@/components/vision/ui";
 import { cn } from "@/lib/utils";
-import { formatDate, formatHours, sydToday } from "@/lib/format";
-import { getCatalogue } from "@/lib/vision/catalogue.functions";
+import { formatHours, sydToday } from "@/lib/format";
+import { getCatalogue, saveProgram } from "@/lib/vision/catalogue.functions";
 import {
   generateSessions,
   getClassOffering,
   saveClassOffering,
-  seedRollForOffering,
 } from "@/lib/vision/classes.functions";
 import { listCommerce, saveEnrolment } from "@/lib/vision/commerce.functions";
 import { LABELS, Row } from "@/lib/vision/types";
@@ -35,7 +34,7 @@ export const Route = createFileRoute("/_authenticated/classes/new")({
 
 function ClassBuilderPage() {
   const [offeringId, setOfferingId] = useState<string | null>(null);
-  const [generated, setGenerated] = useState(false);
+  const [lessonCount, setLessonCount] = useState(0);
 
   const { data: catalogue } = useQuery({ queryKey: ["catalogue"], queryFn: () => getCatalogue() });
   const { data: built, refetch } = useQuery({
@@ -45,10 +44,9 @@ function ClassBuilderPage() {
   });
 
   const enrolmentCount = built?.enrolments.length ?? 0;
-  const lessonCount = built?.sessions.length ?? 0;
 
   return (
-    <div className="stagger space-y-6">
+    <div className="stagger mx-auto w-full max-w-2xl space-y-5">
       <Button asChild variant="ghost" size="sm" className="-ml-2">
         <Link to="/classes">
           <ArrowLeft className="mr-1 h-4 w-4" /> All classes
@@ -57,37 +55,41 @@ function ClassBuilderPage() {
 
       <PageHeader
         title="Class Builder"
-        description="Four steps. Each one clears itself when it is done."
+        description="Make a class — it generates its lessons and lands on the timetable. Add students and how they pay after, or leave that for later."
       />
-
-      <div className="flex items-start gap-2 rounded-md border border-info/40 bg-info/10 px-3 py-2 text-sm">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" />
-        <p>
-          <strong>Steps 2 and 3 are order-independent.</strong> Enrol students before or after
-          generating lessons — it makes no difference. Seeding the roll is a function you can run at
-          any time, so the old "generate first or the roll stays empty forever" trap is gone.
-        </p>
-      </div>
 
       <StepCard
         step={1}
-        title="Create the class"
+        title="The class"
         done={!!offeringId}
         summary={
           built?.offering
-            ? `${built.offering.programs?.name} · ${built.offering.operating_periods?.code} · ${built.offering.code}`
+            ? `${built.offering.programs?.name} · ${built.offering.code}${
+                lessonCount > 0 ? ` · ${lessonCount} lesson${lessonCount === 1 ? "" : "s"}` : ""
+              }`
             : undefined
         }
       >
-        <StepOne catalogue={catalogue} onCreated={(id) => setOfferingId(id)} />
+        <StepOne
+          catalogue={catalogue}
+          onCreated={(id, lessons) => {
+            setOfferingId(id);
+            setLessonCount(lessons);
+          }}
+        />
       </StepCard>
 
       <StepCard
         step={2}
-        title="Add enrolments"
+        title="Students & payment"
+        optional
         done={enrolmentCount > 0}
         locked={!offeringId}
-        summary={enrolmentCount > 0 ? `${enrolmentCount} student(s) enrolled` : undefined}
+        summary={
+          enrolmentCount > 0
+            ? `${enrolmentCount} student${enrolmentCount === 1 ? "" : "s"}`
+            : undefined
+        }
       >
         {offeringId && built?.offering && (
           <StepTwo
@@ -96,35 +98,6 @@ function ClassBuilderPage() {
             onSaved={() => refetch()}
           />
         )}
-      </StepCard>
-
-      <StepCard
-        step={3}
-        title="Generate lessons"
-        done={lessonCount > 0}
-        locked={!offeringId}
-        summary={lessonCount > 0 ? `${lessonCount} lesson(s) on the timetable` : undefined}
-      >
-        {offeringId && (
-          <StepThree
-            offeringId={offeringId}
-            sessions={built?.sessions ?? []}
-            onGenerated={async () => {
-              setGenerated(true);
-              await refetch();
-            }}
-          />
-        )}
-      </StepCard>
-
-      <StepCard
-        step={4}
-        title="Seed the roll"
-        done={generated && lessonCount > 0 && enrolmentCount > 0}
-        locked={!offeringId}
-        summary="Runs automatically after steps 2 and 3 — re-run it any time."
-      >
-        {offeringId && <StepFour offeringId={offeringId} onSeeded={() => refetch()} />}
       </StepCard>
 
       {offeringId && (
@@ -146,6 +119,7 @@ function StepCard({
   title,
   done,
   locked,
+  optional,
   summary,
   children,
 }: {
@@ -153,6 +127,7 @@ function StepCard({
   title: string;
   done: boolean;
   locked?: boolean | undefined;
+  optional?: boolean | undefined;
   summary?: string | undefined;
   children: React.ReactNode;
 }) {
@@ -169,13 +144,22 @@ function StepCard({
             {done ? <Check className="h-3.5 w-3.5" /> : step}
           </span>
           {title}
+          {optional && (
+            <span className="rounded-full bg-[var(--mat-thin)] px-2 py-0.5 text-[0.7rem] font-medium text-muted-foreground">
+              optional
+            </span>
+          )}
+          {summary && (
+            <span className="ml-auto truncate text-xs font-normal text-muted-foreground">
+              {summary}
+            </span>
+          )}
         </CardTitle>
-        {summary && <CardDescription>{summary}</CardDescription>}
       </CardHeader>
       <CardContent>
         {locked ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <CircleDashed className="h-4 w-4" /> Create the class first.
+            <CircleDashed className="h-4 w-4" /> Make the class first.
           </p>
         ) : (
           children
@@ -185,8 +169,16 @@ function StepCard({
   );
 }
 
-function StepOne({ catalogue, onCreated }: { catalogue: Row; onCreated: (id: string) => void }) {
+function StepOne({
+  catalogue,
+  onCreated,
+}: {
+  catalogue: Row;
+  onCreated: (id: string, lessons: number) => void;
+}) {
   const save = useServerFn(saveClassOffering);
+  const generate = useServerFn(generateSessions);
+  const saveProg = useServerFn(saveProgram);
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
@@ -202,17 +194,80 @@ function StepOne({ catalogue, onCreated }: { catalogue: Row; onCreated: (id: str
     session_duration_hours: 1.5,
     room: "",
   });
+  // A program can be made right here when the one you want is not in the list.
+  const [newProg, setNewProg] = useState({
+    name: "",
+    code: "",
+    duration: "1.5",
+    type: "group_class" as "group_class" | "private_tuition",
+  });
 
+  const creatingProgram = form.program_id === "__new__";
   const program = (catalogue?.programs ?? []).find((p: Row) => p.id === form.program_id);
   const isPrivate = form.offering_type === "private_tuition";
 
+  async function createClass() {
+    if (creatingProgram && (!newProg.name.trim() || !newProg.code.trim())) {
+      toast.error("A new program needs a name and a short code.");
+      return;
+    }
+    setBusy(true);
+    try {
+      let programId = form.program_id;
+      if (creatingProgram) {
+        const made = await saveProg({
+          data: {
+            name: newProg.name.trim(),
+            code: newProg.code.trim(),
+            standard_duration_hours: Number(newProg.duration) || 1.5,
+            default_offering_type: newProg.type,
+            is_active: true,
+          },
+        });
+        programId = made.id;
+        await queryClient.invalidateQueries({ queryKey: ["catalogue"] });
+      }
+
+      const row: Row = await save({ data: { ...form, program_id: programId, status: "active" } });
+      await queryClient.invalidateQueries({ queryKey: ["classes"] });
+
+      // Generate its lessons straight away so the class is on the timetable the
+      // moment it exists. If there is nothing to generate from yet, the class is
+      // still made — the lessons can come once a first lesson and recurrence are
+      // set.
+      let lessons = 0;
+      try {
+        const gen = await generate({ data: { offering_id: row.id } });
+        lessons = gen.lessons_created;
+      } catch {
+        /* leave lessons at 0; the class was still created */
+      }
+      await queryClient.invalidateQueries({ queryKey: ["timetable"] });
+
+      toast.success(
+        lessons > 0
+          ? `Class ${row.code} created — ${lessons} lesson${lessons === 1 ? "" : "s"} on the timetable.`
+          : `Class ${row.code} created. Set a first lesson and recurrence to generate its lessons.`,
+      );
+      onCreated(row.id, lessons);
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <div className="space-y-1.5">
+    <div className="grid gap-2.5 sm:grid-cols-2">
+      <div className="space-y-1.5 sm:col-span-2">
         <Label>Program</Label>
         <Select
           value={form.program_id}
           onValueChange={(v) => {
+            if (v === "__new__") {
+              setForm({ ...form, program_id: v });
+              return;
+            }
             const p = (catalogue?.programs ?? []).find((x: Row) => x.id === v);
             setForm({
               ...form,
@@ -234,11 +289,63 @@ function StepOne({ catalogue, onCreated }: { catalogue: Row; onCreated: (id: str
                 {p.name} · {p.code}
               </SelectItem>
             ))}
+            <SelectItem value="__new__">+ New program…</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
-      <div className="space-y-1.5">
+      {creatingProgram && (
+        <div className="grid gap-2.5 rounded-lg border border-dashed border-[var(--edge)] p-3 sm:col-span-2 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label>New program name</Label>
+            <Input
+              placeholder="e.g. Year 7 English"
+              value={newProg.name}
+              onChange={(e) => setNewProg({ ...newProg, name: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Short code</Label>
+            <Input
+              placeholder="e.g. Y7ENG"
+              value={newProg.code}
+              onChange={(e) => setNewProg({ ...newProg, code: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Usual length (hours)</Label>
+            <Input
+              type="number"
+              step="0.25"
+              min={0.25}
+              value={newProg.duration}
+              onChange={(e) => setNewProg({ ...newProg, duration: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Usually taught as</Label>
+            <Select
+              value={newProg.type}
+              onValueChange={(v: "group_class" | "private_tuition") =>
+                setNewProg({ ...newProg, type: v })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="group_class">Group class</SelectItem>
+                <SelectItem value="private_tuition">Private tuition</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-xs text-muted-foreground sm:col-span-2">
+            The program is created with the class, then chosen automatically.
+          </p>
+        </div>
+      )}
+
+      <div className="space-y-1.5 sm:col-span-2">
         <Label>Term</Label>
         <Select
           value={form.operating_period_id}
@@ -259,26 +366,6 @@ function StepOne({ catalogue, onCreated }: { catalogue: Row; onCreated: (id: str
             {(catalogue?.periods ?? []).map((p: Row) => (
               <SelectItem key={p.id} value={p.id}>
                 {p.name} · {p.code}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label>Default tutor</Label>
-        <Select
-          value={form.primary_tutor_id || "none"}
-          onValueChange={(v) => setForm({ ...form, primary_tutor_id: v === "none" ? "" : v })}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">Unassigned</SelectItem>
-            {(catalogue?.tutors ?? []).map((t: Row) => (
-              <SelectItem key={t.id} value={t.id}>
-                {t.full_name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -316,25 +403,35 @@ function StepOne({ catalogue, onCreated }: { catalogue: Row; onCreated: (id: str
           value={form.capacity}
           onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) })}
         />
-        {isPrivate && (
-          <p className="text-xs text-muted-foreground">Private tuition is always capacity 1.</p>
-        )}
+        {isPrivate && <p className="text-xs text-muted-foreground">Private is always 1.</p>}
       </div>
 
       <div className="space-y-1.5">
-        <Label>Lesson length (hours)</Label>
+        <Label>First lesson (Sydney)</Label>
         <Input
-          type="number"
-          step="0.25"
-          min={0.25}
-          value={form.session_duration_hours}
-          onChange={(e) => setForm({ ...form, session_duration_hours: Number(e.target.value) })}
+          type="datetime-local"
+          value={form.recurrence_start_local}
+          onChange={(e) => setForm({ ...form, recurrence_start_local: e.target.value })}
         />
-        {program && (
-          <p className="text-xs text-muted-foreground">
-            Program standard is {formatHours(program.standard_duration_hours)}.
-          </p>
-        )}
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Repeats</Label>
+        <Select
+          value={form.recurrence}
+          onValueChange={(v: Row) => setForm({ ...form, recurrence: v })}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(LABELS.recurrence).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="space-y-1.5">
@@ -356,60 +453,58 @@ function StepOne({ catalogue, onCreated }: { catalogue: Row; onCreated: (id: str
       </div>
 
       <div className="space-y-1.5">
-        <Label>Recurrence</Label>
+        <Label>Lesson length (hours)</Label>
+        <Input
+          type="number"
+          step="0.25"
+          min={0.25}
+          value={form.session_duration_hours}
+          onChange={(e) => setForm({ ...form, session_duration_hours: Number(e.target.value) })}
+        />
+        {program && (
+          <p className="text-xs text-muted-foreground">
+            Program standard {formatHours(program.standard_duration_hours)}.
+          </p>
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Tutor</Label>
         <Select
-          value={form.recurrence}
-          onValueChange={(v: Row) => setForm({ ...form, recurrence: v })}
+          value={form.primary_tutor_id || "none"}
+          onValueChange={(v) => setForm({ ...form, primary_tutor_id: v === "none" ? "" : v })}
         >
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {Object.entries(LABELS.recurrence).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
+            <SelectItem value="none">Unassigned</SelectItem>
+            {(catalogue?.tutors ?? []).map((t: Row) => (
+              <SelectItem key={t.id} value={t.id}>
+                {t.full_name}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
-      <div className="space-y-1.5">
-        <Label>First lesson (Sydney)</Label>
-        <Input
-          type="datetime-local"
-          value={form.recurrence_start_local}
-          onChange={(e) => setForm({ ...form, recurrence_start_local: e.target.value })}
-        />
-        <p className="text-xs text-muted-foreground">
-          Fixes both the weekday and the time of day. A 5:30pm class stays 5:30pm across the
-          daylight-saving change.
-        </p>
-      </div>
-
       <div className="space-y-1.5 sm:col-span-2">
-        <Label>Room</Label>
+        <Label>Room (optional)</Label>
         <Input value={form.room} onChange={(e) => setForm({ ...form, room: e.target.value })} />
       </div>
 
       <div className="sm:col-span-2">
         <Button
-          disabled={!form.program_id || !form.operating_period_id || busy}
-          onClick={async () => {
-            setBusy(true);
-            try {
-              const row: Row = await save({ data: { ...form, status: "active" } });
-              await queryClient.invalidateQueries({ queryKey: ["classes"] });
-              toast.success(`Class ${row.code} created.`);
-              onCreated(row.id);
-            } catch (error) {
-              toast.error((error as Error).message);
-            } finally {
-              setBusy(false);
-            }
-          }}
+          className="w-full sm:w-auto"
+          disabled={
+            !form.program_id ||
+            !form.operating_period_id ||
+            (creatingProgram && (!newProg.name.trim() || !newProg.code.trim())) ||
+            busy
+          }
+          onClick={createClass}
         >
-          Create class
+          Create class &amp; generate lessons
         </Button>
       </div>
     </div>
@@ -440,39 +535,41 @@ function StepTwo({
   return (
     <div className="space-y-4">
       {enrolments.length > 0 && (
-        <TableShell>
-          <thead>
-            <tr>
-              <Th>Student</Th>
-              <Th>Method</Th>
-              <Th>Status</Th>
-              <Th className="text-right">Agreed price</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {enrolments.map((e: Row) => (
-              <tr key={e.id}>
-                <Td>
-                  {e.students?.full_name} <Code>{e.code}</Code>
-                </Td>
-                <Td>{e.method ? LABELS.billingMethod[e.method as "hours" | "payg"] : "—"}</Td>
-                <Td>
-                  <StatusPill tone={e.status === "trial" ? "info" : "success"}>
-                    {e.status}
-                  </StatusPill>
-                </Td>
-                <Td className="text-right tabular-nums">
-                  {e.final_agreed_price != null
-                    ? `$${Number(e.final_agreed_price).toFixed(2)}`
-                    : "—"}
-                </Td>
+        <div className="overflow-x-auto">
+          <table className="table-zebra w-full text-sm">
+            <thead>
+              <tr>
+                <Th>Student</Th>
+                <Th>Pays by</Th>
+                <Th>Status</Th>
+                <Th className="text-right">Agreed price</Th>
               </tr>
-            ))}
-          </tbody>
-        </TableShell>
+            </thead>
+            <tbody>
+              {enrolments.map((e: Row) => (
+                <tr key={e.id}>
+                  <Td>
+                    {e.students?.full_name} <Code>{e.code}</Code>
+                  </Td>
+                  <Td>{e.method ? LABELS.billingMethod[e.method as "hours" | "payg"] : "—"}</Td>
+                  <Td>
+                    <StatusPill tone={e.status === "trial" ? "info" : "success"}>
+                      {e.status}
+                    </StatusPill>
+                  </Td>
+                  <Td className="text-right tabular-nums">
+                    {e.final_agreed_price != null
+                      ? `$${Number(e.final_agreed_price).toFixed(2)}`
+                      : "—"}
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-2.5 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label>Student</Label>
           <Select value={studentId} onValueChange={setStudentId}>
@@ -490,7 +587,7 @@ function StepTwo({
         </div>
 
         <div className="space-y-1.5">
-          <Label>Enrolment status</Label>
+          <Label>Enrolment</Label>
           <Select value={status} onValueChange={(v: "active" | "trial") => setStatus(v)}>
             <SelectTrigger>
               <SelectValue />
@@ -501,23 +598,21 @@ function StepTwo({
             </SelectContent>
           </Select>
           {status === "trial" && (
-            <p className="text-xs text-muted-foreground">
-              A trial needs no billing method and consumes no hours.
-            </p>
+            <p className="text-xs text-muted-foreground">A trial needs no payment and no hours.</p>
           )}
         </div>
 
         {status !== "trial" && (
           <>
             <div className="space-y-1.5">
-              <Label>Billing method</Label>
+              <Label>Pays by</Label>
               <Select value={method} onValueChange={(v: "hours" | "payg") => setMethod(v)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="hours">Hours — buy a block, draw it down</SelectItem>
-                  <SelectItem value="payg">Pay as you go — one charge per lesson</SelectItem>
+                  <SelectItem value="payg">Pay as you go — a charge per lesson</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -550,8 +645,7 @@ function StepTwo({
                   placeholder="e.g. 15"
                 />
                 <p className="text-xs text-warning-foreground">
-                  This is a per-hour price, so it carries a catalogue quantity of one hour. Without
-                  a figure here the system would sell them a single hour for the whole term.
+                  A per-hour price sells a single hour unless you set the block bought here.
                 </p>
               </div>
             )}
@@ -577,7 +671,7 @@ function StepTwo({
                 adjustment_value: 0,
               },
             });
-            toast.success("Enrolled. The roll has been seeded for every lesson.");
+            toast.success("Enrolled, and added to every lesson's roll.");
             setStudentId("");
             setHours("");
             onSaved();
@@ -588,115 +682,7 @@ function StepTwo({
           }
         }}
       >
-        Add enrolment
-      </Button>
-    </div>
-  );
-}
-
-function StepThree({
-  offeringId,
-  sessions,
-  onGenerated,
-}: {
-  offeringId: string;
-  sessions: Row[];
-  onGenerated: () => Promise<void>;
-}) {
-  const generate = useServerFn(generateSessions);
-  const [busy, setBusy] = useState(false);
-
-  return (
-    <div className="space-y-3">
-      <Button
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          try {
-            const result = await generate({ data: { offering_id: offeringId } });
-            toast.success(
-              `${result.lessons_created} lesson(s) created, ${result.roll_entries_created} roll entries seeded.`,
-            );
-            await onGenerated();
-          } catch (error) {
-            toast.error((error as Error).message);
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        Generate lessons
-      </Button>
-
-      <p className="text-xs text-muted-foreground">
-        Safe to press twice. Duplicate lessons are impossible — the database refuses two lessons for
-        the same class at the same instant.
-      </p>
-
-      {sessions.length > 0 && (
-        <TableShell>
-          <thead>
-            <tr>
-              <Th>Lesson</Th>
-              <Th>Date</Th>
-              <Th className="text-right">Length</Th>
-              <Th>Status</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {sessions.slice(0, 8).map((s: Row) => (
-              <tr key={s.id}>
-                <Td>
-                  <Code>{s.code}</Code>
-                </Td>
-                <Td>{formatDate(s.session_date)}</Td>
-                <Td className="text-right">{formatHours(s.duration_hours)}</Td>
-                <Td>
-                  <StatusPill tone="info">{s.status}</StatusPill>
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </TableShell>
-      )}
-      {sessions.length > 8 && (
-        <p className="text-xs text-muted-foreground">…and {sessions.length - 8} more.</p>
-      )}
-    </div>
-  );
-}
-
-function StepFour({ offeringId, onSeeded }: { offeringId: string; onSeeded: () => void }) {
-  const seed = useServerFn(seedRollForOffering);
-  const [busy, setBusy] = useState(false);
-
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        The roll is seeded automatically whenever you enrol someone or generate lessons. Run it by
-        hand any time — it only ever adds what is missing.
-      </p>
-      <Button
-        variant="outline"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          try {
-            const result = await seed({ data: { offering_id: offeringId } });
-            toast.success(
-              result.roll_entries_created === 0
-                ? "Already complete — nothing to add."
-                : `${result.roll_entries_created} roll entries added.`,
-            );
-            onSeeded();
-          } catch (error) {
-            toast.error((error as Error).message);
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        Re-run roll seeding
+        Add student
       </Button>
     </div>
   );
