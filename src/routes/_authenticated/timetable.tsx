@@ -35,7 +35,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Code, EmptyState } from "@/components/vision/ui";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Code, EmptyState, StatusPill } from "@/components/vision/ui";
 import { MonthGrid, TimeGrid, toCalendarEvent } from "@/components/vision/calendar";
 import { cn } from "@/lib/utils";
 import {
@@ -43,6 +44,7 @@ import {
   formatDay,
   formatHours,
   instantToSydneyLocal as toLocalInput,
+  sydDate,
   sydneyLocalToInstant as fromLocalInput,
   sydToday,
   weekStart,
@@ -50,9 +52,14 @@ import {
 import {
   cancelSession,
   deleteSession,
+  getSessionRoll,
   listRange,
+  seedRoll,
   updateSession,
 } from "@/lib/vision/schedule.functions";
+import { bookMakeUp, holdMakeUp, markAttendance, markRollBulk } from "@/lib/vision/roll.functions";
+import { saveEnrolment } from "@/lib/vision/commerce.functions";
+import { listStudents } from "@/lib/vision/people.functions";
 import { getCatalogue } from "@/lib/vision/catalogue.functions";
 import type { Row } from "@/lib/vision/types";
 
@@ -129,7 +136,36 @@ function TimetablePage() {
   const { data: sessions } = useSuspenseQuery(rangeQueryOptions(from, to, tutorId));
   const { data: catalogue } = useQuery({ queryKey: ["catalogue"], queryFn: () => getCatalogue() });
 
+  const queryClient = useQueryClient();
+  const move = useServerFn(updateSession);
+
   const events = useMemo(() => sessions.map(toCalendarEvent), [sessions]);
+
+  // Dragging a lesson writes straight through to the session, so the roll,
+  // attendance and everywhere else this lesson shows follow it. The grid is
+  // patched in place first so the block does not jump back before the save
+  // returns.
+  async function moveLesson(row: Row, startISO: string, endISO: string) {
+    const key = ["timetable", from, to, tutorId] as const;
+    const previous = queryClient.getQueryData<Row[]>(key);
+    queryClient.setQueryData<Row[]>(key, (rows) =>
+      (rows ?? []).map((s) =>
+        s.id === row.id
+          ? { ...s, starts_at: startISO, ends_at: endISO, session_date: sydDate(startISO) }
+          : s,
+      ),
+    );
+    try {
+      await move({ data: { id: row.id, starts_at: startISO, ends_at: endISO } });
+      await queryClient.invalidateQueries({ queryKey: ["timetable"] });
+      await queryClient.invalidateQueries({ queryKey: ["today"] });
+      await queryClient.invalidateQueries({ queryKey: ["roll"] });
+      toast.success("Lesson moved. Its roll moved with it.");
+    } catch (error) {
+      queryClient.setQueryData(key, previous);
+      toast.error((error as Error).message);
+    }
+  }
 
   const gridDays = useMemo(() => {
     if (view === "day") return [anchor];
@@ -226,7 +262,8 @@ function TimetablePage() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Coloured by tutor · all times Sydney
+        Coloured by tutor · all times Sydney · drag a lesson to move it, drag its edge to stretch
+        it, click it to open
         {sessions.length > 0 &&
           ` · ${sessions.length} ${sessions.length === 1 ? "lesson" : "lessons"}`}
       </p>
@@ -250,7 +287,7 @@ function TimetablePage() {
           onOpenDay={openDay}
         />
       ) : (
-        <TimeGrid days={gridDays} events={events} onSelect={setEditing} />
+        <TimeGrid days={gridDays} events={events} onSelect={setEditing} onMove={moveLesson} />
       )}
 
       {editing && (
@@ -278,6 +315,7 @@ function SessionDialog({
   const cancel = useServerFn(cancelSession);
   const remove = useServerFn(deleteSession);
 
+  const [tab, setTab] = useState<"details" | "roll">("details");
   const [tutor, setTutor] = useState<string>(session.tutor_id ?? "none");
   const [room, setRoom] = useState(session.room ?? "");
   const [start, setStart] = useState(toLocalInput(session.starts_at));
@@ -285,13 +323,20 @@ function SessionDialog({
   const [notes, setNotes] = useState(session.notes ?? "");
   const [busy, setBusy] = useState(false);
 
-  async function refresh() {
-    await queryClient.invalidateQueries({ queryKey: ["timetable"] });
-    await queryClient.invalidateQueries({ queryKey: ["today"] });
-    onClose();
+  // The lesson touches the roll, attendance and today at once, so everything
+  // that shows it is refreshed together. Marking a student does not close the
+  // panel — you are usually mid-roll — so `close` is a separate choice.
+  async function invalidate() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["timetable"] }),
+      queryClient.invalidateQueries({ queryKey: ["today"] }),
+      queryClient.invalidateQueries({ queryKey: ["roll"] }),
+      queryClient.invalidateQueries({ queryKey: ["session-roll", session.id] }),
+      queryClient.invalidateQueries({ queryKey: ["needs-attention-count"] }),
+    ]);
   }
 
-  async function save() {
+  async function saveDetails() {
     setBusy(true);
     try {
       await update({
@@ -305,7 +350,8 @@ function SessionDialog({
         },
       });
       toast.success("Lesson updated. The roll is untouched.");
-      await refresh();
+      await invalidate();
+      onClose();
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
@@ -328,137 +374,501 @@ function SessionDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-3">
-          <div className="grid grid-cols-2 gap-3">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "details" | "roll")}>
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="details">Time, tutor & room</TabsTrigger>
+            <TabsTrigger value="roll">Roll & make-up</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="details" className="space-y-3 pt-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="start">Starts (Sydney)</Label>
+                <Input
+                  id="start"
+                  type="datetime-local"
+                  value={start}
+                  onChange={(e) => setStart(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="end">Ends (Sydney)</Label>
+                <Input
+                  id="end"
+                  type="datetime-local"
+                  value={end}
+                  onChange={(e) => setEnd(e.target.value)}
+                />
+              </div>
+            </div>
+
             <div className="space-y-1.5">
-              <Label htmlFor="start">Starts (Sydney)</Label>
-              <Input
-                id="start"
-                type="datetime-local"
-                value={start}
-                onChange={(e) => setStart(e.target.value)}
+              <Label>Tutor for this lesson</Label>
+              <Select value={tutor} onValueChange={setTutor}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Unassigned</SelectItem>
+                  {tutors.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.full_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                A lesson's tutor is its own — changing it here is how cover works, and it is what
+                tutor pay counts.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="room">Room</Label>
+              <Input id="room" value={room} onChange={(e) => setRoom(e.target.value)} />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="notes">Notes</Label>
+              <Textarea
+                id="notes"
+                rows={2}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="end">Ends (Sydney)</Label>
-              <Input
-                id="end"
-                type="datetime-local"
-                value={end}
-                onChange={(e) => setEnd(e.target.value)}
-              />
-            </div>
-          </div>
 
-          <div className="space-y-1.5">
-            <Label>Tutor for this lesson</Label>
-            <Select value={tutor} onValueChange={setTutor}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Unassigned</SelectItem>
-                {tutors.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.full_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              A lesson's tutor is its own — changing it here is how cover works, and it is what
-              tutor pay counts.
-            </p>
-          </div>
+            <DialogFooter className="flex-col gap-2 pt-1 sm:flex-row sm:justify-between">
+              <div className="flex gap-2">
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" className="text-destructive">
+                      Cancel lesson
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Cancel this lesson?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Cancelling keeps the roll and the history. Nobody is paid for it and
+                        nobody's hours are consumed. This is almost always what you want.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Keep it</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={async () => {
+                          await cancel({ data: { id: session.id, notes } });
+                          toast.success("Lesson cancelled.");
+                          await invalidate();
+                          onClose();
+                        }}
+                      >
+                        Cancel lesson
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="room">Room</Label>
-            <Input id="room" value={room} onChange={(e) => setRoom(e.target.value)} />
-          </div>
+                {session.roll_total === 0 && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="sm" className="text-muted-foreground">
+                        Delete
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete this lesson permanently?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Only possible because it has no roll. Anything with attendance must be
+                          cancelled instead.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Keep it</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={async () => {
+                            try {
+                              await remove({ data: { id: session.id } });
+                              toast.success("Lesson deleted.");
+                              await invalidate();
+                              onClose();
+                            } catch (error) {
+                              toast.error((error as Error).message);
+                            }
+                          }}
+                        >
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+              </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="notes">Notes</Label>
-            <Textarea
-              id="notes"
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </div>
-        </div>
+              <Button onClick={saveDetails} disabled={busy}>
+                Save changes
+              </Button>
+            </DialogFooter>
+          </TabsContent>
 
-        <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
-          <div className="flex gap-2">
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" className="text-destructive">
-                  Cancel lesson
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Cancel this lesson?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Cancelling keeps the roll and the history. Nobody is paid for it and nobody's
-                    hours are consumed. This is almost always what you want.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Keep it</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={async () => {
-                      await cancel({ data: { id: session.id, notes } });
-                      toast.success("Lesson cancelled.");
-                      await refresh();
-                    }}
-                  >
-                    Cancel lesson
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-
-            {session.roll_total === 0 && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="ghost" size="sm" className="text-muted-foreground">
-                    Delete
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete this lesson permanently?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Only possible because it has no roll. Anything with attendance must be
-                      cancelled instead.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Keep it</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={async () => {
-                        try {
-                          await remove({ data: { id: session.id } });
-                          toast.success("Lesson deleted.");
-                          await refresh();
-                        } catch (error) {
-                          toast.error((error as Error).message);
-                        }
-                      }}
-                    >
-                      Delete
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-          </div>
-
-          <Button onClick={save} disabled={busy}>
-            Save changes
-          </Button>
-        </DialogFooter>
+          <TabsContent value="roll" className="pt-3">
+            <LessonRollPanel session={session} tutors={tutors} onChanged={invalidate} />
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * The regular jobs on a lesson, gathered where you are looking at it: marking
+ * the roll, adding a student, and making the class up. Each writes to the same
+ * places the Roll and Class Builder do, so the timetable is not a separate copy
+ * of the data — it is another door onto it.
+ */
+function LessonRollPanel({
+  session,
+  tutors,
+  onChanged,
+}: {
+  session: Row;
+  tutors: Row[];
+  onChanged: () => Promise<void>;
+}) {
+  const mark = useServerFn(markAttendance);
+  const bulk = useServerFn(markRollBulk);
+  const hold = useServerFn(holdMakeUp);
+  const seed = useServerFn(seedRoll);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["session-roll", session.id],
+    queryFn: () => getSessionRoll({ data: { session_id: session.id } }),
+  });
+  const roll: Row[] = data?.roll ?? [];
+  const marked = roll.filter((r) => r.status !== "not_marked").length;
+  const notMarkedIds = roll.filter((r) => r.status === "not_marked").map((r) => r.id);
+
+  async function set(id: string, status: "present" | "absent" | "not_marked") {
+    try {
+      await mark({ data: { id, status } });
+      await onChanged();
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  }
+
+  if (isLoading) {
+    return <p className="py-6 text-center text-sm text-muted-foreground">Loading the roll…</p>;
+  }
+
+  if (roll.length === 0) {
+    return (
+      <div className="space-y-3 py-2">
+        <p className="text-sm text-muted-foreground">
+          This lesson has no roll yet. Seeding adds every enrolled student — it is safe to run more
+          than once.
+        </p>
+        <Button
+          size="sm"
+          onClick={async () => {
+            try {
+              const { created } = await seed({ data: { session_id: session.id } });
+              toast.success(`${created} student${created === 1 ? "" : "s"} added to the roll.`);
+              await onChanged();
+            } catch (error) {
+              toast.error((error as Error).message);
+            }
+          }}
+        >
+          Seed the roll
+        </Button>
+        <AddStudentRow session={session} enrolledIds={new Set()} onChanged={onChanged} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <StatusPill tone={marked === roll.length ? "success" : marked > 0 ? "warning" : "neutral"}>
+          {marked}/{roll.length} marked
+        </StatusPill>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={notMarkedIds.length === 0}
+          onClick={async () => {
+            try {
+              await bulk({ data: { ids: notMarkedIds, status: "present" } });
+              toast.success("Whole class marked present.");
+              await onChanged();
+            } catch (error) {
+              toast.error((error as Error).message);
+            }
+          }}
+        >
+          All present
+        </Button>
+      </div>
+
+      <div className="max-h-64 space-y-1 overflow-y-auto">
+        {roll.map((r) => (
+          <div
+            key={r.id}
+            className="flex items-center justify-between gap-2 rounded-md border border-[var(--edge)] px-2.5 py-1.5"
+          >
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium">
+                {r.enrolments?.students?.full_name ?? "—"}
+              </div>
+              <div className="text-[0.7rem] text-muted-foreground">
+                <Code>{r.enrolments?.students?.code}</Code>
+                {r.att_type === "make_up" ? " · make-up" : r.att_type === "trial" ? " · trial" : ""}
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                size="sm"
+                variant={r.status === "present" ? "default" : "outline"}
+                title="Present"
+                onClick={() => set(r.id, "present")}
+              >
+                P
+              </Button>
+              <Button
+                size="sm"
+                variant={r.status === "absent" ? "destructive" : "outline"}
+                title="Away"
+                onClick={() => set(r.id, "absent")}
+              >
+                A
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                title="Away, and owed a make-up"
+                disabled={r.att_type === "make_up"}
+                onClick={async () => {
+                  try {
+                    await hold({ data: { ids: [r.id] } });
+                    toast.success("Marked away and owed a make-up.");
+                    await onChanged();
+                  } catch (error) {
+                    toast.error((error as Error).message);
+                  }
+                }}
+              >
+                M
+              </Button>
+              {r.status !== "not_marked" && (
+                <Button size="sm" variant="ghost" onClick={() => set(r.id, "not_marked")}>
+                  Clear
+                </Button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <AddStudentRow
+        session={session}
+        enrolledIds={new Set(roll.map((r) => r.enrolments?.students?.id).filter(Boolean))}
+        onChanged={onChanged}
+      />
+
+      <MakeUpClassForm session={session} roll={roll} tutors={tutors} onChanged={onChanged} />
+    </div>
+  );
+}
+
+/** Enrol a student straight onto this lesson's class, without leaving the day. */
+function AddStudentRow({
+  session,
+  enrolledIds,
+  onChanged,
+}: {
+  session: Row;
+  enrolledIds: Set<string>;
+  onChanged: () => Promise<void>;
+}) {
+  const enrol = useServerFn(saveEnrolment);
+  const { data: students } = useQuery({ queryKey: ["students"], queryFn: () => listStudents() });
+  const [studentId, setStudentId] = useState("");
+  const [method, setMethod] = useState<"hours" | "payg" | "trial">("hours");
+  const [busy, setBusy] = useState(false);
+
+  const candidates = (students ?? []).filter((s: Row) => !enrolledIds.has(s.id));
+
+  async function add() {
+    if (!studentId) return;
+    setBusy(true);
+    try {
+      await enrol({
+        data: {
+          student_id: studentId,
+          class_offering_id: session.class_offering_id,
+          status: method === "trial" ? "trial" : "active",
+          starts_on: sydToday(),
+          method: method === "trial" ? null : method,
+        },
+      });
+      toast.success("Student enrolled and added to the roll.");
+      setStudentId("");
+      await onChanged();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-1.5 rounded-md border border-dashed border-[var(--edge)] p-2.5">
+      <Label className="text-xs text-muted-foreground">Add a student to this class</Label>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={studentId} onValueChange={setStudentId}>
+          <SelectTrigger className="h-8 min-w-44 flex-1">
+            <SelectValue placeholder="Choose a student…" />
+          </SelectTrigger>
+          <SelectContent>
+            {candidates.map((s: Row) => (
+              <SelectItem key={s.id} value={s.id}>
+                {s.full_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={method} onValueChange={(v) => setMethod(v as "hours" | "payg" | "trial")}>
+          <SelectTrigger className="h-8 w-28">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="hours">Hours</SelectItem>
+            <SelectItem value="payg">PAYG</SelectItem>
+            <SelectItem value="trial">Trial</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button size="sm" disabled={busy || !studentId} onClick={add}>
+          Add
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Make the whole class up onto one new lesson — the same booking the Roll uses. */
+function MakeUpClassForm({
+  session,
+  roll,
+  tutors,
+  onChanged,
+}: {
+  session: Row;
+  roll: Row[];
+  tutors: Row[];
+  onChanged: () => Promise<void>;
+}) {
+  const book = useServerFn(bookMakeUp);
+  const [open, setOpen] = useState(false);
+  const [date, setDate] = useState(() => addDays(sydToday(), 7));
+  const [startTime, setStartTime] = useState(() => toLocalInput(session.starts_at).slice(11, 16));
+  const [duration, setDuration] = useState(() => String(session.duration_hours ?? 1));
+  const [tutorId, setTutorId] = useState<string>(session.tutor_id ?? "none");
+  const [busy, setBusy] = useState(false);
+
+  const sources = roll.filter((r) => r.att_type !== "make_up").map((r) => r.id);
+
+  async function submit() {
+    setBusy(true);
+    try {
+      await book({
+        data: {
+          source_attendance_ids: sources,
+          session_id: null,
+          date,
+          start_time: startTime,
+          duration_hours: Number(duration) || 1,
+          tutor_id: tutorId === "none" ? null : tutorId,
+        },
+      });
+      toast.success("One make-up lesson booked for the class.");
+      setOpen(false);
+      await onChanged();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        className="w-full"
+        disabled={sources.length === 0}
+        onClick={() => setOpen(true)}
+      >
+        Make up the class on another day
+      </Button>
+    );
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border border-[var(--edge)] bg-[var(--mat-thin)] p-3">
+      <p className="text-xs text-muted-foreground">
+        Marks the {sources.length} in this class away and settles them together on one new lesson. A
+        tutor is optional — decide it later if you need to.
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1.5">
+          <Label>Day</Label>
+          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Starts</Label>
+          <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1.5">
+          <Label>Hours</Label>
+          <Input
+            type="number"
+            min="0.5"
+            step="0.5"
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Tutor</Label>
+          <Select value={tutorId} onValueChange={setTutorId}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Decide later</SelectItem>
+              {tutors.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.full_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+        <Button size="sm" disabled={busy} onClick={submit}>
+          Book make-up
+        </Button>
+      </div>
+    </div>
   );
 }

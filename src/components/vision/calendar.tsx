@@ -1,10 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import { cn } from "@/lib/utils";
 import {
   addDays,
   formatClock,
   sydDate,
+  sydneyLocalToInstant,
   sydneyMinutesNow,
   sydneyMinutesOfDay,
   sydToday,
@@ -29,8 +36,20 @@ import type { Row } from "@/lib/vision/types";
 export const HOUR_HEIGHT = 48;
 const DAY_MINUTES = 24 * 60;
 
+/** Dragging snaps to this, the way Google's grid clicks to quarter-hours. */
+const SNAP = 15;
+
 /** Where the grid scrolls to on open — early enough to see the first lesson. */
 const DEFAULT_SCROLL_HOUR = 7;
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/** Minutes-of-day to a 24h "HH:mm" the Sydney converter accepts. */
+function clock24(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
 
 export type CalendarEvent = {
   id: string;
@@ -68,23 +87,28 @@ export function toCalendarEvent(s: Row): CalendarEvent {
 }
 
 /**
- * Google Calendar's own palette, near enough. A calendar that is not
+ * A calendar of pastels, one hue per tutor. A calendar that is not
  * colour-coded is just a list with lines on it, and no tutor in the imported
  * base has a colour set yet — so one is derived from the tutor's id. It is
  * stable across sessions and machines, and the moment a real colour is saved
  * on the tutor that takes over.
+ *
+ * Pastel on purpose: a whole week tiled in saturated blocks is loud, and these
+ * lessons sit on a dark surface where a soft fill with dark text reads calmer
+ * and still tells the tutors apart at a glance. `readableOn` keeps the text
+ * dark against every one of them.
  */
 const PALETTE = [
-  "#7986CB", // blueberry
-  "#33B679", // basil
-  "#E67C73", // flamingo
-  "#F6BF26", // banana
-  "#039BE5", // peacock
-  "#8E24AA", // grape
-  "#F4511E", // tangerine
-  "#0B8043", // sage
-  "#3F51B5", // lavender
-  "#D50000", // tomato
+  "#AEC6E8", // periwinkle
+  "#B8E0C9", // mint
+  "#F6B6B0", // blossom
+  "#F7E1A0", // butter
+  "#A9DDE6", // sky
+  "#D3C1EC", // lilac
+  "#F8C9A6", // apricot
+  "#CBE0AC", // pear
+  "#C4CCF3", // cornflower
+  "#F4B8CE", // rose
 ];
 
 /**
@@ -160,26 +184,52 @@ function layout(events: CalendarEvent[]): Array<CalendarEvent & { col: number; c
   return placed;
 }
 
+type DragMode = "move" | "resize-start" | "resize-end";
+
 function EventBlock({
   event,
   col,
   cols,
   onSelect,
+  editable,
+  dimmed,
+  onDragStart,
 }: {
   event: CalendarEvent;
   col: number;
   cols: number;
   onSelect: (row: Row) => void;
+  /** Whether this grid lets you drag lessons around. Month view never does. */
+  editable: boolean;
+  /** The block being dragged shows where it was, faded, while the ghost leads. */
+  dimmed: boolean;
+  onDragStart: (e: ReactPointerEvent, event: CalendarEvent, mode: DragMode) => void;
 }) {
   const colour = event.colour || PALETTE[0]!;
   const top = (event.startMinutes / 60) * HOUR_HEIGHT;
   const height = Math.max(((event.endMinutes - event.startMinutes) / 60) * HOUR_HEIGHT - 1, 17);
   const compact = height < 44;
+  // Resizing needs a block tall enough to carry grips without swallowing the body.
+  const resizable = editable && !event.cancelled && height >= 30;
 
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(event.row)}
+    <div
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(event.row);
+        }
+      }}
+      // A plain click still opens the lesson; a click that moves becomes a drag.
+      // The distinction is made in the grid, which owns the pointer maths.
+      onPointerDown={(e) => {
+        if (editable && e.button === 0) onDragStart(e, event, "move");
+      }}
+      onClick={() => {
+        if (!editable) onSelect(event.row);
+      }}
       title={`${formatClock(event.startMinutes)} – ${formatClock(event.endMinutes)} · ${event.title}${
         event.subtitle ? ` · ${event.subtitle}` : ""
       }`}
@@ -188,18 +238,21 @@ function EventBlock({
         height,
         left: `calc(${(col / cols) * 100}% + 1px)`,
         width: `calc(${100 / cols}% - 3px)`,
-        // Solid fill, white text — Google's own treatment, and the only one
-        // that stays legible at 18px tall on a dark surface. A cancelled
-        // lesson inverts to an outline, the way a declined event does.
+        // Soft pastel fill, dark text — a whole week of these stays calm, and
+        // `readableOn` keeps the label legible. A cancelled lesson inverts to an
+        // outline, the way a declined event does.
         backgroundColor: event.cancelled ? "transparent" : colour,
         borderColor: event.cancelled ? colour : "rgba(0,0,0,0.22)",
         color: event.cancelled ? colour : readableOn(colour),
+        opacity: dimmed ? 0.4 : 1,
+        touchAction: editable ? "none" : undefined,
       }}
       className={cn(
-        "absolute overflow-hidden rounded border px-1.5 py-[3px] text-left",
-        "transition-[filter,box-shadow] duration-150",
-        "hover:z-20 hover:shadow-lg hover:brightness-110",
+        "absolute select-none overflow-hidden rounded border px-1.5 py-[3px] text-left",
+        "transition-[box-shadow,filter] duration-150",
+        "hover:z-20 hover:shadow-lg hover:brightness-95",
         "focus-visible:z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
+        editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
         event.cancelled && "border-dashed",
         compact ? "flex items-baseline gap-1.5 leading-none" : "leading-tight",
       )}
@@ -232,7 +285,28 @@ function EventBlock({
           )}
         </>
       )}
-    </button>
+
+      {resizable && (
+        <>
+          {/* Grip the top edge to change when it starts, the bottom to change
+              when it ends — Google's own affordance. */}
+          <span
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              if (e.button === 0) onDragStart(e, event, "resize-start");
+            }}
+            className="absolute inset-x-0 top-0 h-1.5 cursor-ns-resize"
+          />
+          <span
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              if (e.button === 0) onDragStart(e, event, "resize-end");
+            }}
+            className="absolute inset-x-0 bottom-0 h-1.5 cursor-ns-resize"
+          />
+        </>
+      )}
+    </div>
   );
 }
 
@@ -259,22 +333,138 @@ function NowLine({ dayCount, todayIndex }: { dayCount: number; todayIndex: numbe
   );
 }
 
+type Draft = {
+  row: Row;
+  originId: string;
+  mode: DragMode;
+  date: string;
+  startMinutes: number;
+  endMinutes: number;
+  /** Grab offset for a move: where in the block the pointer took hold. */
+  grab: number;
+  duration: number;
+  originX: number;
+  originY: number;
+  moved: boolean;
+};
+
 export function TimeGrid({
   days,
   events,
   onSelect,
+  onMove,
 }: {
   days: string[];
   events: CalendarEvent[];
   onSelect: (row: Row) => void;
+  /** Given a new day and time for a lesson, persist it. Omit for a read-only grid. */
+  onMove?: (row: Row, startISO: string, endISO: string) => void;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
+  const area = useRef<HTMLDivElement>(null);
   const today = sydToday();
   const todayIndex = days.indexOf(today);
+  const editable = Boolean(onMove);
+
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const draftRef = useRef<Draft | null>(null);
+  const setDrag = (d: Draft | null) => {
+    draftRef.current = d;
+    setDraft(d);
+  };
 
   useEffect(() => {
     if (scroller.current) scroller.current.scrollTop = DEFAULT_SCROLL_HOUR * HOUR_HEIGHT - 10;
   }, []);
+
+  /** Pointer position → the minute-of-day and day column it falls on. */
+  function locate(clientX: number, clientY: number) {
+    const rect = area.current!.getBoundingClientRect();
+    const minutes = clamp(
+      Math.round((((clientY - rect.top) / HOUR_HEIGHT) * 60) / SNAP) * SNAP,
+      0,
+      DAY_MINUTES,
+    );
+    const colWidth = rect.width / days.length;
+    const dayIndex = clamp(Math.floor((clientX - rect.left) / colWidth), 0, days.length - 1);
+    return { minutes, dayIndex };
+  }
+
+  function onPointerMove(e: PointerEvent) {
+    const d = draftRef.current;
+    if (!d) return;
+    const moved = d.moved || Math.abs(e.clientX - d.originX) + Math.abs(e.clientY - d.originY) > 4;
+    const { minutes, dayIndex } = locate(e.clientX, e.clientY);
+
+    if (d.mode === "move") {
+      const start = clamp(minutes - d.grab, 0, DAY_MINUTES - d.duration);
+      setDrag({
+        ...d,
+        moved,
+        startMinutes: start,
+        endMinutes: start + d.duration,
+        date: days[dayIndex]!,
+      });
+    } else if (d.mode === "resize-end") {
+      setDrag({
+        ...d,
+        moved,
+        endMinutes: clamp(Math.max(minutes, d.startMinutes + SNAP), 0, DAY_MINUTES),
+      });
+    } else {
+      setDrag({
+        ...d,
+        moved,
+        startMinutes: clamp(Math.min(minutes, d.endMinutes - SNAP), 0, DAY_MINUTES),
+      });
+    }
+  }
+
+  function onPointerUp() {
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onPointerUp);
+    const d = draftRef.current;
+    setDrag(null);
+    if (!d) return;
+
+    // A press that never travelled is a click: open the lesson.
+    if (!d.moved) {
+      onSelect(d.row);
+      return;
+    }
+    const same =
+      d.date === d.row.session_date &&
+      d.startMinutes === sydneyMinutesOfDay(d.row.starts_at) &&
+      d.endMinutes === sydneyMinutesOfDay(d.row.ends_at);
+    if (same) return;
+
+    onMove?.(
+      d.row,
+      sydneyLocalToInstant(`${d.date}T${clock24(d.startMinutes)}`),
+      sydneyLocalToInstant(`${d.date}T${clock24(d.endMinutes)}`),
+    );
+  }
+
+  function beginDrag(e: ReactPointerEvent, ev: CalendarEvent, mode: DragMode) {
+    if (!editable) return;
+    e.preventDefault();
+    const { minutes } = locate(e.clientX, e.clientY);
+    setDrag({
+      row: ev.row,
+      originId: ev.id,
+      mode,
+      date: ev.date,
+      startMinutes: ev.startMinutes,
+      endMinutes: ev.endMinutes,
+      grab: minutes - ev.startMinutes,
+      duration: ev.endMinutes - ev.startMinutes,
+      originX: e.clientX,
+      originY: e.clientY,
+      moved: false,
+    });
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+  }
 
   const byDay = useMemo(() => {
     const map = new Map<string, ReturnType<typeof layout>>();
@@ -285,6 +475,8 @@ export function TimeGrid({
   }, [days, events]);
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
+  const ghostShown = draft?.moved ? draft : null;
+  const ghostDayIndex = ghostShown ? days.indexOf(ghostShown.date) : -1;
 
   return (
     <div className="glass--solid overflow-hidden rounded-xl border">
@@ -334,7 +526,7 @@ export function TimeGrid({
             ))}
           </div>
 
-          <div className="relative flex flex-1">
+          <div ref={area} className="relative flex flex-1">
             {/* Hour rules sit behind every column so they line up exactly. */}
             <div className="pointer-events-none absolute inset-0">
               {hours.map((h) => (
@@ -354,10 +546,49 @@ export function TimeGrid({
             {days.map((day) => (
               <div key={day} className="relative min-w-0 flex-1 border-r last:border-r-0">
                 {(byDay.get(day) ?? []).map((e) => (
-                  <EventBlock key={e.id} event={e} col={e.col} cols={e.cols} onSelect={onSelect} />
+                  <EventBlock
+                    key={e.id}
+                    event={e}
+                    col={e.col}
+                    cols={e.cols}
+                    onSelect={onSelect}
+                    editable={editable}
+                    dimmed={ghostShown?.originId === e.id}
+                    onDragStart={beginDrag}
+                  />
                 ))}
               </div>
             ))}
+
+            {/* The ghost the drag steers: same block, leading the way, snapped to
+                the quarter-hour it would land on. */}
+            {ghostShown && ghostDayIndex >= 0 && (
+              <div
+                className="pointer-events-none absolute z-30 overflow-hidden rounded border-2 border-white/70 px-1.5 py-[3px] leading-tight shadow-xl"
+                style={{
+                  top: (ghostShown.startMinutes / 60) * HOUR_HEIGHT,
+                  height: Math.max(
+                    ((ghostShown.endMinutes - ghostShown.startMinutes) / 60) * HOUR_HEIGHT - 1,
+                    17,
+                  ),
+                  left: `calc(${(ghostDayIndex / days.length) * 100}% + 2px)`,
+                  width: `calc(${100 / days.length}% - 4px)`,
+                  backgroundColor: ghostShown.row.tutors?.colour
+                    ? colourFor(ghostShown.row.tutor_id, ghostShown.row.tutors.colour)
+                    : colourFor(ghostShown.row.tutor_id),
+                  color: readableOn(
+                    colourFor(ghostShown.row.tutor_id, ghostShown.row.tutors?.colour),
+                  ),
+                }}
+              >
+                <div className="truncate text-[0.7rem] font-semibold">
+                  {ghostShown.row.class_offerings?.programs?.name ?? "Lesson"}
+                </div>
+                <div className="text-[0.65rem] tabular-nums opacity-90">
+                  {formatClock(ghostShown.startMinutes)} – {formatClock(ghostShown.endMinutes)}
+                </div>
+              </div>
+            )}
 
             {todayIndex >= 0 && <NowLine dayCount={days.length} todayIndex={todayIndex} />}
           </div>
