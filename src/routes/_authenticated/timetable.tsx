@@ -531,41 +531,42 @@ function SessionDialog({
                   </AlertDialogContent>
                 </AlertDialog>
 
-                {session.roll_total === 0 && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="sm" className="text-muted-foreground">
-                        Delete
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete this lesson permanently?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Only possible because it has no roll. Anything with attendance must be
-                          cancelled instead.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Keep it</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={async () => {
-                            try {
-                              await remove({ data: { id: session.id } });
-                              toast.success("Lesson deleted.");
-                              await invalidate();
-                              onClose();
-                            } catch (error) {
-                              toast.error((error as Error).message);
-                            }
-                          }}
-                        >
-                          Delete
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="sm" className="text-muted-foreground">
+                      Delete
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete this lesson permanently?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {session.roll_total > 0
+                          ? "The lesson and its roll are removed for good — use this to clear a spare or duplicate lesson off the calendar. To keep the record, cancel it instead."
+                          : "The lesson is removed for good. It has no roll, so nothing else is affected."}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Keep it</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={async () => {
+                          try {
+                            await remove({
+                              data: { id: session.id, force: session.roll_total > 0 },
+                            });
+                            toast.success("Lesson deleted.");
+                            await invalidate();
+                            onClose();
+                          } catch (error) {
+                            toast.error((error as Error).message);
+                          }
+                        }}
+                      >
+                        Delete lesson
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
 
               <Button onClick={saveDetails} disabled={busy}>
