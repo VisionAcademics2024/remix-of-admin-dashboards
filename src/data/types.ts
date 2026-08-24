@@ -77,8 +77,6 @@ export interface WeekParams {
   tutorId?: string | null;
 }
 
-export type MakeUpQueueState = "outstanding" | "scheduled" | "completed";
-
 /**
  * Rows returned by the live adapter are PostgREST-shaped (embeds decided by
  * the query, not by the schema), so they are typed loosely at the boundary and

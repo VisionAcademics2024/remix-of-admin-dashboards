@@ -9,7 +9,7 @@
  * Rows are typed loosely for now (see ViewRows in ./types) and tightened into
  * named view models screen by screen.
  */
-import type { DirectoryParams, MakeUpQueueState, SydneyDate, ViewRow, ViewRows, WeekParams } from "./types";
+import type { DirectoryParams, SydneyDate, ViewRow, ViewRows, WeekParams } from "./types";
 
 export interface VisionRepository {
   /** Which adapter is answering. Surfaced by the environment badge. */
@@ -31,9 +31,8 @@ export interface VisionRepository {
   getOfferingList(): Promise<ViewRows>;
   getOfferingDetail(id: string): Promise<ViewRow>;
 
-  /* attendance and make-ups */
+  /* attendance */
   getAttendanceQueue(filter: string, date: SydneyDate): Promise<ViewRows>;
-  getMakeupQueue(state?: MakeUpQueueState): Promise<ViewRow>;
 
   /* commerce */
   getCommerceBoard(): Promise<ViewRow>;

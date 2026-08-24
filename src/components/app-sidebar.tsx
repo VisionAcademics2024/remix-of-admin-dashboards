@@ -10,7 +10,6 @@ import {
   ListChecks,
   LogOut,
   Receipt,
-  Repeat,
   Settings,
   Sunrise,
   UserCog,
@@ -49,7 +48,6 @@ const OPERATE: NavItem[] = [
   { title: "Today", url: "/today", icon: Sunrise },
   { title: "Timetable", url: "/timetable", icon: CalendarDays },
   { title: "Attendance", url: "/roll", icon: ClipboardCheck },
-  { title: "Make-Ups", url: "/make-ups", icon: Repeat },
   { title: "Class Builder", url: "/classes/new", icon: Wrench },
 ];
 

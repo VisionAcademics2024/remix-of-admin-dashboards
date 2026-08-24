@@ -7,16 +7,20 @@
  * fixed here.
  */
 import type { VisionRepository } from "../repository";
-import type { DirectoryParams, MakeUpQueueState, SydneyDate, WeekParams } from "../types";
+import type { DirectoryParams, SydneyDate, WeekParams } from "../types";
 
 import { getBillingBoard } from "@/lib/vision/billing.functions";
 import { getCatalogue } from "@/lib/vision/catalogue.functions";
 import { getClassOffering, listClassOfferings } from "@/lib/vision/classes.functions";
 import { listCommerce } from "@/lib/vision/commerce.functions";
-import { getNeedsAttention, getNeedsAttentionCount, getToday } from "@/lib/vision/overview.functions";
+import {
+  getNeedsAttention,
+  getNeedsAttentionCount,
+  getToday,
+} from "@/lib/vision/overview.functions";
 import { getFortnightPay } from "@/lib/vision/pay.functions";
 import { getStudentDetail, listGuardians, listStudents } from "@/lib/vision/people.functions";
-import { listMakeUps, listRoll } from "@/lib/vision/roll.functions";
+import { listRoll } from "@/lib/vision/roll.functions";
 import { getSessionRoll, listToday, listWeek } from "@/lib/vision/schedule.functions";
 import { getMe, listStaff } from "@/lib/vision/session.functions";
 
@@ -78,11 +82,6 @@ export const liveRepository: VisionRepository = {
   getAttendanceQueue(filter: string, date: SydneyDate) {
     return listRoll({ data: { filter, date } });
   },
-  async getMakeupQueue(_state?: MakeUpQueueState) {
-    // The server returns all three groups in one payload; the caller picks.
-    return listMakeUps();
-  },
-
   getCommerceBoard() {
     return listCommerce();
   },
