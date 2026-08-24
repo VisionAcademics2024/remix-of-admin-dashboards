@@ -35,7 +35,15 @@ import {
   toneForStatus,
 } from "@/components/vision/ui";
 import { Segmented } from "@/components/vision/segmented";
-import { addDays, formatDay, formatHours, formatTime, sydToday, weekStart } from "@/lib/format";
+import {
+  addDays,
+  formatDay,
+  formatHours,
+  formatTime,
+  instantToSydneyLocal,
+  sydToday,
+  weekStart,
+} from "@/lib/format";
 import { getCatalogue } from "@/lib/vision/catalogue.functions";
 import type { Row } from "@/lib/vision/types";
 import {
@@ -89,7 +97,7 @@ function RollPage() {
   const today = sydToday();
   const [filter, setFilter] = useState<RollFilter>("today");
   const [search, setSearch] = useState("");
-  const [makingUp, setMakingUp] = useState<Row | null>(null);
+  const [makingUp, setMakingUp] = useState<Row[] | null>(null);
 
   // Which way the panel enters: the direction the selection travelled.
   const previousIndex = useRef(0);
@@ -128,6 +136,11 @@ function RollPage() {
       toast.error((error as Error).message);
     }
   }
+
+  // A roll is read one class at a time, not one student at a time: the whole
+  // group turns up together, is away together, and is made up together. Rows
+  // are grouped by the lesson they belong to so the sheet matches the room.
+  const groups = groupByLesson(visible);
 
   const unmarkedIds = visible.filter((r: Row) => r.status === "not_marked").map((r: Row) => r.id);
 
@@ -192,131 +205,27 @@ function RollPage() {
               }
             />
           ) : (
-            <TableShell>
-              <thead>
-                <tr>
-                  <Th>Student</Th>
-                  <Th>Lesson</Th>
-                  <Th>Date</Th>
-                  <Th>Tutor</Th>
-                  <Th>Type</Th>
-                  <Th>Billing</Th>
-                  <Th>Hours</Th>
-                  <Th>Status</Th>
-                  <Th className="text-right">Mark</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((row: Row) => (
-                  <tr key={row.id}>
-                    <Td>
-                      <Link
-                        to="/students/$id"
-                        params={{ id: row.student_id }}
-                        className="font-medium hover:underline"
-                      >
-                        {row.enrolments?.students?.full_name ?? "—"}
-                      </Link>
-                      <div>
-                        <Code>{row.enrolments?.students?.code}</Code>
-                      </div>
-                    </Td>
-                    <Td>
-                      <div className="max-w-48 truncate">
-                        {row.sessions?.class_offerings?.programs?.name ?? "—"}
-                      </div>
-                      <Code>{row.sessions?.code}</Code>
-                    </Td>
-                    <Td className="whitespace-nowrap">
-                      {formatDay(row.lesson_starts_at)}
-                      <div className="text-xs text-muted-foreground">
-                        {formatTime(row.lesson_starts_at)}
-                      </div>
-                    </Td>
-                    <Td>
-                      <TutorCell row={row} tutors={catalogue?.tutors ?? []} onChanged={refresh} />
-                    </Td>
-                    <Td>
-                      <StatusPill
-                        tone={
-                          row.att_type === "trial"
-                            ? "info"
-                            : row.att_type === "make_up"
-                              ? "warning"
-                              : "neutral"
-                        }
-                      >
-                        {row.att_type === "make_up"
-                          ? "Make-up"
-                          : row.att_type === "trial"
-                            ? "Trial"
-                            : "Regular"}
-                      </StatusPill>
-                      {row.make_up_state && (
-                        <div className="mt-1">
-                          <StatusPill tone={toneForStatus("makeup", row.make_up_state)}>
-                            {row.make_up_state === "outstanding" ? "owed" : row.make_up_state}
-                          </StatusPill>
-                        </div>
-                      )}
-                    </Td>
-                    <Td className="whitespace-nowrap text-xs text-muted-foreground">
-                      {row.billing_method === "hours"
-                        ? row.package_id
-                          ? "Hours"
-                          : "Hours · no package"
-                        : row.billing_method === "payg"
-                          ? "PAYG"
-                          : "Trial"}
-                    </Td>
-                    <Td className="tabular-nums">{formatHours(row.hours_consumed)}</Td>
-                    <Td>
-                      <StatusPill tone={toneForStatus("attendance", row.effective_status)}>
-                        {row.effective_status.replace("_", " ")}
-                      </StatusPill>
-                    </Td>
-                    <Td className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          size="sm"
-                          variant={row.status === "present" ? "default" : "outline"}
-                          title="Present"
-                          onClick={() => setStatus(row.id, "present")}
-                        >
-                          P
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={row.status === "absent" ? "destructive" : "outline"}
-                          title="Away"
-                          onClick={() => setStatus(row.id, "absent")}
-                        >
-                          A
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          title="Away, and owed a make-up"
-                          disabled={row.att_type === "make_up"}
-                          onClick={() => setMakingUp(row)}
-                        >
-                          M
-                        </Button>
-                        {row.status !== "not_marked" && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setStatus(row.id, "not_marked")}
-                          >
-                            Clear
-                          </Button>
-                        )}
-                      </div>
-                    </Td>
-                  </tr>
-                ))}
-              </tbody>
-            </TableShell>
+            <div className="space-y-4">
+              {groups.map((group, i) => (
+                <LessonGroup
+                  key={group.sessionId}
+                  group={group}
+                  showColumns={i === 0}
+                  tutors={catalogue?.tutors ?? []}
+                  onSetStatus={setStatus}
+                  onMakeUp={setMakingUp}
+                  onBulk={async (ids, status) => {
+                    try {
+                      await bulk({ data: { ids, status } });
+                      await refresh();
+                    } catch (error) {
+                      toast.error((error as Error).message);
+                    }
+                  }}
+                  onChanged={refresh}
+                />
+              ))}
+            </div>
           )}
         </div>
       </div>
@@ -328,13 +237,237 @@ function RollPage() {
 
       {makingUp && (
         <MakeUpDialog
-          row={makingUp}
+          rows={makingUp}
           tutors={catalogue?.tutors ?? []}
           onClose={() => setMakingUp(null)}
           onDone={refresh}
         />
       )}
     </div>
+  );
+}
+
+type LessonGrouping = {
+  sessionId: string;
+  lesson: Row;
+  rows: Row[];
+};
+
+/**
+ * One block per lesson, newest first, students alphabetical inside it.
+ *
+ * The order is taken from the rows as they arrive — already sorted by lesson
+ * time — so the groups stay in the order the day actually runs rather than
+ * being re-sorted into something unfamiliar.
+ */
+function groupByLesson(rows: Row[]): LessonGrouping[] {
+  const groups = new Map<string, LessonGrouping>();
+  for (const row of rows) {
+    const key = row.session_id ?? row.id;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.rows.push(row);
+    } else {
+      groups.set(key, { sessionId: key, lesson: row, rows: [row] });
+    }
+  }
+  for (const group of groups.values()) {
+    group.rows.sort((a, b) =>
+      (a.enrolments?.students?.full_name ?? "").localeCompare(
+        b.enrolments?.students?.full_name ?? "",
+      ),
+    );
+  }
+  return [...groups.values()];
+}
+
+/**
+ * A class, and everyone on its roll.
+ *
+ * The header carries what belongs to the lesson rather than to a student — the
+ * class, the time, the tutor — so it is stated once instead of repeated down
+ * every row, and it is where the whole-class actions live. Marking a class
+ * present is one press, not eight.
+ */
+function LessonGroup({
+  group,
+  showColumns,
+  tutors,
+  onSetStatus,
+  onMakeUp,
+  onBulk,
+  onChanged,
+}: {
+  group: LessonGrouping;
+  /** Column names are stated once at the top, not above every class. */
+  showColumns: boolean;
+  tutors: Row[];
+  onSetStatus: (id: string, status: "present" | "absent" | "not_marked") => Promise<void>;
+  onMakeUp: (rows: Row[]) => void;
+  onBulk: (ids: string[], status: "present" | "absent" | "not_marked") => Promise<void>;
+  onChanged: () => Promise<void>;
+}) {
+  const { lesson, rows } = group;
+  const marked = rows.filter((r: Row) => r.status !== "not_marked").length;
+  const unmarkedIds = rows.filter((r: Row) => r.status === "not_marked").map((r: Row) => r.id);
+  const makeUpable = rows.filter((r: Row) => r.att_type !== "make_up");
+  const complete = marked === rows.length;
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-[var(--edge)]">
+      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--edge)] bg-[var(--mat-thin)] px-4 py-2.5">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="truncate font-medium">
+              {lesson.sessions?.class_offerings?.programs?.name ?? "Lesson"}
+            </span>
+            <Code>{lesson.sessions?.code}</Code>
+          </div>
+          <div className="mt-0.5 text-xs text-muted-foreground">
+            {formatDay(lesson.lesson_starts_at)} · {formatTime(lesson.lesson_starts_at)} ·{" "}
+            {rows.length} {rows.length === 1 ? "student" : "students"}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <TutorCell row={lesson} tutors={tutors} onChanged={onChanged} />
+        </div>
+
+        <StatusPill tone={complete ? "success" : marked > 0 ? "warning" : "neutral"}>
+          {marked}/{rows.length} marked
+        </StatusPill>
+
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={unmarkedIds.length === 0}
+            onClick={() => onBulk(unmarkedIds, "present")}
+          >
+            All present
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={makeUpable.length === 0}
+            title="The whole class was away — book one make-up lesson for all of them"
+            onClick={() => onMakeUp(makeUpable)}
+          >
+            Make up the class
+          </Button>
+        </div>
+      </header>
+
+      <TableShell>
+        {showColumns && (
+          <thead>
+            <tr>
+              <Th>Student</Th>
+              <Th>Type</Th>
+              <Th>Billing</Th>
+              <Th>Hours</Th>
+              <Th>Status</Th>
+              <Th className="text-right">Mark</Th>
+            </tr>
+          </thead>
+        )}
+        <tbody>
+          {rows.map((row: Row) => (
+            <tr key={row.id}>
+              <Td>
+                <Link
+                  to="/students/$id"
+                  params={{ id: row.student_id }}
+                  className="font-medium hover:underline"
+                >
+                  {row.enrolments?.students?.full_name ?? "—"}
+                </Link>
+                <div>
+                  <Code>{row.enrolments?.students?.code}</Code>
+                </div>
+              </Td>
+              <Td>
+                <StatusPill
+                  tone={
+                    row.att_type === "trial"
+                      ? "info"
+                      : row.att_type === "make_up"
+                        ? "warning"
+                        : "neutral"
+                  }
+                >
+                  {row.att_type === "make_up"
+                    ? "Make-up"
+                    : row.att_type === "trial"
+                      ? "Trial"
+                      : "Regular"}
+                </StatusPill>
+                {row.make_up_state && (
+                  <div className="mt-1">
+                    <StatusPill tone={toneForStatus("makeup", row.make_up_state)}>
+                      {row.make_up_state === "outstanding" ? "owed" : row.make_up_state}
+                    </StatusPill>
+                  </div>
+                )}
+              </Td>
+              <Td className="whitespace-nowrap text-xs text-muted-foreground">
+                {row.billing_method === "hours"
+                  ? row.package_id
+                    ? "Hours"
+                    : "Hours · no package"
+                  : row.billing_method === "payg"
+                    ? "PAYG"
+                    : "Trial"}
+              </Td>
+              <Td className="tabular-nums">{formatHours(row.hours_consumed)}</Td>
+              <Td>
+                <StatusPill tone={toneForStatus("attendance", row.effective_status)}>
+                  {row.effective_status.replace("_", " ")}
+                </StatusPill>
+              </Td>
+              <Td className="text-right">
+                <div className="flex justify-end gap-1">
+                  <Button
+                    size="sm"
+                    variant={row.status === "present" ? "default" : "outline"}
+                    title="Present"
+                    onClick={() => onSetStatus(row.id, "present")}
+                  >
+                    P
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={row.status === "absent" ? "destructive" : "outline"}
+                    title="Away"
+                    onClick={() => onSetStatus(row.id, "absent")}
+                  >
+                    A
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    title="Away, and owed a make-up"
+                    disabled={row.att_type === "make_up"}
+                    onClick={() => onMakeUp([row])}
+                  >
+                    M
+                  </Button>
+                  {row.status !== "not_marked" && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onSetStatus(row.id, "not_marked")}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+              </Td>
+            </tr>
+          ))}
+        </tbody>
+      </TableShell>
+    </section>
   );
 }
 
@@ -417,12 +550,12 @@ function TutorCell({
  * recording that the student was away.
  */
 function MakeUpDialog({
-  row,
+  rows,
   tutors,
   onClose,
   onDone,
 }: {
-  row: Row;
+  rows: Row[];
   tutors: Row[];
   onClose: () => void;
   onDone: () => Promise<void>;
@@ -430,43 +563,53 @@ function MakeUpDialog({
   const hold = useServerFn(holdMakeUp);
   const book = useServerFn(bookMakeUp);
 
+  const lead = rows[0]!;
+  const many = rows.length > 1;
+
   const [mode, setMode] = useState<"hold" | "day">("hold");
   const [date, setDate] = useState(() => addDays(sydToday(), 7));
-  const [startTime, setStartTime] = useState("16:00");
+  const [startTime, setStartTime] = useState(
+    () => instantToSydneyLocal(lead.lesson_starts_at).split("T")[1] ?? "16:00",
+  );
   const [duration, setDuration] = useState(() => {
-    const start = row.sessions?.starts_at;
-    const end = row.sessions?.ends_at;
+    const start = lead.sessions?.starts_at;
+    const end = lead.sessions?.ends_at;
     if (!start || !end) return "1";
     const hours = (Date.parse(end) - Date.parse(start)) / 3_600_000;
     return hours > 0 ? String(Math.round(hours * 2) / 2) : "1";
   });
-  const [tutorId, setTutorId] = useState<string>("none");
+  const [tutorId, setTutorId] = useState<string>(() => lead.lesson_tutor_id ?? "none");
   const [existingId, setExistingId] = useState<string>("new");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
   const { data: onDate } = useQuery({
-    queryKey: ["lessons-on", date, row.id],
-    queryFn: () => listLessonsOnDate({ data: { date, attendance_id: row.id } }),
+    queryKey: ["lessons-on", date, lead.id],
+    queryFn: () => listLessonsOnDate({ data: { date, attendance_id: lead.id } }),
     enabled: mode === "day",
   });
 
-  const student = row.enrolments?.students?.full_name ?? "This student";
-  const lessons = (onDate?.lessons ?? []).filter((l: Row) => l.id !== row.session_id);
+  const who = many
+    ? `${rows.length} students`
+    : (lead.enrolments?.students?.full_name ?? "This student");
+  const lessons = (onDate?.lessons ?? []).filter((l: Row) => l.id !== lead.session_id);
+  const ids = rows.map((r) => r.id);
 
   async function submit() {
     setBusy(true);
     try {
       if (mode === "hold") {
-        await hold({ data: { id: row.id, note } });
-        toast.success(`${student} is away and owed a make-up.`);
+        await hold({ data: { ids, note } });
+        toast.success(
+          many ? `${rows.length} students owed a make-up.` : `${who} is away and owed a make-up.`,
+        );
       } else if (existingId !== "new") {
-        await book({ data: { source_attendance_id: row.id, session_id: existingId } });
+        await book({ data: { source_attendance_ids: ids, session_id: existingId } });
         toast.success("Make-up booked onto that lesson.");
       } else {
         await book({
           data: {
-            source_attendance_id: row.id,
+            source_attendance_ids: ids,
             session_id: null,
             date,
             start_time: startTime,
@@ -474,7 +617,11 @@ function MakeUpDialog({
             tutor_id: tutorId === "none" ? null : tutorId,
           },
         });
-        toast.success(`Make-up booked for ${formatDay(`${date}T00:00:00Z`)}.`);
+        toast.success(
+          many
+            ? `One make-up lesson booked for all ${rows.length}.`
+            : `Make-up booked for ${formatDay(`${date}T00:00:00Z`)}.`,
+        );
       }
       await onDone();
       onClose();
@@ -489,15 +636,30 @@ function MakeUpDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{student} — make-up</DialogTitle>
+          <DialogTitle>
+            {many
+              ? `${lead.sessions?.class_offerings?.programs?.name ?? "Class"} — make up the class`
+              : `${who} — make-up`}
+          </DialogTitle>
           <DialogDescription>
-            Marks them away for {row.sessions?.class_offerings?.programs?.name ?? "this lesson"} on{" "}
-            {formatDay(row.lesson_starts_at)}. Pick a day now if you have one; otherwise hold it and
-            decide later.
+            Marks {many ? `all ${rows.length}` : "them"} away for{" "}
+            {lead.sessions?.class_offerings?.programs?.name ?? "this lesson"} on{" "}
+            {formatDay(lead.lesson_starts_at)}
+            {many ? ", and settles them together on one lesson" : ""}. Pick a day now if you have
+            one; otherwise hold it and decide later.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
+          {many && (
+            <div className="rounded-md border border-[var(--edge)] bg-[var(--mat-thin)] px-3 py-2 text-xs text-muted-foreground">
+              {rows
+                .map((r: Row) => r.enrolments?.students?.full_name)
+                .filter(Boolean)
+                .join(", ")}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-2">
             <ModeCard
               active={mode === "hold"}
@@ -509,7 +671,11 @@ function MakeUpDialog({
               active={mode === "day"}
               onClick={() => setMode("day")}
               title="Pick a day"
-              hint="Books the make-up. A tutor is optional — decide that later if you need to."
+              hint={
+                many
+                  ? "Creates one lesson and puts the whole class on it. A tutor is optional."
+                  : "Books the make-up. A tutor is optional — decide that later if you need to."
+              }
             />
           </div>
 
@@ -517,7 +683,9 @@ function MakeUpDialog({
             <div className="space-y-1.5">
               <Label>Note (optional)</Label>
               <Input
-                placeholder="Family away until the 12th…"
+                placeholder={
+                  many ? "Tutor sick, class did not run…" : "Family away until the 12th…"
+                }
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
               />
@@ -537,7 +705,11 @@ function MakeUpDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="new">A new lesson just for this make-up</SelectItem>
+                      <SelectItem value="new">
+                        {many
+                          ? "A new lesson for the whole class"
+                          : "A new lesson just for this make-up"}
+                      </SelectItem>
                       {lessons.map((l: Row) => (
                         <SelectItem key={l.id} value={l.id}>
                           {formatTime(l.starts_at)} · {l.code}
@@ -599,7 +771,13 @@ function MakeUpDialog({
             Cancel
           </Button>
           <Button disabled={busy} onClick={submit}>
-            {mode === "hold" ? "Mark away, hold the make-up" : "Book the make-up"}
+            {mode === "hold"
+              ? many
+                ? "Mark all away, hold the make-up"
+                : "Mark away, hold the make-up"
+              : many
+                ? "Book one make-up for the class"
+                : "Book the make-up"}
           </Button>
         </DialogFooter>
       </DialogContent>
