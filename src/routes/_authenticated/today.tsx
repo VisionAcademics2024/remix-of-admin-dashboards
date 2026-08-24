@@ -14,11 +14,17 @@ import {
   StatusPill,
   Td,
   Th,
-  TableShell,
   TutorDot,
   toneForStatus,
 } from "@/components/vision/ui";
-import { formatDay, formatHours, formatMoney, formatTime, sydToday } from "@/lib/format";
+import {
+  formatDay,
+  formatDayDate,
+  formatHours,
+  formatMoney,
+  formatTime,
+  sydToday,
+} from "@/lib/format";
 import { getToday } from "@/lib/vision/overview.functions";
 import { markAttendance } from "@/lib/vision/roll.functions";
 import type { Row } from "@/lib/vision/types";
@@ -114,68 +120,77 @@ function TodayPage() {
             hint="Every lesson up to today has a complete roll. This is what done looks like."
           />
         ) : (
-          <TableShell>
-            <thead>
-              <tr>
-                <Th>Student</Th>
-                <Th>Lesson</Th>
-                <Th>When</Th>
-                <Th>Type</Th>
-                <Th className="text-right">Mark</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.toMark.slice(0, 25).map((row: Row) => (
-                <tr key={row.id}>
-                  <Td>
-                    <Link
-                      to="/students/$id"
-                      params={{ id: row.student_id }}
-                      className="font-medium hover:underline"
-                    >
-                      {row.enrolments?.students?.full_name ?? "—"}
-                    </Link>
-                    <div>
-                      <Code>{row.enrolments?.students?.code}</Code>
-                    </div>
-                  </Td>
-                  <Td>
-                    <div>{row.sessions?.class_offerings?.programs?.name ?? "—"}</div>
-                    <Code>{row.sessions?.code}</Code>
-                  </Td>
-                  <Td className="whitespace-nowrap">
-                    {row.session_date === today ? "Today" : row.session_date}
-                    <div className="text-xs text-muted-foreground">
-                      {formatTime(row.lesson_starts_at)}
-                    </div>
-                  </Td>
-                  <Td>
-                    <StatusPill tone={row.att_type === "trial" ? "info" : "neutral"}>
-                      {row.att_type === "make_up"
-                        ? "Make-up"
-                        : row.att_type === "trial"
-                          ? "Trial"
-                          : "Regular"}
-                    </StatusPill>
-                  </Td>
-                  <Td className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setStatus(row.id, "present")}
-                      >
-                        Present
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setStatus(row.id, "absent")}>
-                        Absent
-                      </Button>
-                    </div>
-                  </Td>
+          // The Section is the card; the table sits flush inside it rather than
+          // in a second rounded box, so the row lines run the full width and
+          // nothing reads as cut off under Mark.
+          <div className="overflow-x-auto">
+            <table className="table-zebra w-full text-sm">
+              <thead>
+                <tr>
+                  <Th>Student</Th>
+                  <Th>Lesson</Th>
+                  <Th>When</Th>
+                  <Th>Type</Th>
+                  <Th className="text-right">Mark</Th>
                 </tr>
-              ))}
-            </tbody>
-          </TableShell>
+              </thead>
+              <tbody>
+                {data.toMark.slice(0, 25).map((row: Row) => (
+                  <tr key={row.id}>
+                    <Td>
+                      <Link
+                        to="/students/$id"
+                        params={{ id: row.student_id }}
+                        className="font-medium hover:underline"
+                      >
+                        {row.enrolments?.students?.full_name ?? "—"}
+                      </Link>
+                      <div>
+                        <Code>{row.enrolments?.students?.code}</Code>
+                      </div>
+                    </Td>
+                    <Td>
+                      <div>{row.sessions?.class_offerings?.programs?.name ?? "—"}</div>
+                      <Code>{row.sessions?.code}</Code>
+                    </Td>
+                    <Td className="whitespace-nowrap">
+                      {row.session_date === today ? "Today" : formatDayDate(row.session_date)}
+                      <div className="text-xs text-muted-foreground">
+                        {formatTime(row.lesson_starts_at)}
+                      </div>
+                    </Td>
+                    <Td>
+                      <StatusPill tone={row.att_type === "trial" ? "info" : "neutral"}>
+                        {row.att_type === "make_up"
+                          ? "Make-up"
+                          : row.att_type === "trial"
+                            ? "Trial"
+                            : "Regular"}
+                      </StatusPill>
+                    </Td>
+                    <Td className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setStatus(row.id, "present")}
+                        >
+                          Present
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setStatus(row.id, "absent")}
+                        >
+                          Absent
+                        </Button>
+                      </div>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
         {data.toMark.length > 25 && (
           <p className="mt-3 text-sm text-muted-foreground">
@@ -244,38 +259,40 @@ function TodayPage() {
               hint="Balances are recalculated from attendance, so this updates itself as rolls are marked."
             />
           ) : (
-            <TableShell>
-              <thead>
-                <tr>
-                  <Th>Student</Th>
-                  <Th>Package</Th>
-                  <Th className="text-right">Remaining</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.lowPackages.map((p: Row) => (
-                  <tr key={p.id}>
-                    <Td>
-                      <Link
-                        to="/students/$id"
-                        params={{ id: p.student_id }}
-                        className="font-medium hover:underline"
-                      >
-                        {p.students?.full_name}
-                      </Link>
-                    </Td>
-                    <Td>
-                      <Code>{p.code}</Code>
-                    </Td>
-                    <Td className="text-right">
-                      <StatusPill tone={p.is_overdrawn ? "danger" : "warning"}>
-                        {formatHours(p.hours_remaining)}
-                      </StatusPill>
-                    </Td>
+            <div className="overflow-x-auto">
+              <table className="table-zebra w-full text-sm">
+                <thead>
+                  <tr>
+                    <Th>Student</Th>
+                    <Th>Package</Th>
+                    <Th className="text-right">Remaining</Th>
                   </tr>
-                ))}
-              </tbody>
-            </TableShell>
+                </thead>
+                <tbody>
+                  {data.lowPackages.map((p: Row) => (
+                    <tr key={p.id}>
+                      <Td>
+                        <Link
+                          to="/students/$id"
+                          params={{ id: p.student_id }}
+                          className="font-medium hover:underline"
+                        >
+                          {p.students?.full_name}
+                        </Link>
+                      </Td>
+                      <Td>
+                        <Code>{p.code}</Code>
+                      </Td>
+                      <Td className="text-right">
+                        <StatusPill tone={p.is_overdrawn ? "danger" : "warning"}>
+                          {formatHours(p.hours_remaining)}
+                        </StatusPill>
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Section>
       </div>
