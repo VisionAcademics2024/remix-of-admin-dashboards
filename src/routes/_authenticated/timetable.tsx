@@ -54,6 +54,7 @@ import {
   deleteSession,
   getSessionRoll,
   listRange,
+  moveSession,
   seedRoll,
   updateSession,
 } from "@/lib/vision/schedule.functions";
@@ -137,14 +138,15 @@ function TimetablePage() {
   const { data: catalogue } = useQuery({ queryKey: ["catalogue"], queryFn: () => getCatalogue() });
 
   const queryClient = useQueryClient();
-  const move = useServerFn(updateSession);
+  const move = useServerFn(moveSession);
 
   const events = useMemo(() => sessions.map(toCalendarEvent), [sessions]);
 
   // Dragging a lesson writes straight through to the session, so the roll,
-  // attendance and everywhere else this lesson shows follow it. The grid is
-  // patched in place first so the block does not jump back before the save
-  // returns.
+  // attendance and everywhere else this lesson shows follow it. Moving it off
+  // its usual slot makes it a make-up; dragging it home again makes it ordinary
+  // once more. The grid is patched in place first so the block does not jump
+  // back before the save returns.
   async function moveLesson(row: Row, startISO: string, endISO: string) {
     const key = ["timetable", from, to, tutorId] as const;
     const previous = queryClient.getQueryData<Row[]>(key);
@@ -156,11 +158,17 @@ function TimetablePage() {
       ),
     );
     try {
-      await move({ data: { id: row.id, starts_at: startISO, ends_at: endISO } });
+      const { make_up } = await move({
+        data: { id: row.id, starts_at: startISO, ends_at: endISO },
+      });
       await queryClient.invalidateQueries({ queryKey: ["timetable"] });
       await queryClient.invalidateQueries({ queryKey: ["today"] });
       await queryClient.invalidateQueries({ queryKey: ["roll"] });
-      toast.success("Lesson moved. Its roll moved with it.");
+      toast.success(
+        make_up
+          ? "Moved — now a make-up. Drag it back to its slot to undo."
+          : "Back in its usual slot — an ordinary lesson again.",
+      );
     } catch (error) {
       queryClient.setQueryData(key, previous);
       toast.error((error as Error).message);

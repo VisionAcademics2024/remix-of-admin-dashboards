@@ -170,6 +170,83 @@ export const updateSession = createServerFn({ method: "POST" })
     return { success: true };
   });
 
+/**
+ * Move one lesson on the calendar, and let that mean something.
+ *
+ * A lesson dragged off the slot it was generated in becomes a make-up: its type
+ * flips to `dedicated_make_up` and the slot it came from is remembered. Drag it
+ * back onto that exact slot and it becomes an ordinary lesson again, the
+ * remembered slot cleared. Only this one lesson changes — every other week's
+ * lesson in the class is its own row and stays put.
+ *
+ * Reading and writing the base table (not the view) so the original slot is
+ * available; if the columns that hold it are not present yet, the move and the
+ * make-up flag still take effect — only the remembered slot is skipped.
+ */
+export const moveSession = createServerFn({ method: "POST" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    z
+      .object({
+        id: z.string().uuid(),
+        starts_at: z.string().min(1),
+        ends_at: z.string().min(1),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+
+    const { data: current, error: readError } = await client
+      .from("sessions")
+      .select("*")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (readError) throw readError;
+    if (!current) throw new Error("That lesson no longer exists.");
+
+    const origStart = (current as Row).original_starts_at ?? current.starts_at;
+    const origEnd = (current as Row).original_ends_at ?? current.ends_at;
+    const home =
+      Date.parse(data.starts_at) === Date.parse(origStart) &&
+      Date.parse(data.ends_at) === Date.parse(origEnd);
+
+    const payload: Record<string, unknown> = home
+      ? {
+          starts_at: origStart,
+          ends_at: origEnd,
+          session_type: "regular",
+          original_starts_at: null,
+          original_ends_at: null,
+        }
+      : {
+          starts_at: data.starts_at,
+          ends_at: data.ends_at,
+          session_type: "dedicated_make_up",
+          original_starts_at: origStart,
+          original_ends_at: origEnd,
+        };
+
+    let { error } = await client.from("sessions").update(payload).eq("id", data.id);
+    // If the remembered-slot columns are not in this database yet, still move
+    // the lesson and set the make-up flag — just without the memory.
+    if (error && /original_(starts|ends)_at/.test(error.message)) {
+      const { original_starts_at, original_ends_at, ...rest } = payload;
+      void original_starts_at;
+      void original_ends_at;
+      ({ error } = await client.from("sessions").update(rest).eq("id", data.id));
+    }
+    if (error) {
+      throw new Error(
+        error.message.includes("sessions_no_duplicates") || error.message.includes("duplicate")
+          ? "There is already a lesson for this class at that time."
+          : error.message,
+      );
+    }
+
+    return { make_up: !home };
+  });
+
 /** Cancelling preserves the roll. Cancelled lessons pay nobody and consume nothing. */
 export const cancelSession = createServerFn({ method: "POST" })
   .middleware([requireStaff])
