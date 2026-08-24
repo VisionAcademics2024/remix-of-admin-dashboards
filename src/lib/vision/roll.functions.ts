@@ -168,7 +168,12 @@ export const setAttendancePackage = createServerFn({ method: "POST" })
 export const holdMakeUp = createServerFn({ method: "POST" })
   .middleware([requireStaff])
   .inputValidator((data) =>
-    z.object({ id: z.string().uuid(), note: z.string().optional().or(z.literal("")) }).parse(data),
+    z
+      .object({
+        ids: z.array(z.string().uuid()).min(1),
+        note: z.string().optional().or(z.literal("")),
+      })
+      .parse(data),
   )
   .handler(async ({ context, data }) => {
     const { error } = await db(context.supabase)
@@ -179,9 +184,9 @@ export const holdMakeUp = createServerFn({ method: "POST" })
           ? data.note.trim()
           : "Make-up owed — day not decided yet.",
       })
-      .eq("id", data.id);
+      .in("id", data.ids);
     if (error) throw error;
-    return { success: true };
+    return { held: data.ids.length };
   });
 
 /** The lessons already on a given Sydney date for this student's class. */
@@ -226,7 +231,8 @@ export const bookMakeUp = createServerFn({ method: "POST" })
   .inputValidator((data) =>
     z
       .object({
-        source_attendance_id: z.string().uuid(),
+        /** One student, or the whole class off the same lesson. */
+        source_attendance_ids: z.array(z.string().uuid()).min(1),
         /** An existing lesson, or null to create one on `date`. */
         session_id: z.string().uuid().nullable().default(null),
         /** Sydney date and wall-clock start for a new lesson. */
@@ -240,13 +246,12 @@ export const bookMakeUp = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const client = db(context.supabase);
 
-    const { data: source, error: sourceError } = await client
+    const { data: sources, error: sourceError } = await client
       .from("attendance")
-      .select("enrolment_id, package_id, session_id, enrolments(class_offering_id)")
-      .eq("id", data.source_attendance_id)
-      .maybeSingle();
+      .select("id, enrolment_id, package_id, session_id, enrolments(class_offering_id)")
+      .in("id", data.source_attendance_ids);
     if (sourceError) throw sourceError;
-    if (!source) throw new Error("That absence no longer exists.");
+    if (!sources?.length) throw new Error("Those absences no longer exist.");
 
     let sessionId = data.session_id;
 
@@ -254,7 +259,11 @@ export const bookMakeUp = createServerFn({ method: "POST" })
       if (!data.date || !data.start_time) {
         throw new Error("Pick a day and a time for the make-up lesson.");
       }
-      const offeringId = (source as Row).enrolments?.class_offering_id;
+      // A whole class making up together goes onto one lesson, so the offering
+      // is taken from the group — they all share it.
+      const offeringId = (sources as Row[])
+        .map((r) => r.enrolments?.class_offering_id)
+        .find(Boolean);
       if (!offeringId) {
         throw new Error("This enrolment has no class, so a make-up lesson cannot be created.");
       }
@@ -271,39 +280,51 @@ export const bookMakeUp = createServerFn({ method: "POST" })
           status: "scheduled",
           starts_at: startsAt,
           ends_at: endsAt,
-          notes: "Created for a make-up.",
+          notes:
+            sources.length > 1
+              ? `Created for a make-up — ${sources.length} students.`
+              : "Created for a make-up.",
         })
         .select("id")
         .single();
       if (createError) throw createError;
       sessionId = created.id;
-    } else if (sessionId === source.session_id) {
+    }
+
+    const target = sessionId;
+    const usable = (sources as Row[]).filter((r) => r.session_id !== target);
+    if (!usable.length) {
       throw new Error("A make-up has to sit on a different lesson from the absence.");
     }
 
-    // The absence is the thing being settled, so make sure it reads as one.
+    // The absences are what is being settled, so make sure they read as away.
     await client
       .from("attendance")
       .update({ status: "absent" })
-      .eq("id", data.source_attendance_id)
+      .in(
+        "id",
+        usable.map((r) => r.id),
+      )
       .eq("status", "not_marked");
 
-    const { error } = await client.from("attendance").insert({
-      session_id: sessionId,
-      enrolment_id: source.enrolment_id,
-      att_type: "make_up",
-      status: "not_marked",
-      package_id: source.package_id,
-      source_attendance_id: data.source_attendance_id,
-    });
+    const { error } = await client.from("attendance").insert(
+      usable.map((r) => ({
+        session_id: target,
+        enrolment_id: r.enrolment_id,
+        att_type: "make_up",
+        status: "not_marked",
+        package_id: r.package_id,
+        source_attendance_id: r.id,
+      })),
+    );
     if (error) {
       throw new Error(
         error.message.includes("attendance_unique")
-          ? "That student is already on the roll for that lesson."
+          ? "One of these students is already on the roll for that lesson."
           : error.message,
       );
     }
-    return { success: true };
+    return { booked: usable.length };
   });
 
 /**
