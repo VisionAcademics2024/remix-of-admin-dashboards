@@ -54,7 +54,7 @@ function ClassesPage() {
   const term = search.trim().toLowerCase();
   const visible = term
     ? classes.filter((c: Row) =>
-        `${c.code} ${c.programs?.name ?? ""} ${c.operating_periods?.code ?? ""} ${c.tutors?.full_name ?? ""}`
+        `${c.code} ${c.programs?.name ?? ""} ${c.sole_student_name ?? ""} ${c.operating_periods?.code ?? ""} ${c.tutors?.full_name ?? ""}`
           .toLowerCase()
           .includes(term),
       )
@@ -115,16 +115,39 @@ function ClassesPage() {
           <tbody>
             {visible.map((c: Row) => {
               const full = c.enrolled >= c.capacity;
+              const solo = c.enrolled === 1 && Boolean(c.sole_student_name);
               return (
                 <tr key={c.id}>
                   <Td>
-                    <div className="font-medium">{c.programs?.name ?? "—"}</div>
-                    <div className="flex items-center gap-2">
-                      <Code>{c.code}</Code>
-                      <span className="text-xs text-muted-foreground">
-                        {LABELS.offeringType[c.offering_type as "group_class" | "private_tuition"]}
-                      </span>
-                    </div>
+                    {/* A one-person class reads by who is in it: the student's
+                        name leads, with the class kind (e.g. "Year 6 Private")
+                        beneath. The moment a second student enrols, it goes back
+                        to the class name. */}
+                    {solo ? (
+                      <>
+                        <div className="font-medium">{c.sole_student_name}</div>
+                        <div className="flex items-center gap-2">
+                          <Code>{c.code}</Code>
+                          <span className="text-xs text-muted-foreground">
+                            {c.programs?.name ?? "—"}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="font-medium">{c.programs?.name ?? "—"}</div>
+                        <div className="flex items-center gap-2">
+                          <Code>{c.code}</Code>
+                          <span className="text-xs text-muted-foreground">
+                            {
+                              LABELS.offeringType[
+                                c.offering_type as "group_class" | "private_tuition"
+                              ]
+                            }
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </Td>
                   <Td>{c.operating_periods?.code ?? "—"}</Td>
                   <Td>

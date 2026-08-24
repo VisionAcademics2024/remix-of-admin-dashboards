@@ -11,8 +11,9 @@ const ROLL_SELECT =
 
 export const ROLL_FILTERS = [
   "today",
-  "unmarked",
+  "tomorrow",
   "this_week",
+  "unmarked",
   "make_ups",
   "trials",
   "all",
@@ -44,6 +45,9 @@ export const listRoll = createServerFn({ method: "GET" })
     switch (data.filter) {
       case "today":
         query = query.eq("session_date", data.today);
+        break;
+      case "tomorrow":
+        query = query.eq("session_date", shift(data.today, 1));
         break;
       case "unmarked":
         query = query.eq("status", "not_marked").lte("session_date", data.today);

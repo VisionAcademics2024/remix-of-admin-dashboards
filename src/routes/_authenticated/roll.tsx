@@ -28,7 +28,6 @@ import {
   EmptyState,
   PageHeader,
   StatusPill,
-  TableShell,
   Td,
   Th,
   TutorDot,
@@ -60,11 +59,16 @@ import {
 const FILTERS: { value: RollFilter; label: string; hint: string }[] = [
   { value: "today", label: "Today", hint: "Every roll entry for a lesson dated today in Sydney." },
   {
+    value: "tomorrow",
+    label: "Tomorrow",
+    hint: "Every roll entry for a lesson dated tomorrow in Sydney.",
+  },
+  { value: "this_week", label: "This week", hint: "Monday to Sunday, Sydney." },
+  {
     value: "unmarked",
     label: "Unmarked",
     hint: "Lessons that have run and still have blank entries.",
   },
-  { value: "this_week", label: "This week", hint: "Monday to Sunday, Sydney." },
   {
     value: "make_ups",
     label: "Make-ups",
@@ -147,7 +151,7 @@ function RollPage() {
   return (
     <div className="stagger space-y-5">
       <PageHeader
-        title="Roll"
+        title="Attendance Roll"
         description="The full attendance record — corrections, history and make-ups."
         actions={
           unmarkedIds.length > 0 ? (
@@ -358,115 +362,119 @@ function LessonGroup({
         </div>
       </header>
 
-      <TableShell>
-        {showColumns && (
-          <thead>
-            <tr>
-              <Th>Student</Th>
-              <Th>Type</Th>
-              <Th>Billing</Th>
-              <Th>Hours</Th>
-              <Th>Status</Th>
-              <Th className="text-right">Mark</Th>
-            </tr>
-          </thead>
-        )}
-        <tbody>
-          {rows.map((row: Row) => (
-            <tr key={row.id}>
-              <Td>
-                <Link
-                  to="/students/$id"
-                  params={{ id: row.student_id }}
-                  className="font-medium hover:underline"
-                >
-                  {row.enrolments?.students?.full_name ?? "—"}
-                </Link>
-                <div>
-                  <Code>{row.enrolments?.students?.code}</Code>
-                </div>
-              </Td>
-              <Td>
-                <StatusPill
-                  tone={
-                    row.att_type === "trial"
-                      ? "info"
-                      : row.att_type === "make_up"
-                        ? "warning"
-                        : "neutral"
-                  }
-                >
-                  {row.att_type === "make_up"
-                    ? "Make-up"
-                    : row.att_type === "trial"
-                      ? "Trial"
-                      : "Regular"}
-                </StatusPill>
-                {row.make_up_state && (
-                  <div className="mt-1">
-                    <StatusPill tone={toneForStatus("makeup", row.make_up_state)}>
-                      {row.make_up_state === "outstanding" ? "owed" : row.make_up_state}
-                    </StatusPill>
+      {/* The roll sits flush under the header — no card-within-a-card. The one
+          rounding is the section's, clipped at the bottom by overflow-hidden. */}
+      <div className="overflow-x-auto bg-[var(--mat-solid)]">
+        <table className="table-zebra w-full text-sm">
+          {showColumns && (
+            <thead>
+              <tr>
+                <Th>Student</Th>
+                <Th>Type</Th>
+                <Th>Billing</Th>
+                <Th>Hours</Th>
+                <Th>Status</Th>
+                <Th className="text-right">Mark</Th>
+              </tr>
+            </thead>
+          )}
+          <tbody>
+            {rows.map((row: Row) => (
+              <tr key={row.id}>
+                <Td>
+                  <Link
+                    to="/students/$id"
+                    params={{ id: row.student_id }}
+                    className="font-medium hover:underline"
+                  >
+                    {row.enrolments?.students?.full_name ?? "—"}
+                  </Link>
+                  <div>
+                    <Code>{row.enrolments?.students?.code}</Code>
                   </div>
-                )}
-              </Td>
-              <Td className="whitespace-nowrap text-xs text-muted-foreground">
-                {row.billing_method === "hours"
-                  ? row.package_id
-                    ? "Hours"
-                    : "Hours · no package"
-                  : row.billing_method === "payg"
-                    ? "PAYG"
-                    : "Trial"}
-              </Td>
-              <Td className="tabular-nums">{formatHours(row.hours_consumed)}</Td>
-              <Td>
-                <StatusPill tone={toneForStatus("attendance", row.effective_status)}>
-                  {row.effective_status.replace("_", " ")}
-                </StatusPill>
-              </Td>
-              <Td className="text-right">
-                <div className="flex justify-end gap-1">
-                  <Button
-                    size="sm"
-                    variant={row.status === "present" ? "default" : "outline"}
-                    title="Present"
-                    onClick={() => onSetStatus(row.id, "present")}
+                </Td>
+                <Td>
+                  <StatusPill
+                    tone={
+                      row.att_type === "trial"
+                        ? "info"
+                        : row.att_type === "make_up"
+                          ? "warning"
+                          : "neutral"
+                    }
                   >
-                    P
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={row.status === "absent" ? "destructive" : "outline"}
-                    title="Away"
-                    onClick={() => onSetStatus(row.id, "absent")}
-                  >
-                    A
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    title="Away, and owed a make-up"
-                    disabled={row.att_type === "make_up"}
-                    onClick={() => onMakeUp([row])}
-                  >
-                    M
-                  </Button>
-                  {row.status !== "not_marked" && (
+                    {row.att_type === "make_up"
+                      ? "Make-up"
+                      : row.att_type === "trial"
+                        ? "Trial"
+                        : "Regular"}
+                  </StatusPill>
+                  {row.make_up_state && (
+                    <div className="mt-1">
+                      <StatusPill tone={toneForStatus("makeup", row.make_up_state)}>
+                        {row.make_up_state === "outstanding" ? "owed" : row.make_up_state}
+                      </StatusPill>
+                    </div>
+                  )}
+                </Td>
+                <Td className="whitespace-nowrap text-xs text-muted-foreground">
+                  {row.billing_method === "hours"
+                    ? row.package_id
+                      ? "Hours"
+                      : "Hours · no package"
+                    : row.billing_method === "payg"
+                      ? "PAYG"
+                      : "Trial"}
+                </Td>
+                <Td className="tabular-nums">{formatHours(row.hours_consumed)}</Td>
+                <Td>
+                  <StatusPill tone={toneForStatus("attendance", row.effective_status)}>
+                    {row.effective_status.replace("_", " ")}
+                  </StatusPill>
+                </Td>
+                <Td className="text-right">
+                  <div className="flex justify-end gap-1">
                     <Button
                       size="sm"
-                      variant="ghost"
-                      onClick={() => onSetStatus(row.id, "not_marked")}
+                      variant={row.status === "present" ? "default" : "outline"}
+                      title="Present"
+                      onClick={() => onSetStatus(row.id, "present")}
                     >
-                      Clear
+                      P
                     </Button>
-                  )}
-                </div>
-              </Td>
-            </tr>
-          ))}
-        </tbody>
-      </TableShell>
+                    <Button
+                      size="sm"
+                      variant={row.status === "absent" ? "destructive" : "outline"}
+                      title="Away"
+                      onClick={() => onSetStatus(row.id, "absent")}
+                    >
+                      A
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      title="Away, and owed a make-up"
+                      disabled={row.att_type === "make_up"}
+                      onClick={() => onMakeUp([row])}
+                    >
+                      M
+                    </Button>
+                    {row.status !== "not_marked" && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onSetStatus(row.id, "not_marked")}
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
