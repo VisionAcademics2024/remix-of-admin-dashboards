@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { keepPreviousData, queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useRef, useState } from "react";
-import { ClipboardCheck } from "lucide-react";
+import { Check, ClipboardCheck, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -438,17 +438,19 @@ function LessonGroup({
                       size="sm"
                       variant={row.status === "present" ? "default" : "outline"}
                       title="Present"
+                      aria-label="Present"
                       onClick={() => onSetStatus(row.id, "present")}
                     >
-                      P
+                      <Check className="h-4 w-4" />
                     </Button>
                     <Button
                       size="sm"
                       variant={row.status === "absent" ? "destructive" : "outline"}
                       title="Away"
+                      aria-label="Away"
                       onClick={() => onSetStatus(row.id, "absent")}
                     >
-                      A
+                      <X className="h-4 w-4" />
                     </Button>
                     <Button
                       size="sm"
@@ -457,7 +459,7 @@ function LessonGroup({
                       disabled={row.att_type === "make_up"}
                       onClick={() => onMakeUp([row])}
                     >
-                      M
+                      Make up
                     </Button>
                     {row.status !== "not_marked" && (
                       <Button

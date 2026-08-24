@@ -2,7 +2,15 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Plus, StretchVertical } from "lucide-react";
+import {
+  CalendarDays,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  StretchVertical,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -686,17 +694,19 @@ function LessonRollPanel({
                 size="sm"
                 variant={r.status === "present" ? "default" : "outline"}
                 title="Present"
+                aria-label="Present"
                 onClick={() => set(r.id, "present")}
               >
-                P
+                <Check className="h-4 w-4" />
               </Button>
               <Button
                 size="sm"
                 variant={r.status === "absent" ? "destructive" : "outline"}
                 title="Away"
+                aria-label="Away"
                 onClick={() => set(r.id, "absent")}
               >
-                A
+                <X className="h-4 w-4" />
               </Button>
               <Button
                 size="sm"
@@ -713,7 +723,7 @@ function LessonRollPanel({
                   }
                 }}
               >
-                M
+                Make up
               </Button>
               {r.status !== "not_marked" && (
                 <Button size="sm" variant="ghost" onClick={() => set(r.id, "not_marked")}>
