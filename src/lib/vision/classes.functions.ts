@@ -20,15 +20,23 @@ export const listClassOfferings = createServerFn({ method: "GET" })
           .from("class_offerings")
           .select(OFFERING_SELECT)
           .order("starts_on", { ascending: false }),
-        client.from("enrolments").select("id, class_offering_id, status"),
+        client.from("enrolments").select("id, class_offering_id, status, students(full_name)"),
         client.from("sessions").select("id, class_offering_id, status"),
       ]);
     if (error) throw error;
 
     const enrolledBy = new Map<string, number>();
+    // The single enrolled student, kept only while a class has exactly one — a
+    // private lesson reads better by who is in it than by a generic class name.
+    const soleStudentBy = new Map<string, string | null>();
     for (const e of enrolments ?? []) {
       if (e.status === "closed") continue;
-      enrolledBy.set(e.class_offering_id, (enrolledBy.get(e.class_offering_id) ?? 0) + 1);
+      const count = (enrolledBy.get(e.class_offering_id) ?? 0) + 1;
+      enrolledBy.set(e.class_offering_id, count);
+      soleStudentBy.set(
+        e.class_offering_id,
+        count === 1 ? ((e as Row).students?.full_name ?? null) : null,
+      );
     }
     const lessonsBy = new Map<string, number>();
     for (const s of sessions ?? []) {
@@ -39,6 +47,7 @@ export const listClassOfferings = createServerFn({ method: "GET" })
       ...o,
       enrolled: enrolledBy.get(o.id) ?? 0,
       lesson_count: lessonsBy.get(o.id) ?? 0,
+      sole_student_name: soleStudentBy.get(o.id) ?? null,
     }));
   });
 
