@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { CalendarDays, ChevronLeft, ChevronRight, Plus, StretchVertical } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Code, EmptyState, StatusPill } from "@/components/vision/ui";
 import { MonthGrid, TimeGrid, toCalendarEvent } from "@/components/vision/calendar";
@@ -133,6 +134,26 @@ function TimetablePage() {
   const [tutorId, setTutorId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Row | null>(null);
 
+  // How tall an hour is drawn. Remembered per browser so the density you like
+  // is there next time — quarter-hour lines appear once the rows are tall
+  // enough to read them.
+  const [hourHeight, setHourHeight] = useState<number>(() => {
+    try {
+      const stored = Number(localStorage.getItem("tt-hour-height"));
+      if (stored >= 40 && stored <= 160) return stored;
+    } catch {
+      /* private mode, or storage blocked — the default is fine. */
+    }
+    return 48;
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("tt-hour-height", String(hourHeight));
+    } catch {
+      /* ignore — remembering it is a convenience, not a requirement. */
+    }
+  }, [hourHeight]);
+
   const { from, to } = spanFor(view, anchor);
   const { data: sessions } = useSuspenseQuery(rangeQueryOptions(from, to, tutorId));
   const { data: catalogue } = useQuery({ queryKey: ["catalogue"], queryFn: () => getCatalogue() });
@@ -226,6 +247,24 @@ function TimetablePage() {
         <div className="min-w-0 text-base font-medium">{titleFor(view, anchor)}</div>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          {view !== "month" && (
+            <div
+              className="hidden items-center gap-2 rounded-full border px-3 py-1.5 sm:flex"
+              title="Row height — taller rows show the quarter-hours"
+            >
+              <StretchVertical className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <Slider
+                className="w-24"
+                min={40}
+                max={160}
+                step={4}
+                value={[hourHeight]}
+                onValueChange={([v]) => setHourHeight(v ?? 48)}
+                aria-label="Row height"
+              />
+            </div>
+          )}
+
           <Select
             value={tutorId ?? "all"}
             onValueChange={(v) => setTutorId(v === "all" ? null : v)}
@@ -295,7 +334,13 @@ function TimetablePage() {
           onOpenDay={openDay}
         />
       ) : (
-        <TimeGrid days={gridDays} events={events} onSelect={setEditing} onMove={moveLesson} />
+        <TimeGrid
+          days={gridDays}
+          events={events}
+          onSelect={setEditing}
+          onMove={moveLesson}
+          hourHeight={hourHeight}
+        />
       )}
 
       {editing && (

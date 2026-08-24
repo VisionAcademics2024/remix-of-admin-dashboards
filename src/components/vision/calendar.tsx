@@ -79,6 +79,7 @@ export type CalendarEvent = {
 export function toCalendarEvent(s: Row): CalendarEvent {
   const start = sydneyMinutesOfDay(s.starts_at);
   const end = sydneyMinutesOfDay(s.ends_at);
+  const program = s.class_offerings?.programs?.name ?? "Lesson";
   return {
     id: s.id,
     date: s.session_date ?? sydDate(s.starts_at),
@@ -86,7 +87,9 @@ export function toCalendarEvent(s: Row): CalendarEvent {
     // A lesson running past midnight would wrap to a smaller number; clamp it
     // to the end of the day rather than drawing a negative-height block.
     endMinutes: end > start ? end : DAY_MINUTES,
-    title: s.class_offerings?.programs?.name ?? "Lesson",
+    // A one-student class reads by who is in it — their name leads, the class
+    // kind follows — exactly as it does on the Classes list.
+    title: s.sole_student_name ? `${s.sole_student_name} · ${program}` : program,
     subtitle: s.tutors?.full_name ?? undefined,
     colour: colourFor(s.tutor_id, s.tutors?.colour),
     cancelled: s.status === "cancelled" || s.status === "rescheduled",
@@ -200,6 +203,7 @@ function EventBlock({
   event,
   col,
   cols,
+  hourHeight,
   onSelect,
   editable,
   dimmed,
@@ -208,6 +212,7 @@ function EventBlock({
   event: CalendarEvent;
   col: number;
   cols: number;
+  hourHeight: number;
   onSelect: (row: Row) => void;
   /** Whether this grid lets you drag lessons around. Month view never does. */
   editable: boolean;
@@ -216,8 +221,8 @@ function EventBlock({
   onDragStart: (e: ReactPointerEvent, event: CalendarEvent, mode: DragMode) => void;
 }) {
   const colour = event.colour || PALETTE[0]!;
-  const top = (event.startMinutes / 60) * HOUR_HEIGHT;
-  const height = Math.max(((event.endMinutes - event.startMinutes) / 60) * HOUR_HEIGHT - 1, 17);
+  const top = (event.startMinutes / 60) * hourHeight;
+  const height = Math.max(((event.endMinutes - event.startMinutes) / 60) * hourHeight - 1, 17);
   const compact = height < 44;
   // Resizing needs a block tall enough to carry grips without swallowing the body.
   const resizable = editable && !event.cancelled && height >= 30;
@@ -335,7 +340,15 @@ function EventBlock({
 }
 
 /** The red line, and the dot that anchors it to today's column. */
-function NowLine({ dayCount, todayIndex }: { dayCount: number; todayIndex: number }) {
+function NowLine({
+  dayCount,
+  todayIndex,
+  hourHeight,
+}: {
+  dayCount: number;
+  todayIndex: number;
+  hourHeight: number;
+}) {
   const [minutes, setMinutes] = useState(sydneyMinutesNow);
 
   useEffect(() => {
@@ -346,7 +359,7 @@ function NowLine({ dayCount, todayIndex }: { dayCount: number; todayIndex: numbe
   return (
     <div
       className="pointer-events-none absolute inset-x-0 z-10"
-      style={{ top: (minutes / 60) * HOUR_HEIGHT }}
+      style={{ top: (minutes / 60) * hourHeight }}
     >
       <div className="h-px w-full bg-[oklch(0.62_0.22_25)]" />
       <div
@@ -377,12 +390,15 @@ export function TimeGrid({
   events,
   onSelect,
   onMove,
+  hourHeight = HOUR_HEIGHT,
 }: {
   days: string[];
   events: CalendarEvent[];
   onSelect: (row: Row) => void;
   /** Given a new day and time for a lesson, persist it. Omit for a read-only grid. */
   onMove?: (row: Row, startISO: string, endISO: string) => void;
+  /** Pixels per hour. Taller rows spread the day out for fifteen-minute work. */
+  hourHeight?: number;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const area = useRef<HTMLDivElement>(null);
@@ -398,14 +414,15 @@ export function TimeGrid({
   };
 
   useEffect(() => {
-    if (scroller.current) scroller.current.scrollTop = DEFAULT_SCROLL_HOUR * HOUR_HEIGHT - 10;
-  }, []);
+    if (scroller.current) scroller.current.scrollTop = DEFAULT_SCROLL_HOUR * hourHeight - 10;
+    // Re-anchor when the rows get taller or shorter so the morning stays put.
+  }, [hourHeight]);
 
   /** Pointer position → the minute-of-day and day column it falls on. */
   function locate(clientX: number, clientY: number) {
     const rect = area.current!.getBoundingClientRect();
     const minutes = clamp(
-      Math.round((((clientY - rect.top) / HOUR_HEIGHT) * 60) / SNAP) * SNAP,
+      Math.round((((clientY - rect.top) / hourHeight) * 60) / SNAP) * SNAP,
       0,
       DAY_MINUTES,
     );
@@ -542,11 +559,11 @@ export function TimeGrid({
           })}
         </div>
 
-        <div className="flex" style={{ height: 24 * HOUR_HEIGHT }}>
+        <div className="flex" style={{ height: 24 * hourHeight }}>
           {/* Hour gutter. The midnight label is dropped, as Google's is. */}
           <div className="w-14 shrink-0 border-r sm:w-16">
             {hours.map((h) => (
-              <div key={h} className="relative" style={{ height: HOUR_HEIGHT }}>
+              <div key={h} className="relative" style={{ height: hourHeight }}>
                 {h > 0 && (
                   <span className="absolute -top-2 right-2 text-[0.65rem] text-muted-foreground">
                     {formatClock(h * 60)}
@@ -557,18 +574,32 @@ export function TimeGrid({
           </div>
 
           <div ref={area} className="relative flex flex-1">
-            {/* Hour rules sit behind every column so they line up exactly. */}
+            {/* Hour rules sit behind every column so they line up exactly. The
+                quarter-hour rules only appear once the rows are tall enough to
+                read them — that is what the density slider is for. */}
             <div className="pointer-events-none absolute inset-0">
               {hours.map((h) => (
                 <div key={h}>
                   <div
                     className="absolute inset-x-0 border-t border-[var(--edge)]"
-                    style={{ top: h * HOUR_HEIGHT }}
+                    style={{ top: h * hourHeight }}
                   />
                   <div
                     className="absolute inset-x-0 border-t border-[var(--edge)] opacity-40"
-                    style={{ top: h * HOUR_HEIGHT + HOUR_HEIGHT / 2 }}
+                    style={{ top: h * hourHeight + hourHeight / 2 }}
                   />
+                  {hourHeight >= 96 && (
+                    <>
+                      <div
+                        className="absolute inset-x-0 border-t border-dashed border-[var(--edge)] opacity-25"
+                        style={{ top: h * hourHeight + hourHeight / 4 }}
+                      />
+                      <div
+                        className="absolute inset-x-0 border-t border-dashed border-[var(--edge)] opacity-25"
+                        style={{ top: h * hourHeight + (hourHeight * 3) / 4 }}
+                      />
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -587,6 +618,7 @@ export function TimeGrid({
                       event={e}
                       col={e.col}
                       cols={e.cols}
+                      hourHeight={hourHeight}
                       onSelect={onSelect}
                       editable={editable}
                       dimmed={ghostShown?.originId === e.id}
@@ -603,9 +635,9 @@ export function TimeGrid({
               <div
                 className="pointer-events-none absolute z-30 overflow-hidden rounded border-2 border-white/70 px-1.5 py-[3px] leading-tight shadow-xl"
                 style={{
-                  top: (ghostShown.startMinutes / 60) * HOUR_HEIGHT,
+                  top: (ghostShown.startMinutes / 60) * hourHeight,
                   height: Math.max(
-                    ((ghostShown.endMinutes - ghostShown.startMinutes) / 60) * HOUR_HEIGHT - 1,
+                    ((ghostShown.endMinutes - ghostShown.startMinutes) / 60) * hourHeight - 1,
                     17,
                   ),
                   left: `calc(${(ghostDayIndex / days.length) * 100}% + 2px)`,
@@ -627,7 +659,9 @@ export function TimeGrid({
               </div>
             )}
 
-            {todayIndex >= 0 && <NowLine dayCount={days.length} todayIndex={todayIndex} />}
+            {todayIndex >= 0 && (
+              <NowLine dayCount={days.length} todayIndex={todayIndex} hourHeight={hourHeight} />
+            )}
           </div>
         </div>
       </div>
