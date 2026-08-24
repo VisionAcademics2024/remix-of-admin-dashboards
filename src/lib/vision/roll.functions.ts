@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+import { sydneyLocalToInstant } from "@/lib/format";
+
 import { db, requireStaff } from "./guard";
 import type { Row } from "./types";
 
@@ -11,8 +13,7 @@ export const ROLL_FILTERS = [
   "today",
   "unmarked",
   "this_week",
-  "absences_owed",
-  "makeups_booked",
+  "make_ups",
   "trials",
   "all",
 ] as const;
@@ -52,9 +53,10 @@ export const listRoll = createServerFn({ method: "GET" })
           .gte("session_date", data.week_start)
           .lte("session_date", shift(data.week_start, 6));
         break;
-      case "absences_owed":
-      case "makeups_booked":
-        query = query.eq("status", "absent");
+      case "make_ups":
+        // Both halves of a make-up: the absence still owed one, and the
+        // make-up entry itself once a day has been picked.
+        query = query.or("status.eq.absent,att_type.eq.make_up");
         break;
       case "trials":
         query = query.eq("att_type", "trial");
@@ -69,13 +71,11 @@ export const listRoll = createServerFn({ method: "GET" })
       .limit(500);
     if (error) throw error;
 
-    let result = rows ?? [];
-    // make_up_state is derived in the view, so these two filter in memory.
-    if (data.filter === "absences_owed") {
-      result = result.filter((r: Row) => r.make_up_state === "outstanding");
-    }
-    if (data.filter === "makeups_booked") {
-      result = result.filter((r: Row) => r.make_up_state === "scheduled");
+    const result = rows ?? [];
+    // make_up_state is derived in the view, so a settled absence — one whose
+    // make-up has already been attended — drops out here rather than in SQL.
+    if (data.filter === "make_ups") {
+      return result.filter((r: Row) => r.att_type === "make_up" || r.make_up_state !== "completed");
     }
 
     return result;
@@ -157,45 +157,84 @@ export const setAttendancePackage = createServerFn({ method: "POST" })
 
 /* --------------------------------------------------------------------- Make-ups */
 
-/** Outstanding absences, booked make-ups, and make-ups waiting to be marked. */
-export const listMakeUps = createServerFn({ method: "GET" })
+/**
+ * A make-up is deliberately not a workflow.
+ *
+ * There are two states worth recording and no more: the student was away and
+ * is owed one, or a day has been picked. "Owed" is not a stored flag — it is
+ * simply an absence with no make-up attached, which v_attendance already
+ * derives — so holding one is just marking the absence and writing down why.
+ */
+export const holdMakeUp = createServerFn({ method: "POST" })
   .middleware([requireStaff])
-  .handler(async ({ context }) => {
+  .inputValidator((data) =>
+    z.object({ id: z.string().uuid(), note: z.string().optional().or(z.literal("")) }).parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const { error } = await db(context.supabase)
+      .from("attendance")
+      .update({
+        status: "absent",
+        correction_note: data.note?.trim()
+          ? data.note.trim()
+          : "Make-up owed — day not decided yet.",
+      })
+      .eq("id", data.id);
+    if (error) throw error;
+    return { success: true };
+  });
+
+/** The lessons already on a given Sydney date for this student's class. */
+export const listLessonsOnDate = createServerFn({ method: "GET" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    z.object({ date: z.string().min(1), attendance_id: z.string().uuid() }).parse(data),
+  )
+  .handler(async ({ context, data }) => {
     const client = db(context.supabase);
 
-    const [absences, makeups] = await Promise.all([
-      client
-        .from("v_attendance")
-        .select(ROLL_SELECT)
-        .eq("status", "absent")
-        .order("lesson_starts_at", { ascending: false })
-        .limit(400),
-      client
-        .from("v_attendance")
-        .select(ROLL_SELECT)
-        .eq("att_type", "make_up")
-        .order("lesson_starts_at")
-        .limit(400),
-    ]);
+    const { data: source } = await client
+      .from("attendance")
+      .select("enrolment_id, enrolments(class_offering_id)")
+      .eq("id", data.attendance_id)
+      .maybeSingle();
 
-    const rows = absences.data ?? [];
-    return {
-      outstanding: rows.filter((r: Row) => r.make_up_state === "outstanding"),
-      scheduled: rows.filter((r: Row) => r.make_up_state === "scheduled"),
-      completed: rows.filter((r: Row) => r.make_up_state === "completed"),
-      toMark: (makeups.data ?? []).filter((r: Row) => r.status === "not_marked"),
-    };
+    const { data: rows, error } = await client
+      .from("v_sessions")
+      .select("id, code, starts_at, ends_at, session_date, status, tutor_id, tutors(full_name)")
+      .eq("session_date", data.date)
+      .neq("status", "cancelled")
+      .order("starts_at")
+      .limit(50);
+    if (error) throw error;
+
+    const offeringId = (source as Row | null)?.enrolments?.class_offering_id ?? null;
+    return { lessons: rows ?? [], class_offering_id: offeringId };
   });
 
 /**
- * A make-up is a new roll entry on a different lesson, linked back to the
- * absence it settles. It consumes hours like any other lesson.
+ * Book the make-up on a day.
+ *
+ * Either onto a lesson that already exists, or — the common case, because a
+ * make-up rarely lines up with a scheduled class — onto a new one created for
+ * it. That new lesson may have no tutor: who teaches it is often decided after
+ * the day is, and refusing to record the day until a tutor exists is what made
+ * the old flow unusable.
  */
-export const createMakeUp = createServerFn({ method: "POST" })
+export const bookMakeUp = createServerFn({ method: "POST" })
   .middleware([requireStaff])
   .inputValidator((data) =>
     z
-      .object({ source_attendance_id: z.string().uuid(), session_id: z.string().uuid() })
+      .object({
+        source_attendance_id: z.string().uuid(),
+        /** An existing lesson, or null to create one on `date`. */
+        session_id: z.string().uuid().nullable().default(null),
+        /** Sydney date and wall-clock start for a new lesson. */
+        date: z.string().min(1).nullable().default(null),
+        start_time: z.string().min(1).nullable().default(null),
+        duration_hours: z.number().positive().max(12).default(1),
+        tutor_id: z.string().uuid().nullable().default(null),
+      })
       .parse(data),
   )
   .handler(async ({ context, data }) => {
@@ -203,17 +242,54 @@ export const createMakeUp = createServerFn({ method: "POST" })
 
     const { data: source, error: sourceError } = await client
       .from("attendance")
-      .select("enrolment_id, package_id, session_id")
+      .select("enrolment_id, package_id, session_id, enrolments(class_offering_id)")
       .eq("id", data.source_attendance_id)
       .maybeSingle();
     if (sourceError) throw sourceError;
     if (!source) throw new Error("That absence no longer exists.");
-    if (source.session_id === data.session_id) {
+
+    let sessionId = data.session_id;
+
+    if (!sessionId) {
+      if (!data.date || !data.start_time) {
+        throw new Error("Pick a day and a time for the make-up lesson.");
+      }
+      const offeringId = (source as Row).enrolments?.class_offering_id;
+      if (!offeringId) {
+        throw new Error("This enrolment has no class, so a make-up lesson cannot be created.");
+      }
+
+      const startsAt = sydneyLocalToInstant(`${data.date}T${data.start_time}`);
+      const endsAt = new Date(Date.parse(startsAt) + data.duration_hours * 3_600_000).toISOString();
+
+      const { data: created, error: createError } = await client
+        .from("sessions")
+        .insert({
+          class_offering_id: offeringId,
+          tutor_id: data.tutor_id,
+          session_type: "dedicated_make_up",
+          status: "scheduled",
+          starts_at: startsAt,
+          ends_at: endsAt,
+          notes: "Created for a make-up.",
+        })
+        .select("id")
+        .single();
+      if (createError) throw createError;
+      sessionId = created.id;
+    } else if (sessionId === source.session_id) {
       throw new Error("A make-up has to sit on a different lesson from the absence.");
     }
 
+    // The absence is the thing being settled, so make sure it reads as one.
+    await client
+      .from("attendance")
+      .update({ status: "absent" })
+      .eq("id", data.source_attendance_id)
+      .eq("status", "not_marked");
+
     const { error } = await client.from("attendance").insert({
-      session_id: data.session_id,
+      session_id: sessionId,
       enrolment_id: source.enrolment_id,
       att_type: "make_up",
       status: "not_marked",
@@ -230,20 +306,20 @@ export const createMakeUp = createServerFn({ method: "POST" })
     return { success: true };
   });
 
-/** Candidate lessons a make-up could be booked onto. */
-export const listMakeUpCandidates = createServerFn({ method: "GET" })
+/**
+ * Who taught it, set from the roll. A make-up lesson is usually created before
+ * anyone knows, and this is where you find out.
+ */
+export const setLessonTutor = createServerFn({ method: "POST" })
   .middleware([requireStaff])
-  .inputValidator((data) => z.object({ from: z.string().min(1) }).parse(data))
+  .inputValidator((data) =>
+    z.object({ session_id: z.string().uuid(), tutor_id: z.string().uuid().nullable() }).parse(data),
+  )
   .handler(async ({ context, data }) => {
-    const { data: rows, error } = await db(context.supabase)
-      .from("v_sessions")
-      .select(
-        "id, code, starts_at, ends_at, session_date, status, class_offerings(code, programs(name))",
-      )
-      .gte("starts_at", `${data.from}T00:00:00Z`)
-      .neq("status", "cancelled")
-      .order("starts_at")
-      .limit(200);
+    const { error } = await db(context.supabase)
+      .from("sessions")
+      .update({ tutor_id: data.tutor_id })
+      .eq("id", data.session_id);
     if (error) throw error;
-    return rows ?? [];
+    return { success: true };
   });

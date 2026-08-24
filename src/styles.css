@@ -596,6 +596,22 @@
   to   { opacity: 1; transform: none; }
 }
 
+/* Moving between filters should read as travel, not as a reload.
+ *
+ * Deliberately no opacity: a panel that fades up from nothing is exactly the
+ * "the whole page reloaded" feeling this replaces. The rows stay on screen the
+ * whole way across — the previous filter's data is held until the next arrives
+ * — and only the position moves. */
+@keyframes panel-in-right {
+  from { transform: translate3d(26px, 0, 0); }
+  to   { transform: none; }
+}
+
+@keyframes panel-in-left {
+  from { transform: translate3d(-26px, 0, 0); }
+  to   { transform: none; }
+}
+
 @keyframes sheen {
   from { transform: translateX(-120%); }
   to   { transform: translateX(220%); }
@@ -618,6 +634,9 @@
   .stagger > *:nth-child(5) { animation-delay: 180ms; }
   .stagger > *:nth-child(6) { animation-delay: 225ms; }
   .stagger > *:nth-child(n + 7) { animation-delay: 270ms; }
+
+  .panel-in-right { animation: panel-in-right var(--dur-fast) var(--ease-spatial) both; }
+  .panel-in-left  { animation: panel-in-left  var(--dur-fast) var(--ease-spatial) both; }
 
   /* Loading uses a light sweep, not a grey pulse. */
   .shimmer { position: relative; overflow: hidden; }

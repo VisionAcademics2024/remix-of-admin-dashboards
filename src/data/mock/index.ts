@@ -34,7 +34,6 @@ export const mockRepository: VisionRepository = {
   getOfferingDetail: async () => pending("getOfferingDetail"),
 
   getAttendanceQueue: async () => pending("getAttendanceQueue"),
-  getMakeupQueue: async () => pending("getMakeupQueue"),
 
   getCommerceBoard: async () => pending("getCommerceBoard"),
   getChargeWorkQueue: async () => pending("getChargeWorkQueue"),

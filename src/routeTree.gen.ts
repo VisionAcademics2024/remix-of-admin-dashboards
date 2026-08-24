@@ -15,7 +15,6 @@ import { Route as AccessRouteImport } from './routes/access'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
 import { Route as AuthenticatedEnrolmentsRouteImport } from './routes/_authenticated/enrolments'
-import { Route as AuthenticatedMakeUpsRouteImport } from './routes/_authenticated/make-ups'
 import { Route as AuthenticatedNeedsAttentionRouteImport } from './routes/_authenticated/needs-attention'
 import { Route as AuthenticatedRollRouteImport } from './routes/_authenticated/roll'
 import { Route as AuthenticatedSetupRouteImport } from './routes/_authenticated/setup'
@@ -61,11 +60,6 @@ const AuthenticatedBillingRoute = AuthenticatedBillingRouteImport.update({
 const AuthenticatedEnrolmentsRoute = AuthenticatedEnrolmentsRouteImport.update({
   id: '/enrolments',
   path: '/enrolments',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedMakeUpsRoute = AuthenticatedMakeUpsRouteImport.update({
-  id: '/make-ups',
-  path: '/make-ups',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedNeedsAttentionRoute =
@@ -169,7 +163,6 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/billing': typeof AuthenticatedBillingRoute
   '/enrolments': typeof AuthenticatedEnrolmentsRoute
-  '/make-ups': typeof AuthenticatedMakeUpsRoute
   '/needs-attention': typeof AuthenticatedNeedsAttentionRoute
   '/roll': typeof AuthenticatedRollRoute
   '/setup': typeof AuthenticatedSetupRoute
@@ -194,7 +187,6 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/billing': typeof AuthenticatedBillingRoute
   '/enrolments': typeof AuthenticatedEnrolmentsRoute
-  '/make-ups': typeof AuthenticatedMakeUpsRoute
   '/needs-attention': typeof AuthenticatedNeedsAttentionRoute
   '/roll': typeof AuthenticatedRollRoute
   '/setup': typeof AuthenticatedSetupRoute
@@ -221,7 +213,6 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/billing': typeof AuthenticatedBillingRoute
   '/_authenticated/enrolments': typeof AuthenticatedEnrolmentsRoute
-  '/_authenticated/make-ups': typeof AuthenticatedMakeUpsRoute
   '/_authenticated/needs-attention': typeof AuthenticatedNeedsAttentionRoute
   '/_authenticated/roll': typeof AuthenticatedRollRoute
   '/_authenticated/setup': typeof AuthenticatedSetupRoute
@@ -248,7 +239,6 @@ export interface FileRouteTypes {
     | '/auth'
     | '/billing'
     | '/enrolments'
-    | '/make-ups'
     | '/needs-attention'
     | '/roll'
     | '/setup'
@@ -273,7 +263,6 @@ export interface FileRouteTypes {
     | '/auth'
     | '/billing'
     | '/enrolments'
-    | '/make-ups'
     | '/needs-attention'
     | '/roll'
     | '/setup'
@@ -299,7 +288,6 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_authenticated/billing'
     | '/_authenticated/enrolments'
-    | '/_authenticated/make-ups'
     | '/_authenticated/needs-attention'
     | '/_authenticated/roll'
     | '/_authenticated/setup'
@@ -368,13 +356,6 @@ declare module '@tanstack/react-router' {
       path: '/enrolments'
       fullPath: '/enrolments'
       preLoaderRoute: typeof AuthenticatedEnrolmentsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/make-ups': {
-      id: '/_authenticated/make-ups'
-      path: '/make-ups'
-      fullPath: '/make-ups'
-      preLoaderRoute: typeof AuthenticatedMakeUpsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/needs-attention': {
@@ -517,7 +498,6 @@ const AuthenticatedPrototypeStudentsRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedBillingRoute: typeof AuthenticatedBillingRoute
   AuthenticatedEnrolmentsRoute: typeof AuthenticatedEnrolmentsRoute
-  AuthenticatedMakeUpsRoute: typeof AuthenticatedMakeUpsRoute
   AuthenticatedNeedsAttentionRoute: typeof AuthenticatedNeedsAttentionRoute
   AuthenticatedRollRoute: typeof AuthenticatedRollRoute
   AuthenticatedSetupRoute: typeof AuthenticatedSetupRoute
@@ -539,7 +519,6 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedBillingRoute: AuthenticatedBillingRoute,
   AuthenticatedEnrolmentsRoute: AuthenticatedEnrolmentsRoute,
-  AuthenticatedMakeUpsRoute: AuthenticatedMakeUpsRoute,
   AuthenticatedNeedsAttentionRoute: AuthenticatedNeedsAttentionRoute,
   AuthenticatedRollRoute: AuthenticatedRollRoute,
   AuthenticatedSetupRoute: AuthenticatedSetupRoute,
