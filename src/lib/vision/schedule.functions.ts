@@ -246,6 +246,28 @@ export const moveSession = createServerFn({ method: "POST" })
       Date.parse(data.starts_at) === Date.parse(origStart) &&
       Date.parse(data.ends_at) === Date.parse(origEnd);
 
+    // The class can hold only one lesson per start time. If another lesson of
+    // this class already sits in the target slot, it is almost always a stray
+    // left by an earlier failed booking — clear it out of the way when it has
+    // no roll, and only refuse when it is a real lesson with attendance on it.
+    const { data: clash } = await client
+      .from("sessions")
+      .select("id")
+      .eq("class_offering_id", current.class_offering_id)
+      .eq("starts_at", data.starts_at)
+      .neq("id", data.id)
+      .maybeSingle();
+    if (clash) {
+      const { count } = await client
+        .from("attendance")
+        .select("id", { count: "exact", head: true })
+        .eq("session_id", clash.id);
+      if ((count ?? 0) > 0) {
+        throw new Error("There is already a lesson for this class at that time.");
+      }
+      await client.from("sessions").delete().eq("id", clash.id);
+    }
+
     const payload: Record<string, unknown> = home
       ? {
           starts_at: origStart,
