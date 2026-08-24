@@ -44,6 +44,13 @@ const DEFAULT_SCROLL_HOUR = 7;
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
+/** Today's column, softly filled and outlined so its lessons stand out. */
+const TODAY_TINT = "color-mix(in oklab, oklch(0.55 0.19 258) 9%, transparent)";
+const TODAY_EDGE = "color-mix(in oklab, oklch(0.62 0.19 258) 55%, transparent)";
+const todayEdges = {
+  boxShadow: `inset 1px 0 0 ${TODAY_EDGE}, inset -1px 0 0 ${TODAY_EDGE}`,
+};
+
 /** Minutes-of-day to a 24h "HH:mm" the Sydney converter accepts. */
 function clock24(minutes: number): string {
   const h = Math.floor(minutes / 60);
@@ -62,6 +69,8 @@ export type CalendarEvent = {
   colour?: string | undefined;
   /** Draws as struck through and faded, the way a cancelled event does. */
   cancelled?: boolean | undefined;
+  /** A make-up lesson — moved off its usual slot, or booked as one. */
+  makeUp?: boolean | undefined;
   badge?: string | undefined;
   row: Row;
 };
@@ -81,6 +90,7 @@ export function toCalendarEvent(s: Row): CalendarEvent {
     subtitle: s.tutors?.full_name ?? undefined,
     colour: colourFor(s.tutor_id, s.tutors?.colour),
     cancelled: s.status === "cancelled" || s.status === "rescheduled",
+    makeUp: s.session_type === "dedicated_make_up",
     badge: s.roll_total > 0 ? `${s.roll_marked}/${s.roll_total}` : undefined,
     row: s,
   };
@@ -237,7 +247,7 @@ function EventBlock({
         top,
         height,
         left: `calc(${(col / cols) * 100}% + 1px)`,
-        width: `calc(${100 / cols}% - 3px)`,
+        width: `calc(${100 / cols}% - 2px)`,
         // Soft pastel fill, dark text — a whole week of these stays calm, and
         // `readableOn` keeps the label legible. A cancelled lesson inverts to an
         // outline, the way a declined event does.
@@ -266,13 +276,27 @@ function EventBlock({
         {event.title}
       </span>
       {compact ? (
-        <span className="shrink-0 text-[0.65rem] tabular-nums opacity-85">
-          {formatClock(event.startMinutes)}
-        </span>
+        <>
+          <span className="shrink-0 text-[0.65rem] tabular-nums opacity-85">
+            {formatClock(event.startMinutes)}
+          </span>
+          {event.makeUp && !event.cancelled && (
+            <span className="shrink-0 rounded bg-black/15 px-1 text-[0.55rem] font-semibold uppercase tracking-wide">
+              MU
+            </span>
+          )}
+        </>
       ) : (
         <>
-          <div className="truncate text-[0.65rem] tabular-nums opacity-90">
-            {formatClock(event.startMinutes)} – {formatClock(event.endMinutes)}
+          <div className="flex items-center gap-1 text-[0.65rem] tabular-nums opacity-90">
+            <span className="truncate">
+              {formatClock(event.startMinutes)} – {formatClock(event.endMinutes)}
+            </span>
+            {event.makeUp && !event.cancelled && (
+              <span className="shrink-0 rounded bg-black/15 px-1 text-[0.55rem] font-semibold uppercase not-italic tracking-wide">
+                MU
+              </span>
+            )}
           </div>
           {/* An hour-tall block cannot carry a third line without clipping it. */}
           {height >= 62 && event.subtitle && (
@@ -480,38 +504,44 @@ export function TimeGrid({
 
   return (
     <div className="glass--solid overflow-hidden rounded-xl border">
-      {/* Day headers stay put while the hours scroll beneath them. */}
-      <div className="flex border-b bg-[var(--mat-thin)]">
-        <div className="w-14 shrink-0 border-r sm:w-16" />
-        {days.map((day) => {
-          const isToday = day === today;
-          const d = new Date(`${day}T00:00:00Z`);
-          return (
-            <div key={day} className="min-w-0 flex-1 border-r py-2 text-center last:border-r-0">
-              <div
-                className={cn(
-                  "text-[0.68rem] font-medium uppercase tracking-wide",
-                  isToday ? "text-[oklch(0.68_0.16_255)]" : "text-muted-foreground",
-                )}
-              >
-                {d.toLocaleDateString("en-AU", { weekday: "short", timeZone: "UTC" })}
-              </div>
-              <div
-                className={cn(
-                  "mx-auto mt-0.5 flex h-8 w-8 items-center justify-center rounded-full text-lg",
-                  isToday
-                    ? "bg-[oklch(0.55_0.19_258)] font-semibold text-white"
-                    : "font-normal text-foreground",
-                )}
-              >
-                {d.getUTCDate()}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
+      {/* Header and grid share one scroll container, so a scrollbar narrows
+          both by the same amount and the day columns never drift out from
+          under their headings. The header stays pinned as the hours scroll. */}
       <div ref={scroller} className="relative max-h-[62vh] overflow-y-auto overscroll-contain">
+        <div className="sticky top-0 z-20 flex border-b bg-[var(--mat-solid)]">
+          <div className="w-14 shrink-0 border-r sm:w-16" />
+          {days.map((day) => {
+            const isToday = day === today;
+            const d = new Date(`${day}T00:00:00Z`);
+            return (
+              <div
+                key={day}
+                className="min-w-0 flex-1 border-r py-2 text-center last:border-r-0"
+                style={isToday ? { backgroundColor: TODAY_TINT, ...todayEdges } : undefined}
+              >
+                <div
+                  className={cn(
+                    "text-[0.68rem] font-medium uppercase tracking-wide",
+                    isToday ? "text-[oklch(0.72_0.16_255)]" : "text-muted-foreground",
+                  )}
+                >
+                  {d.toLocaleDateString("en-AU", { weekday: "short", timeZone: "UTC" })}
+                </div>
+                <div
+                  className={cn(
+                    "mx-auto mt-0.5 flex h-8 w-8 items-center justify-center rounded-full text-lg",
+                    isToday
+                      ? "bg-[oklch(0.55_0.19_258)] font-semibold text-white"
+                      : "font-normal text-foreground",
+                  )}
+                >
+                  {d.getUTCDate()}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
         <div className="flex" style={{ height: 24 * HOUR_HEIGHT }}>
           {/* Hour gutter. The midnight label is dropped, as Google's is. */}
           <div className="w-14 shrink-0 border-r sm:w-16">
@@ -543,22 +573,29 @@ export function TimeGrid({
               ))}
             </div>
 
-            {days.map((day) => (
-              <div key={day} className="relative min-w-0 flex-1 border-r last:border-r-0">
-                {(byDay.get(day) ?? []).map((e) => (
-                  <EventBlock
-                    key={e.id}
-                    event={e}
-                    col={e.col}
-                    cols={e.cols}
-                    onSelect={onSelect}
-                    editable={editable}
-                    dimmed={ghostShown?.originId === e.id}
-                    onDragStart={beginDrag}
-                  />
-                ))}
-              </div>
-            ))}
+            {days.map((day) => {
+              const isToday = day === today;
+              return (
+                <div
+                  key={day}
+                  className="relative min-w-0 flex-1 border-r last:border-r-0"
+                  style={isToday ? { backgroundColor: TODAY_TINT, ...todayEdges } : undefined}
+                >
+                  {(byDay.get(day) ?? []).map((e) => (
+                    <EventBlock
+                      key={e.id}
+                      event={e}
+                      col={e.col}
+                      cols={e.cols}
+                      onSelect={onSelect}
+                      editable={editable}
+                      dimmed={ghostShown?.originId === e.id}
+                      onDragStart={beginDrag}
+                    />
+                  ))}
+                </div>
+              );
+            })}
 
             {/* The ghost the drag steers: same block, leading the way, snapped to
                 the quarter-hour it would land on. */}
