@@ -24,6 +24,14 @@ const dayFmt = new Intl.DateTimeFormat("en-AU", {
   month: "short",
 });
 
+const dayDateFmt = new Intl.DateTimeFormat("en-AU", {
+  timeZone: TIMEZONE,
+  weekday: "short",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
+
 const timeFmt = new Intl.DateTimeFormat("en-AU", {
   timeZone: TIMEZONE,
   hour: "numeric",
@@ -63,6 +71,14 @@ export function formatDay(value: string | Date | null | undefined): string {
   const d = typeof value === "string" ? parseLoose(value) : value;
   if (!d) return "—";
   return dayFmt.format(d);
+}
+
+/** "Thu, 23 April 2026" — weekday first, then the full date. */
+export function formatDayDate(value: string | Date | null | undefined): string {
+  if (!value) return "—";
+  const d = typeof value === "string" ? parseLoose(value) : value;
+  if (!d) return "—";
+  return dayDateFmt.format(d);
 }
 
 /** "5:30 pm" — always Sydney wall clock. */
