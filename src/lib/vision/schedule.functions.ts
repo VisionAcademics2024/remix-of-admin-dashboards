@@ -113,12 +113,47 @@ export const listRange = createServerFn({ method: "GET" })
       }
     }
 
+    // A class with exactly one enrolled student reads by that student's name on
+    // the grid, so the sole student per offering in view is looked up once.
+    const soleStudent = await soleStudentByOffering(
+      client,
+      inRange.map((s: Row) => s.class_offering_id),
+    );
+
     return inRange.map((s: Row) => ({
       ...s,
       roll_marked: counts.get(s.id)?.marked ?? 0,
       roll_total: counts.get(s.id)?.total ?? 0,
+      sole_student_name: soleStudent.get(s.class_offering_id) ?? null,
     }));
   });
+
+/**
+ * The one enrolled student for each offering that has exactly one — null for
+ * classes with none or with two or more. A closed enrolment does not count.
+ */
+async function soleStudentByOffering(
+  client: ReturnType<typeof db>,
+  offeringIds: string[],
+): Promise<Map<string, string | null>> {
+  const result = new Map<string, string | null>();
+  const unique = [...new Set(offeringIds.filter(Boolean))];
+  if (!unique.length) return result;
+
+  const { data: enrolments } = await client
+    .from("enrolments")
+    .select("class_offering_id, status, students(full_name)")
+    .in("class_offering_id", unique);
+
+  const counts = new Map<string, number>();
+  for (const e of enrolments ?? []) {
+    if (e.status === "closed") continue;
+    const n = (counts.get(e.class_offering_id) ?? 0) + 1;
+    counts.set(e.class_offering_id, n);
+    result.set(e.class_offering_id, n === 1 ? ((e as Row).students?.full_name ?? null) : null);
+  }
+  return result;
+}
 
 function shiftDate(date: string, days: number): string {
   const d = new Date(`${date}T00:00:00Z`);
