@@ -13,14 +13,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 
 import { cn } from "@/lib/utils";
 
-import tenaya from "@/assets/environments/tenaya.jpg.asset.json";
-import tenayaThumb from "@/assets/environments/tenaya-thumb.jpg.asset.json";
-import solstice from "@/assets/environments/solstice.jpg.asset.json";
-import solsticeThumb from "@/assets/environments/solstice-thumb.jpg.asset.json";
-import sierra from "@/assets/environments/sierra.jpg.asset.json";
-import sierraThumb from "@/assets/environments/sierra-thumb.jpg.asset.json";
-import alpenglow from "@/assets/environments/alpenglow.jpg.asset.json";
-import alpenglowThumb from "@/assets/environments/alpenglow-thumb.jpg.asset.json";
+import vestrahorn from "@/assets/environments/vestrahorn.jpg.asset.json";
+import vestrahornThumb from "@/assets/environments/vestrahorn-thumb.jpg.asset.json";
+import yosemite from "@/assets/environments/yosemite.jpg.asset.json";
+import yosemiteThumb from "@/assets/environments/yosemite-thumb.jpg.asset.json";
+import vernazza from "@/assets/environments/vernazza.jpg.asset.json";
+import vernazzaThumb from "@/assets/environments/vernazza-thumb.jpg.asset.json";
+import vermilion from "@/assets/environments/vermilion.jpg.asset.json";
+import vermilionThumb from "@/assets/environments/vermilion-thumb.jpg.asset.json";
 
 /**
  * Environments.
