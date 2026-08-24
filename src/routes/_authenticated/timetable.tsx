@@ -59,7 +59,7 @@ import {
   seedRoll,
   updateSession,
 } from "@/lib/vision/schedule.functions";
-import { bookMakeUp, holdMakeUp, markAttendance, markRollBulk } from "@/lib/vision/roll.functions";
+import { holdMakeUp, markAttendance, markRollBulk } from "@/lib/vision/roll.functions";
 import { saveEnrolment } from "@/lib/vision/commerce.functions";
 import { listStudents } from "@/lib/vision/people.functions";
 import { getCatalogue } from "@/lib/vision/catalogue.functions";
@@ -731,7 +731,7 @@ function LessonRollPanel({
         onChanged={onChanged}
       />
 
-      <MakeUpClassForm session={session} roll={roll} tutors={tutors} onChanged={onChanged} />
+      <MakeUpClassForm session={session} tutors={tutors} onChanged={onChanged} />
     </div>
   );
 }
@@ -812,41 +812,45 @@ function AddStudentRow({
 }
 
 /** Make the whole class up onto one new lesson — the same booking the Roll uses. */
+/**
+ * Make the class up by moving this lesson to another day and time, exactly as a
+ * drag would. The lesson leaves its slot and reappears at the new one, flagged
+ * a make-up; drag it back, or move it home here, and it is ordinary again. No
+ * second lesson is created — the class is rescheduled, not duplicated.
+ */
 function MakeUpClassForm({
   session,
-  roll,
   tutors,
   onChanged,
 }: {
   session: Row;
-  roll: Row[];
   tutors: Row[];
   onChanged: () => Promise<void>;
 }) {
-  const book = useServerFn(bookMakeUp);
+  const move = useServerFn(moveSession);
+  const update = useServerFn(updateSession);
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(() => addDays(sydToday(), 7));
   const [startTime, setStartTime] = useState(() => toLocalInput(session.starts_at).slice(11, 16));
-  const [duration, setDuration] = useState(() => String(session.duration_hours ?? 1));
+  const [endTime, setEndTime] = useState(() => toLocalInput(session.ends_at).slice(11, 16));
   const [tutorId, setTutorId] = useState<string>(session.tutor_id ?? "none");
   const [busy, setBusy] = useState(false);
 
-  const sources = roll.filter((r) => r.att_type !== "make_up").map((r) => r.id);
-
   async function submit() {
+    const startsAt = fromLocalInput(`${date}T${startTime}`);
+    const endsAt = fromLocalInput(`${date}T${endTime}`);
+    if (Date.parse(endsAt) <= Date.parse(startsAt)) {
+      toast.error("The end time has to be after the start time.");
+      return;
+    }
     setBusy(true);
     try {
-      await book({
-        data: {
-          source_attendance_ids: sources,
-          session_id: null,
-          date,
-          start_time: startTime,
-          duration_hours: Number(duration) || 1,
-          tutor_id: tutorId === "none" ? null : tutorId,
-        },
-      });
-      toast.success("One make-up lesson booked for the class.");
+      await move({ data: { id: session.id, starts_at: startsAt, ends_at: endsAt } });
+      const nextTutor = tutorId === "none" ? null : tutorId;
+      if (nextTutor !== (session.tutor_id ?? null)) {
+        await update({ data: { id: session.id, tutor_id: nextTutor } });
+      }
+      toast.success("Class moved. It is now a make-up on that day.");
       setOpen(false);
       await onChanged();
     } catch (error) {
@@ -858,13 +862,7 @@ function MakeUpClassForm({
 
   if (!open) {
     return (
-      <Button
-        variant="outline"
-        size="sm"
-        className="w-full"
-        disabled={sources.length === 0}
-        onClick={() => setOpen(true)}
-      >
+      <Button variant="outline" size="sm" className="w-full" onClick={() => setOpen(true)}>
         Make up the class on another day
       </Button>
     );
@@ -873,10 +871,10 @@ function MakeUpClassForm({
   return (
     <div className="space-y-3 rounded-md border border-[var(--edge)] bg-[var(--mat-thin)] p-3">
       <p className="text-xs text-muted-foreground">
-        Marks the {sources.length} in this class away and settles them together on one new lesson. A
-        tutor is optional — decide it later if you need to.
+        Moves this class off its slot to the day and time you set, and marks it a make-up. The roll
+        moves with it — no second lesson is made. A tutor is optional.
       </p>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         <div className="space-y-1.5">
           <Label>Day</Label>
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -885,41 +883,33 @@ function MakeUpClassForm({
           <Label>Starts</Label>
           <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
         </div>
+        <div className="space-y-1.5">
+          <Label>Ends</Label>
+          <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+        </div>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1.5">
-          <Label>Hours</Label>
-          <Input
-            type="number"
-            min="0.5"
-            step="0.5"
-            value={duration}
-            onChange={(e) => setDuration(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Tutor</Label>
-          <Select value={tutorId} onValueChange={setTutorId}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Decide later</SelectItem>
-              {tutors.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.full_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="space-y-1.5">
+        <Label>Tutor</Label>
+        <Select value={tutorId} onValueChange={setTutorId}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Decide later</SelectItem>
+            {tutors.map((t) => (
+              <SelectItem key={t.id} value={t.id}>
+                {t.full_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div className="flex justify-end gap-2">
         <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
           Cancel
         </Button>
         <Button size="sm" disabled={busy} onClick={submit}>
-          Book make-up
+          Move to make-up
         </Button>
       </div>
     </div>
