@@ -13,14 +13,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 
 import { cn } from "@/lib/utils";
 
-import tenaya from "@/assets/environments/tenaya.jpg.asset.json";
-import tenayaThumb from "@/assets/environments/tenaya-thumb.jpg.asset.json";
-import solstice from "@/assets/environments/solstice.jpg.asset.json";
-import solsticeThumb from "@/assets/environments/solstice-thumb.jpg.asset.json";
-import sierra from "@/assets/environments/sierra.jpg.asset.json";
-import sierraThumb from "@/assets/environments/sierra-thumb.jpg.asset.json";
-import alpenglow from "@/assets/environments/alpenglow.jpg.asset.json";
-import alpenglowThumb from "@/assets/environments/alpenglow-thumb.jpg.asset.json";
+import vestrahorn from "@/assets/environments/vestrahorn.jpg.asset.json";
+import vestrahornThumb from "@/assets/environments/vestrahorn-thumb.jpg.asset.json";
+import yosemite from "@/assets/environments/yosemite.jpg.asset.json";
+import yosemiteThumb from "@/assets/environments/yosemite-thumb.jpg.asset.json";
+import vernazza from "@/assets/environments/vernazza.jpg.asset.json";
+import vernazzaThumb from "@/assets/environments/vernazza-thumb.jpg.asset.json";
+import vermilion from "@/assets/environments/vermilion.jpg.asset.json";
+import vermilionThumb from "@/assets/environments/vermilion-thumb.jpg.asset.json";
 
 /**
  * Environments.
@@ -49,40 +49,40 @@ export interface EnvironmentDef {
 
 export const ENVIRONMENTS: EnvironmentDef[] = [
   {
-    id: "tenaya",
-    name: "Tenaya",
-    description: "Still alpine water at dusk. The calmest to read against.",
-    image: tenaya.url,
-    thumb: tenayaThumb.url,
+    id: "vestrahorn",
+    name: "Vestrahorn",
+    description: "Twilight over black sand and still water. The calmest to read against.",
+    image: vestrahorn.url,
+    thumb: vestrahornThumb.url,
     theme: "dark",
   },
   {
-    id: "solstice",
-    name: "Solstice",
-    description: "A lone tree under the Milky Way. Warm, quiet, graphic.",
-    image: solstice.url,
-    thumb: solsticeThumb.url,
+    id: "yosemite",
+    name: "Yosemite",
+    description: "Winter dusk in the valley. Deep, cold, cinematic.",
+    image: yosemite.url,
+    thumb: yosemiteThumb.url,
     theme: "dark",
   },
   {
-    id: "sierra",
-    name: "Sierra",
-    description: "First light on the high granite. Pale sky, dark type.",
-    image: sierra.url,
-    thumb: sierraThumb.url,
-    theme: "light",
+    id: "vernazza",
+    name: "Vernazza",
+    description: "Warm lamplight on the Ligurian coast after sunset.",
+    image: vernazza.url,
+    thumb: vernazzaThumb.url,
+    theme: "dark",
   },
   {
-    id: "alpenglow",
-    name: "Alpenglow",
-    description: "Rose afterglow above the ridgeline. The brightest scene.",
-    image: alpenglow.url,
-    thumb: alpenglowThumb.url,
+    id: "vermilion",
+    name: "Vermilion",
+    description: "Red canyon walls under bright daylight. Pale sky, dark type.",
+    image: vermilion.url,
+    thumb: vermilionThumb.url,
     theme: "light",
   },
 ];
 
-const DEFAULT_ID = "tenaya";
+const DEFAULT_ID = "vestrahorn";
 
 const STORAGE_KEY = "vision-environment";
 
