@@ -13,6 +13,15 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 
 import { cn } from "@/lib/utils";
 
+import tenaya from "@/assets/environments/tenaya.jpg.asset.json";
+import tenayaThumb from "@/assets/environments/tenaya-thumb.jpg.asset.json";
+import solstice from "@/assets/environments/solstice.jpg.asset.json";
+import solsticeThumb from "@/assets/environments/solstice-thumb.jpg.asset.json";
+import sierra from "@/assets/environments/sierra.jpg.asset.json";
+import sierraThumb from "@/assets/environments/sierra-thumb.jpg.asset.json";
+import alpenglow from "@/assets/environments/alpenglow.jpg.asset.json";
+import alpenglowThumb from "@/assets/environments/alpenglow-thumb.jpg.asset.json";
+
 /**
  * Environments.
  *
@@ -40,40 +49,41 @@ export interface EnvironmentDef {
 
 export const ENVIRONMENTS: EnvironmentDef[] = [
   {
-    id: "observatory",
-    name: "Observatory",
-    description: "Deep indigo, single cool light source. The calmest to read against.",
-    image: "/environments/observatory.jpg",
-    thumb: "/environments/observatory-thumb.jpg",
+    id: "tenaya",
+    name: "Tenaya",
+    description: "Still alpine water at dusk. The calmest to read against.",
+    image: tenaya.url,
+    thumb: tenayaThumb.url,
     theme: "dark",
   },
   {
-    id: "sunrise",
-    name: "Sunrise",
-    description: "Warm horizon haze. Higher contrast, more atmosphere.",
-    image: "/environments/sunrise.jpg",
-    thumb: "/environments/sunrise-thumb.jpg",
+    id: "solstice",
+    name: "Solstice",
+    description: "A lone tree under the Milky Way. Warm, quiet, graphic.",
+    image: solstice.url,
+    thumb: solsticeThumb.url,
     theme: "dark",
   },
   {
-    id: "glacier",
-    name: "Glacier",
-    description: "Cool and quiet. Good for long stretches on the roll.",
-    image: "/environments/glacier.jpg",
-    thumb: "/environments/glacier-thumb.jpg",
-    theme: "dark",
+    id: "sierra",
+    name: "Sierra",
+    description: "First light on the high granite. Pale sky, dark type.",
+    image: sierra.url,
+    thumb: sierraThumb.url,
+    theme: "light",
   },
   {
-    id: "daylight",
-    name: "Daylight",
-    description: "Pale and open, with dark type. The light theme.",
-    image: "/environments/daylight.jpg",
-    thumb: "/environments/daylight-thumb.jpg",
+    id: "alpenglow",
+    name: "Alpenglow",
+    description: "Rose afterglow above the ridgeline. The brightest scene.",
+    image: alpenglow.url,
+    thumb: alpenglowThumb.url,
     theme: "light",
   },
 ];
 
-const DEFAULT_ID = "observatory";
+const DEFAULT_ID = "tenaya";
+
 const STORAGE_KEY = "vision-environment";
 
 interface EnvironmentContextValue {
