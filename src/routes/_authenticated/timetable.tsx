@@ -837,14 +837,14 @@ function MakeUpClassForm({
   const [busy, setBusy] = useState(false);
 
   async function submit() {
-    const startsAt = fromLocalInput(`${date}T${startTime}`);
-    const endsAt = fromLocalInput(`${date}T${endTime}`);
-    if (Date.parse(endsAt) <= Date.parse(startsAt)) {
-      toast.error("The end time has to be after the start time.");
-      return;
-    }
     setBusy(true);
     try {
+      const startsAt = fromLocalInput(`${date}T${startTime}`);
+      const endsAt = fromLocalInput(`${date}T${endTime}`);
+      if (Date.parse(endsAt) <= Date.parse(startsAt)) {
+        toast.error("The end time has to be after the start time.");
+        return;
+      }
       await move({ data: { id: session.id, starts_at: startsAt, ends_at: endsAt } });
       const nextTutor = tutorId === "none" ? null : tutorId;
       if (nextTutor !== (session.tutor_id ?? null)) {
