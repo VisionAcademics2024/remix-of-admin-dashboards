@@ -93,9 +93,10 @@ function AccessPage() {
       <Card className="relative w-full max-w-md rounded-[2rem]">
         <CardHeader>
           <div className="mb-3 flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-chart-4 text-primary-foreground shadow-[inset_0_1px_0_0_var(--edge-top),0_10px_26px_-14px_var(--color-primary)]">
-              <span className="text-sm font-bold">V</span>
+            <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-white via-[#FBF7F0] to-[#EDE6DA] shadow-[inset_0_1px_0_0_var(--edge-top),0_10px_26px_-14px_rgba(15,23,42,0.35)]">
+              <img src={visionLogo.url} alt="Vision Academics" className="h-7 w-7 object-contain" />
             </div>
+
             <div>
               <p className="text-sm font-semibold">Vision CRM</p>
               <p className="text-xs text-muted-foreground">Secure staff access</p>
