@@ -295,6 +295,24 @@ function groupByLesson(rows: Row[]): LessonGrouping[] {
 }
 
 /**
+ * The one set of column widths every class section shares, so Type, Billing,
+ * Hours, Status and Mark line up down the whole page. Student takes whatever is
+ * left. Used with table-fixed on every section's table (and the header).
+ */
+function RollCols() {
+  return (
+    <colgroup>
+      <col />
+      <col className="w-[132px]" />
+      <col className="w-[172px]" />
+      <col className="w-[84px]" />
+      <col className="w-[128px]" />
+      <col className="w-[236px]" />
+    </colgroup>
+  );
+}
+
+/**
  * A class, and everyone on its roll.
  *
  * The header carries what belongs to the lesson rather than to a student - the
@@ -372,9 +390,12 @@ function LessonGroup({
       </header>
 
       {/* The roll sits flush under the header - no card-within-a-card. The one
-          rounding is the section's, clipped at the bottom by overflow-hidden. */}
+          rounding is the section's, clipped at the bottom by overflow-hidden.
+          Every section uses the same fixed column widths (RollCols) so the
+          columns line up down the whole page, not just within one class. */}
       <div className="overflow-x-auto bg-[var(--mat-solid)]">
-        <table className="table-zebra w-full text-sm">
+        <table className="table-zebra w-full min-w-[820px] table-fixed text-sm">
+          <RollCols />
           {showColumns && (
             <thead>
               <tr>
