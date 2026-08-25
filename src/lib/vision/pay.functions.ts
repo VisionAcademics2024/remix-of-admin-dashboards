@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+import { addDays } from "@/lib/format";
 import { db, requireOwner } from "./guard";
 import type { Row } from "./types";
 
@@ -16,17 +17,28 @@ export const getFortnightPay = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const client = db(context.supabase);
 
-    // Totals are worked out here from the lesson rows rather than read from the
-    // v_tutor_fortnight_pay view. The view inner-joins to tutors, so a lesson
-    // whose tutor is not yet assigned vanishes from it — which showed as "no
-    // lessons in this fortnight" even when the timetable was full. Building the
-    // totals in code keeps those lessons visible, grouped under "Unassigned",
-    // and means the screen no longer depends on that view being in the database.
+    // The fortnight's lessons are picked out by session_date (the Sydney
+    // calendar date of the lesson), NOT by the view's fortnight_start column.
+    //
+    // Why: an older single-argument fortnight_start() function, anchored to
+    // 2024-01-01, still shadows the two-argument one anchored to 2026-08-03 that
+    // the app uses. v_sessions calls it with one argument, so the column it
+    // stores can disagree with the fortnight the app is asking for — which made
+    // this screen show "no lessons in this fortnight" while the timetable (which
+    // filters by timestamp, not fortnight_start) was full. session_date is just
+    // the Sydney date and carries no anchor, so a plain date-range filter is
+    // correct whichever fortnight_start function the database happens to have.
+    //
+    // Totals are then summed here rather than read from v_tutor_fortnight_pay,
+    // whose inner join to tutors dropped any lesson with no tutor assigned. In
+    // code they stay visible, grouped under "Unassigned".
+    const fortnightEnd = addDays(data.fortnight_start, 13);
     const [lessons, payouts, rates, tutors] = await Promise.all([
       client
         .from("v_session_pay")
         .select("*")
-        .eq("fortnight_start", data.fortnight_start)
+        .gte("session_date", data.fortnight_start)
+        .lte("session_date", fortnightEnd)
         .order("session_date"),
       client.from("tutor_payouts").select("*").eq("fortnight_start", data.fortnight_start),
       client.from("tutor_pay_rates").select("*").order("effective_from", { ascending: false }),
