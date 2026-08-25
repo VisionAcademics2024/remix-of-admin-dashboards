@@ -23,6 +23,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { getNeedsAttentionCount } from "@/lib/vision/overview.functions";
 import type { StaffRole } from "@/lib/vision/types";
 import { cn } from "@/lib/utils";
+import visionLogo from "@/assets/vision-logo.png.asset.json";
+
 
 /**
  * The ornament.
@@ -127,9 +129,10 @@ export function AppSidebar({
     >
       {/* Identity */}
       <div className="mb-1 flex h-10 shrink-0 items-center gap-2.5 px-1.5">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-chart-4 text-[0.8rem] font-bold text-primary-foreground shadow-[inset_0_1px_0_0_var(--edge-top)]">
-          V
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-white via-[#FBF7F0] to-[#EDE6DA] shadow-[inset_0_1px_0_0_var(--edge-top)]">
+          <img src={visionLogo.url} alt="Vision Academics" className="h-6 w-6 object-contain" />
         </span>
+
         <span
           className={cn(
             "min-w-0 transition-opacity duration-200",

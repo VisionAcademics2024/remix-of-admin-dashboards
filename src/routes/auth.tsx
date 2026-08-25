@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import visionLogo from "@/assets/vision-logo.png.asset.json";
+
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
@@ -83,9 +85,10 @@ function AuthPage() {
 
         <div className="glass glass--thick animate-spatial-in mx-auto w-full max-w-md rounded-[2rem] p-6 sm:p-8">
           <div className="mb-7 flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-chart-4 text-primary-foreground shadow-[inset_0_1px_0_0_var(--edge-top),0_10px_26px_-14px_var(--color-primary)]">
-              <GraduationCap className="h-5 w-5" />
+            <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-white via-[#FBF7F0] to-[#EDE6DA] shadow-[inset_0_1px_0_0_var(--edge-top),0_10px_26px_-14px_rgba(15,23,42,0.35)]">
+              <img src={visionLogo.url} alt="Vision Academics" className="h-7 w-7 object-contain" />
             </div>
+
             <div>
               <p className="text-lg font-semibold tracking-[-0.025em]">Vision CRM</p>
               <p className="text-xs text-muted-foreground">Vision Academics operations</p>
