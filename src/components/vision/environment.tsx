@@ -302,10 +302,7 @@ export function EnvironmentButton() {
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-3">
         <EnvironmentPicker />
-        <p className="mt-3 text-[0.68rem] leading-relaxed text-muted-foreground">
-          Placeholder scenes. Drop real photography into{" "}
-          <span className="code-chip">public/environments/</span> to replace them.
-        </p>
+
       </PopoverContent>
     </Popover>
   );
