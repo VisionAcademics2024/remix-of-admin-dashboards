@@ -133,10 +133,19 @@ function RollPage() {
   }
 
   async function setStatus(id: string, status: "present" | "absent" | "not_marked") {
+    // Flip the row the instant it is tapped, before the server answers, so the
+    // button colour confirms the press with no wait. If the save fails the row
+    // is rolled back to what it was and the error shown.
+    const key = ["roll", filter, today];
+    const previous = queryClient.getQueryData<Row[]>(key);
+    queryClient.setQueryData<Row[]>(key, (old) =>
+      (old ?? []).map((r) => (r.id === id ? { ...r, status, effective_status: status } : r)),
+    );
     try {
       await mark({ data: { id, status } });
       await refresh();
     } catch (error) {
+      if (previous) queryClient.setQueryData(key, previous);
       toast.error((error as Error).message);
     }
   }
