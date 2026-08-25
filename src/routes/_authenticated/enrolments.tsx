@@ -40,6 +40,7 @@ import {
 import { formatDate, formatHours, formatMoney, sydToday } from "@/lib/format";
 import {
   listCommerce,
+  saveEnrolment,
   savePackage,
   setPackageEligibility,
   updatePackageStatus,
@@ -57,6 +58,7 @@ export const Route = createFileRoute("/_authenticated/enrolments")({
 function EnrolmentsPage() {
   const { data } = useSuspenseQuery(commerceQueryOptions());
   const [newPackage, setNewPackage] = useState(false);
+  const [newEnrol, setNewEnrol] = useState(false);
   const [editingEligibility, setEditingEligibility] = useState<Row | null>(null);
 
   const eligibilityByPackage = new Map<string, string[]>();
@@ -76,9 +78,14 @@ function EnrolmentsPage() {
         title="Enrolments & Hours"
         description="The commercial view: every enrolment with its agreed price, every package with its balance."
         actions={
-          <Button size="sm" onClick={() => setNewPackage(true)}>
-            <Plus className="mr-1 h-4 w-4" /> New hours package
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setNewEnrol(true)}>
+              <Plus className="mr-1 h-4 w-4" /> New enrolment
+            </Button>
+            <Button size="sm" onClick={() => setNewPackage(true)}>
+              <Plus className="mr-1 h-4 w-4" /> New hours package
+            </Button>
+          </div>
         }
       />
 
@@ -188,10 +195,10 @@ function EnrolmentsPage() {
             <EmptyState
               icon={Wallet}
               title="No enrolments"
-              hint="Enrol students from Class Builder — an enrolment is a student in one class, carrying the agreed price."
+              hint="An enrolment is a student in one class, carrying the agreed price. Add one here, or build a whole class in Class Builder."
               action={
-                <Button asChild size="sm">
-                  <Link to="/classes/new">Open Class Builder</Link>
+                <Button size="sm" onClick={() => setNewEnrol(true)}>
+                  New enrolment
                 </Button>
               }
             />
@@ -259,6 +266,16 @@ function EnrolmentsPage() {
         </TabsContent>
       </Tabs>
 
+      {newEnrol && (
+        <EnrolDialog
+          students={data.students}
+          offerings={data.offerings}
+          prices={data.prices}
+          packages={data.packages}
+          eligibility={data.eligibility}
+          onClose={() => setNewEnrol(false)}
+        />
+      )}
       {newPackage && (
         <PackageDialog
           students={data.students}
@@ -388,6 +405,309 @@ function EligibilityDialog({
               Save eligibility
             </Button>
           </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Enrol one student into one or more classes, from a start date.
+ *
+ * This is the answer to "someone joined mid-term": an enrolment carries a
+ * starts_on, and the roll is seeded only for lessons on or after that date — so
+ * you never touch the timetable lesson by lesson. Ticking several classes makes
+ * several enrolments at once, all sharing the date and terms. For an hours
+ * student you can point the enrolment at the package it draws from here too, and
+ * that package is marked eligible for the new enrolments in the same step, so
+ * the roll validates straight away.
+ */
+function EnrolDialog({
+  students,
+  offerings,
+  prices,
+  packages,
+  eligibility,
+  onClose,
+}: {
+  students: Row[];
+  offerings: Row[];
+  prices: Row[];
+  packages: Row[];
+  eligibility: Row[];
+  onClose: () => void;
+}) {
+  const enrol = useServerFn(saveEnrolment);
+  const setEligibility = useServerFn(setPackageEligibility);
+  const queryClient = useQueryClient();
+
+  const [studentId, setStudentId] = useState("");
+  const [offeringIds, setOfferingIds] = useState<string[]>([]);
+  const [startsOn, setStartsOn] = useState(() => sydToday());
+  const [billing, setBilling] = useState<"hours" | "payg" | "trial">("hours");
+  const [priceId, setPriceId] = useState("");
+  const [hoursOverride, setHoursOverride] = useState("");
+  const [packageId, setPackageId] = useState("");
+  const [classSearch, setClassSearch] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const selectedPrice = prices.find((p: Row) => p.id === priceId);
+  const needHours = selectedPrice?.basis === "per_hour";
+
+  // Only this student's active packages can be drawn from.
+  const studentPackages = packages.filter(
+    (p: Row) => p.student_id === studentId && p.status === "active",
+  );
+
+  const term = classSearch.trim().toLowerCase();
+  const visibleOfferings = (offerings ?? [])
+    .filter((o: Row) => o.status !== "archived")
+    .filter((o: Row) =>
+      term
+        ? `${o.programs?.name ?? ""} ${o.code} ${o.operating_periods?.code ?? ""}`
+            .toLowerCase()
+            .includes(term)
+        : true,
+    );
+
+  const canSubmit =
+    !!studentId &&
+    offeringIds.length > 0 &&
+    !!startsOn &&
+    (!needHours || Number(hoursOverride) > 0) &&
+    !busy;
+
+  async function submit() {
+    setBusy(true);
+    try {
+      const createdIds: string[] = [];
+      for (const class_offering_id of offeringIds) {
+        const row = await enrol({
+          data: {
+            student_id: studentId,
+            class_offering_id,
+            status: billing === "trial" ? "trial" : "active",
+            starts_on: startsOn,
+            method: billing === "trial" ? null : billing,
+            standard_price_id: priceId || null,
+            hours_override: needHours ? Number(hoursOverride) : null,
+            default_package_id: billing === "hours" ? packageId || null : null,
+            notes: "",
+          },
+        });
+        if (row?.id) createdIds.push(row.id);
+      }
+
+      // A package only pays a roll it is eligible for, so tick the new
+      // enrolments onto the chosen package in the same step (merged with
+      // whatever it already covered).
+      if (billing === "hours" && packageId && createdIds.length) {
+        const already = eligibility
+          .filter((e: Row) => e.package_id === packageId)
+          .map((e: Row) => e.enrolment_id);
+        await setEligibility({
+          data: {
+            package_id: packageId,
+            enrolment_ids: Array.from(new Set([...already, ...createdIds])),
+          },
+        });
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ["commerce"] });
+      await queryClient.invalidateQueries({ queryKey: ["roll"] });
+      await queryClient.invalidateQueries({ queryKey: ["today"] });
+      await queryClient.invalidateQueries({ queryKey: ["timetable"] });
+      await queryClient.invalidateQueries({ queryKey: ["needs-attention-count"] });
+      toast.success(
+        createdIds.length === 1
+          ? "Enrolled, and the roll is seeded from the start date."
+          : `Enrolled in ${createdIds.length} classes, rolls seeded from the start date.`,
+      );
+      onClose();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>New enrolment</DialogTitle>
+          <DialogDescription>
+            Enrol a student into one or more classes from a start date. The roll fills in only from
+            that date on, so this is how you add someone who joined mid-term.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-3">
+          <div className="space-y-1.5">
+            <Label>Student</Label>
+            <Select
+              value={studentId}
+              onValueChange={(v) => {
+                setStudentId(v);
+                setPackageId("");
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Who is enrolling…" />
+              </SelectTrigger>
+              <SelectContent>
+                {students.map((s: Row) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.full_name} · {s.code}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Classes</Label>
+            <Input
+              placeholder="Search classes…"
+              value={classSearch}
+              onChange={(e) => setClassSearch(e.target.value)}
+            />
+            <div className="max-h-44 space-y-1.5 overflow-y-auto rounded-md border border-primary/30 bg-primary/5 p-3">
+              {visibleOfferings.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No classes match.</p>
+              ) : (
+                visibleOfferings.map((o: Row) => (
+                  <label
+                    key={o.id}
+                    htmlFor={`enrol-${o.id}`}
+                    className="flex cursor-pointer items-center gap-2"
+                  >
+                    <Checkbox
+                      id={`enrol-${o.id}`}
+                      checked={offeringIds.includes(o.id)}
+                      onCheckedChange={(checked) =>
+                        setOfferingIds(
+                          checked
+                            ? [...offeringIds, o.id]
+                            : offeringIds.filter((x) => x !== o.id),
+                        )
+                      }
+                    />
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      {o.programs?.name ?? "Class"} · <Code>{o.code}</Code>
+                      {o.operating_periods?.code ? (
+                        <span className="text-muted-foreground"> · {o.operating_periods.code}</span>
+                      ) : null}
+                    </span>
+                  </label>
+                ))
+              )}
+            </div>
+            {offeringIds.length > 1 && (
+              <p className="text-xs text-muted-foreground">
+                {offeringIds.length} classes — one enrolment each, all from the same start date.
+              </p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Starts on</Label>
+              <Input
+                type="date"
+                value={startsOn}
+                onChange={(e) => setStartsOn(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Billing</Label>
+              <Select
+                value={billing}
+                onValueChange={(v: "hours" | "payg" | "trial") => {
+                  setBilling(v);
+                  if (v !== "hours") setPackageId("");
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="hours">Hours package</SelectItem>
+                  <SelectItem value="payg">Pay as you go</SelectItem>
+                  <SelectItem value="trial">Trial (no charge)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {billing === "hours" && (
+            <div className="space-y-1.5">
+              <Label>Draws from package</Label>
+              <Select
+                value={packageId || "none"}
+                onValueChange={(v) => setPackageId(v === "none" ? "" : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a package…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Set later</SelectItem>
+                  {studentPackages.map((p: Row) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.code} · {formatHours(p.hours_remaining)} left
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Pick the package these hours come out of and it is marked eligible automatically.
+                {studentId && studentPackages.length === 0
+                  ? " This student has no active package yet — create one after enrolling."
+                  : ""}
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Price (optional)</Label>
+              <Select value={priceId || "none"} onValueChange={(v) => setPriceId(v === "none" ? "" : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Standard price…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {prices.map((p: Row) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {needHours && (
+              <div className="space-y-1.5">
+                <Label>Hours bought</Label>
+                <Input
+                  type="number"
+                  step="0.25"
+                  min="0"
+                  placeholder="e.g. 14"
+                  value={hoursOverride}
+                  onChange={(e) => setHoursOverride(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button disabled={!canSubmit} onClick={submit}>
+            {offeringIds.length > 1 ? `Enrol in ${offeringIds.length} classes` : "Enrol"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
