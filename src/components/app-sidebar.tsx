@@ -23,6 +23,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { getNeedsAttentionCount } from "@/lib/vision/overview.functions";
 import type { StaffRole } from "@/lib/vision/types";
 import { cn } from "@/lib/utils";
+import visionLogo from "@/assets/vision-logo.png.asset.json";
+
 
 /**
  * The ornament.
