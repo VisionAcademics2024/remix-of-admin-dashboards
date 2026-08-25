@@ -13,6 +13,7 @@ import {
   Settings,
   Sunrise,
   UserCog,
+  Users,
   Wallet,
   Wrench,
   type LucideIcon,
@@ -55,6 +56,7 @@ const MANAGE: NavItem[] = [
   { title: "Students & Families", url: "/students", icon: GraduationCap },
   { title: "Classes", url: "/classes", icon: LayoutGrid },
   { title: "Enrolments & Hours", url: "/enrolments", icon: Wallet },
+  { title: "Tutors", url: "/tutors", icon: Users },
   { title: "Billing", url: "/billing", icon: Receipt },
   { title: "Tutor Pay", url: "/tutor-pay", icon: BadgeDollarSign, ownerOnly: true },
 ];

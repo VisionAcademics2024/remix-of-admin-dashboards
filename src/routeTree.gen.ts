@@ -22,6 +22,7 @@ import { Route as AuthenticatedStaffRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedTimetableRouteImport } from './routes/_authenticated/timetable'
 import { Route as AuthenticatedTodayRouteImport } from './routes/_authenticated/today'
 import { Route as AuthenticatedTutorPayRouteImport } from './routes/_authenticated/tutor-pay'
+import { Route as AuthenticatedTutorsRouteImport } from './routes/_authenticated/tutors'
 import { Route as AuthenticatedClassesIndexRouteImport } from './routes/_authenticated/classes.index'
 import { Route as AuthenticatedClassesNewRouteImport } from './routes/_authenticated/classes.new'
 import { Route as AuthenticatedPrototypeDashboardRouteImport } from './routes/_authenticated/prototype.dashboard'
@@ -98,6 +99,11 @@ const AuthenticatedTutorPayRoute = AuthenticatedTutorPayRouteImport.update({
   path: '/tutor-pay',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedTutorsRoute = AuthenticatedTutorsRouteImport.update({
+  id: '/tutors',
+  path: '/tutors',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedClassesIndexRoute =
   AuthenticatedClassesIndexRouteImport.update({
     id: '/classes/',
@@ -170,6 +176,7 @@ export interface FileRoutesByFullPath {
   '/timetable': typeof AuthenticatedTimetableRoute
   '/today': typeof AuthenticatedTodayRoute
   '/tutor-pay': typeof AuthenticatedTutorPayRoute
+  '/tutors': typeof AuthenticatedTutorsRoute
   '/classes/new': typeof AuthenticatedClassesNewRoute
   '/prototype/dashboard': typeof AuthenticatedPrototypeDashboardRoute
   '/prototype/packages': typeof AuthenticatedPrototypePackagesRoute
@@ -194,6 +201,7 @@ export interface FileRoutesByTo {
   '/timetable': typeof AuthenticatedTimetableRoute
   '/today': typeof AuthenticatedTodayRoute
   '/tutor-pay': typeof AuthenticatedTutorPayRoute
+  '/tutors': typeof AuthenticatedTutorsRoute
   '/classes/new': typeof AuthenticatedClassesNewRoute
   '/prototype/dashboard': typeof AuthenticatedPrototypeDashboardRoute
   '/prototype/packages': typeof AuthenticatedPrototypePackagesRoute
@@ -220,6 +228,7 @@ export interface FileRoutesById {
   '/_authenticated/timetable': typeof AuthenticatedTimetableRoute
   '/_authenticated/today': typeof AuthenticatedTodayRoute
   '/_authenticated/tutor-pay': typeof AuthenticatedTutorPayRoute
+  '/_authenticated/tutors': typeof AuthenticatedTutorsRoute
   '/_authenticated/classes/new': typeof AuthenticatedClassesNewRoute
   '/_authenticated/prototype/dashboard': typeof AuthenticatedPrototypeDashboardRoute
   '/_authenticated/prototype/packages': typeof AuthenticatedPrototypePackagesRoute
@@ -246,6 +255,7 @@ export interface FileRouteTypes {
     | '/timetable'
     | '/today'
     | '/tutor-pay'
+    | '/tutors'
     | '/classes/new'
     | '/prototype/dashboard'
     | '/prototype/packages'
@@ -270,6 +280,7 @@ export interface FileRouteTypes {
     | '/timetable'
     | '/today'
     | '/tutor-pay'
+    | '/tutors'
     | '/classes/new'
     | '/prototype/dashboard'
     | '/prototype/packages'
@@ -295,6 +306,7 @@ export interface FileRouteTypes {
     | '/_authenticated/timetable'
     | '/_authenticated/today'
     | '/_authenticated/tutor-pay'
+    | '/_authenticated/tutors'
     | '/_authenticated/classes/new'
     | '/_authenticated/prototype/dashboard'
     | '/_authenticated/prototype/packages'
@@ -407,6 +419,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTutorPayRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/tutors': {
+      id: '/_authenticated/tutors'
+      path: '/tutors'
+      fullPath: '/tutors'
+      preLoaderRoute: typeof AuthenticatedTutorsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/classes/': {
       id: '/_authenticated/classes/'
       path: '/classes'
@@ -505,6 +524,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedTimetableRoute: typeof AuthenticatedTimetableRoute
   AuthenticatedTodayRoute: typeof AuthenticatedTodayRoute
   AuthenticatedTutorPayRoute: typeof AuthenticatedTutorPayRoute
+  AuthenticatedTutorsRoute: typeof AuthenticatedTutorsRoute
   AuthenticatedClassesNewRoute: typeof AuthenticatedClassesNewRoute
   AuthenticatedPrototypeDashboardRoute: typeof AuthenticatedPrototypeDashboardRoute
   AuthenticatedPrototypePackagesRoute: typeof AuthenticatedPrototypePackagesRoute
@@ -526,6 +546,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedTimetableRoute: AuthenticatedTimetableRoute,
   AuthenticatedTodayRoute: AuthenticatedTodayRoute,
   AuthenticatedTutorPayRoute: AuthenticatedTutorPayRoute,
+  AuthenticatedTutorsRoute: AuthenticatedTutorsRoute,
   AuthenticatedClassesNewRoute: AuthenticatedClassesNewRoute,
   AuthenticatedPrototypeDashboardRoute: AuthenticatedPrototypeDashboardRoute,
   AuthenticatedPrototypePackagesRoute: AuthenticatedPrototypePackagesRoute,
