@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
  * We can't track a head, so we track the pointer: --mx/--my feed the radial
  * gradient in `.glass--specular::before`.
  *
- * Written straight to the element's style rather than through React state —
+ * Written straight to the element's style rather than through React state -
  * this fires on every pointer move, and a re-render per frame would be a
  * needless cost for something purely visual.
  */
@@ -48,7 +48,7 @@ export interface GlassProps {
   className?: string | undefined;
   /**
    * How much of the environment shows through.
-   * `solid` is for anything carrying dense data — see the note in styles.css.
+   * `solid` is for anything carrying dense data - see the note in styles.css.
    */
   material?: Material | undefined;
   /** Lift toward the viewer on hover. Off for static containers. */

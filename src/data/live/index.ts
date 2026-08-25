@@ -1,5 +1,5 @@
 /**
- * Live adapter — the default data path.
+ * Live adapter - the default data path.
  *
  * Every method delegates to an existing server function in src/lib/vision.
  * Nothing here adds, changes or bypasses business logic; where a read shape is
@@ -24,7 +24,7 @@ import { listRoll } from "@/lib/vision/roll.functions";
 import { getSessionRoll, listToday, listWeek } from "@/lib/vision/schedule.functions";
 import { getMe, listStaff } from "@/lib/vision/session.functions";
 
-/** Client-side narrowing only — the server owns filtering it already supports. */
+/** Client-side narrowing only - the server owns filtering it already supports. */
 function applyDirectoryFilter(rows: unknown[], params?: DirectoryParams) {
   if (!params) return rows;
   const search = params.search?.trim().toLowerCase();

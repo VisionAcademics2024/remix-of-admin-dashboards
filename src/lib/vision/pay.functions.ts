@@ -23,7 +23,7 @@ export const getFortnightPay = createServerFn({ method: "GET" })
     // Why: an older single-argument fortnight_start() function, anchored to
     // 2024-01-01, still shadows the two-argument one anchored to 2026-08-03 that
     // the app uses. v_sessions calls it with one argument, so the column it
-    // stores can disagree with the fortnight the app is asking for — which made
+    // stores can disagree with the fortnight the app is asking for - which made
     // this screen show "no lessons in this fortnight" while the timetable (which
     // filters by timestamp, not fortnight_start) was full. session_date is just
     // the Sydney date and carries no anchor, so a plain date-range filter is
@@ -108,7 +108,7 @@ export const getFortnightPay = createServerFn({ method: "GET" })
 
 /**
  * A new rate is a new row. Repricing a past fortnight because someone got a
- * raise is a bug, not a feature — v_session_pay always reads the rate in force
+ * raise is a bug, not a feature - v_session_pay always reads the rate in force
  * on the lesson's own date.
  */
 export const addPayRate = createServerFn({ method: "POST" })

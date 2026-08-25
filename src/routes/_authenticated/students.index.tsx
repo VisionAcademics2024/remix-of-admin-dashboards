@@ -105,7 +105,7 @@ function StudentsPage() {
     <div className="stagger space-y-5">
       <PageHeader
         title="Students & Families"
-        description="The student is the record; parents are attached to them. One parent can cover several students — that is how siblings work — and every student needs exactly one default payer, drawn from their own parents."
+        description="The student is the record; parents are attached to them. One parent can cover several students - that is how siblings work - and every student needs exactly one default payer, drawn from their own parents."
         actions={
           <Button size="sm" onClick={() => setNewStudent(true)}>
             <Plus className="mr-1 h-4 w-4" /> New student
@@ -145,7 +145,7 @@ function StudentsPage() {
               hint={
                 term
                   ? "Try part of a name, a phone number or an email address."
-                  : "Creating a student is as fast as typing a name — everything else can wait."
+                  : "Creating a student is as fast as typing a name - everything else can wait."
               }
               action={
                 term ? undefined : (
@@ -190,8 +190,8 @@ function StudentsPage() {
                           )}
                         </div>
                       </Td>
-                      <Td>{s.year_level ?? "—"}</Td>
-                      <Td className="max-w-40 truncate">{s.current_school ?? "—"}</Td>
+                      <Td>{s.year_level ?? "-"}</Td>
+                      <Td className="max-w-40 truncate">{s.current_school ?? "-"}</Td>
                       <Td>
                         {payer ? (
                           <>
@@ -334,7 +334,7 @@ function StudentsPage() {
  */
 function ContactLinks({ person }: { person: Row | undefined }) {
   if (!person || (!person.mobile && !person.email)) {
-    return <span className="text-xs text-muted-foreground">—</span>;
+    return <span className="text-xs text-muted-foreground">-</span>;
   }
   return (
     <div className="space-y-0.5 text-xs">
@@ -463,7 +463,7 @@ function NewGuardianDialog({ onClose }: { onClose: () => void }) {
         <DialogHeader>
           <DialogTitle>New guardian</DialogTitle>
           <DialogDescription>
-            A parent or payer. Guardians never log in — this is a contact record, not an account.
+            A parent or payer. Guardians never log in - this is a contact record, not an account.
           </DialogDescription>
         </DialogHeader>
 
@@ -787,7 +787,7 @@ function FamilyDialog({
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium">{g.full_name}</div>
                       <div className="truncate text-xs text-muted-foreground">
-                        {g.relationship || g.email || g.mobile || "—"}
+                        {g.relationship || g.email || g.mobile || "-"}
                       </div>
                     </div>
                     {student.default_payer_id === g.id ? (
@@ -823,7 +823,7 @@ function FamilyDialog({
           <div className="space-y-3 rounded-md border p-3">
             <Label>Attach a parent</Label>
             <p className="text-xs text-muted-foreground">
-              Attach someone already on file when this is a sibling — that is what keeps one parent
+              Attach someone already on file when this is a sibling - that is what keeps one parent
               record covering both children instead of two half-filled ones.
             </p>
 

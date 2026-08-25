@@ -85,7 +85,7 @@ function StudentDetailPage() {
           {guardians.length === 0 ? (
             <EmptyState
               title="No parent attached"
-              hint="Attach one from Students & Families — the default payer must be one of them."
+              hint="Attach one from Students & Families - the default payer must be one of them."
             />
           ) : (
             <ul className="divide-y">
@@ -211,14 +211,14 @@ function StudentDetailPage() {
               {enrolments.map((e: Row) => (
                 <tr key={e.id}>
                   <Td>
-                    {e.class_offerings?.programs?.name ?? "—"}
+                    {e.class_offerings?.programs?.name ?? "-"}
                     <div>
                       <Code>{e.code}</Code>
                     </div>
                   </Td>
-                  <Td>{e.class_offerings?.operating_periods?.code ?? "—"}</Td>
+                  <Td>{e.class_offerings?.operating_periods?.code ?? "-"}</Td>
                   <Td className="whitespace-nowrap">{formatDate(e.starts_on)}</Td>
-                  <Td>{e.method ? LABELS.billingMethod[e.method as "hours" | "payg"] : "—"}</Td>
+                  <Td>{e.method ? LABELS.billingMethod[e.method as "hours" | "payg"] : "-"}</Td>
                   <Td className="text-right tabular-nums">{formatMoney(e.final_agreed_price)}</Td>
                   <Td>
                     <StatusPill tone={toneForStatus("enrolment", e.status)}>{e.status}</StatusPill>
@@ -312,7 +312,7 @@ function StudentDetailPage() {
                   <Td>
                     <Code>{a.sessions?.code}</Code>
                   </Td>
-                  <Td>{a.sessions?.tutors?.full_name ?? "—"}</Td>
+                  <Td>{a.sessions?.tutors?.full_name ?? "-"}</Td>
                   <Td>{LABELS.attendanceType[a.att_type as "regular" | "trial" | "make_up"]}</Td>
                   <Td className="text-right tabular-nums">{formatHours(a.hours_consumed)}</Td>
                   <Td>
@@ -326,7 +326,7 @@ function StudentDetailPage() {
                         {a.make_up_state}
                       </StatusPill>
                     ) : (
-                      "—"
+                      "-"
                     )}
                   </Td>
                 </tr>
@@ -372,7 +372,7 @@ function StudentDetailPage() {
                       {LABELS.chargeStatus[c.status as keyof typeof LABELS.chargeStatus]}
                     </StatusPill>
                   </Td>
-                  <Td className="text-xs text-muted-foreground">{c.xero_invoice_no ?? "—"}</Td>
+                  <Td className="text-xs text-muted-foreground">{c.xero_invoice_no ?? "-"}</Td>
                 </tr>
               ))}
             </tbody>
@@ -397,7 +397,7 @@ function Detail({
       <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
       <dd className="mt-0.5 flex items-center gap-1.5">
         {Icon && value && <Icon className="h-3.5 w-3.5 text-muted-foreground" />}
-        {value || "—"}
+        {value || "-"}
       </dd>
     </div>
   );

@@ -65,7 +65,7 @@ function TutorsPage() {
     <div className="stagger space-y-5">
       <PageHeader
         title="Tutors"
-        description="The tutor database — contact details, timetable colour, and hourly pay rates."
+        description="The tutor database - contact details, timetable colour, and hourly pay rates."
         actions={
           <Button size="sm" onClick={() => setEditing("new")}>
             <Plus className="mr-1 h-4 w-4" /> New tutor
@@ -84,7 +84,7 @@ function TutorsPage() {
         <EmptyState
           icon={UserCog}
           title="No tutors yet"
-          hint="Add a tutor — their colour makes the timetable readable, and their rate feeds tutor pay."
+          hint="Add a tutor - their colour makes the timetable readable, and their rate feeds tutor pay."
           action={
             <Button size="sm" onClick={() => setEditing("new")}>
               Add a tutor
@@ -112,7 +112,7 @@ function TutorsPage() {
                   </div>
                 </Td>
                 <Td className="text-sm">
-                  <div>{t.email || <span className="text-muted-foreground">—</span>}</div>
+                  <div>{t.email || <span className="text-muted-foreground">-</span>}</div>
                   <div className="text-muted-foreground">{t.mobile || ""}</div>
                 </Td>
                 <Td>
@@ -321,7 +321,7 @@ function RatesDialog({ tutor, onClose }: { tutor: Row; onClose: () => void }) {
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Pay rates — {tutor.full_name}</DialogTitle>
+          <DialogTitle>Pay rates - {tutor.full_name}</DialogTitle>
           <DialogDescription>
             Add a rate with the date it starts. Older rates stay for the days they applied, so past
             pay is never rewritten.
@@ -345,7 +345,7 @@ function RatesDialog({ tutor, onClose }: { tutor: Row; onClose: () => void }) {
                     <td className="px-3 py-2 text-right tabular-nums">
                       {formatMoney(r.hourly_rate)}/h
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">{r.note || "—"}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{r.note || "-"}</td>
                   </tr>
                 ))}
               </tbody>

@@ -153,7 +153,7 @@ const tutorInput = z.object({
 /**
  * The tutor database: every tutor with their details and pay-rate history, and
  * the rate in force today worked out for the list. Rates live under owner-only
- * RLS, so a non-owner simply sees them empty — the details are still theirs to
+ * RLS, so a non-owner simply sees them empty - the details are still theirs to
  * read and edit.
  */
 export const listTutors = createServerFn({ method: "GET" })

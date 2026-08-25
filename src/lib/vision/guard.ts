@@ -18,7 +18,7 @@ export function db(client: unknown): AnyClient {
 
 /**
  * 05-auth-and-permissions.md: an auth.users row on its own grants nothing.
- * Access requires an active `staff` row. RLS enforces this at the database —
+ * Access requires an active `staff` row. RLS enforces this at the database -
  * this middleware exists so the API refuses with a clear message instead of
  * silently returning zero rows.
  */

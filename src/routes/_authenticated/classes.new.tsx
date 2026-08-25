@@ -55,7 +55,7 @@ function ClassBuilderPage() {
 
       <PageHeader
         title="Class Builder"
-        description="Make a class — it generates its lessons and lands on the timetable. Add students and how they pay after, or leave that for later."
+        description="Make a class - it generates its lessons and lands on the timetable. Add students and how they pay after, or leave that for later."
       />
 
       <StepCard
@@ -103,7 +103,7 @@ function ClassBuilderPage() {
       {offeringId && (
         <div className="flex justify-end gap-2">
           <Button asChild variant="outline">
-            <Link to="/classes">Done — back to classes</Link>
+            <Link to="/classes">Done - back to classes</Link>
           </Button>
           <Button asChild>
             <Link to="/timetable">See it on the timetable</Link>
@@ -233,7 +233,7 @@ function StepOne({
 
       // Generate its lessons straight away so the class is on the timetable the
       // moment it exists. If there is nothing to generate from yet, the class is
-      // still made — the lessons can come once a first lesson and recurrence are
+      // still made - the lessons can come once a first lesson and recurrence are
       // set.
       let lessons = 0;
       try {
@@ -246,7 +246,7 @@ function StepOne({
 
       toast.success(
         lessons > 0
-          ? `Class ${row.code} created — ${lessons} lesson${lessons === 1 ? "" : "s"} on the timetable.`
+          ? `Class ${row.code} created - ${lessons} lesson${lessons === 1 ? "" : "s"} on the timetable.`
           : `Class ${row.code} created. Set a first lesson and recurrence to generate its lessons.`,
       );
       onCreated(row.id, lessons);
@@ -551,7 +551,7 @@ function StepTwo({
                   <Td>
                     {e.students?.full_name} <Code>{e.code}</Code>
                   </Td>
-                  <Td>{e.method ? LABELS.billingMethod[e.method as "hours" | "payg"] : "—"}</Td>
+                  <Td>{e.method ? LABELS.billingMethod[e.method as "hours" | "payg"] : "-"}</Td>
                   <Td>
                     <StatusPill tone={e.status === "trial" ? "info" : "success"}>
                       {e.status}
@@ -560,7 +560,7 @@ function StepTwo({
                   <Td className="text-right tabular-nums">
                     {e.final_agreed_price != null
                       ? `$${Number(e.final_agreed_price).toFixed(2)}`
-                      : "—"}
+                      : "-"}
                   </Td>
                 </tr>
               ))}
@@ -611,8 +611,8 @@ function StepTwo({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="hours">Hours — buy a block, draw it down</SelectItem>
-                  <SelectItem value="payg">Pay as you go — a charge per lesson</SelectItem>
+                  <SelectItem value="hours">Hours - buy a block, draw it down</SelectItem>
+                  <SelectItem value="payg">Pay as you go - a charge per lesson</SelectItem>
                 </SelectContent>
               </Select>
             </div>

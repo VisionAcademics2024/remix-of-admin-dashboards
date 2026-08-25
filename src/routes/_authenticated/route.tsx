@@ -35,7 +35,7 @@ export const Route = createFileRoute("/_authenticated")({
  * The window.
  *
  * visionOS floats a single pane in space with its navigation hung alongside,
- * so there is no full-height chrome column here — the ornament is absolutely
+ * so there is no full-height chrome column here - the ornament is absolutely
  * positioned and the content simply keeps clear of it.
  */
 function AuthenticatedLayout() {
@@ -57,7 +57,7 @@ function AuthenticatedLayout() {
       className={cn(
         // From lg up the page makes room for the rail rather than being covered
         // by it. Below that there is no width to give away, so it overlays and
-        // the rail thickens instead — see .ornament[data-expanded] in styles.css.
+        // the rail thickens instead - see .ornament[data-expanded] in styles.css.
         "min-h-screen pl-[5.5rem] pr-3 transition-[padding] duration-[320ms] lg:pr-5",
         navExpanded ? "lg:pl-[17.25rem]" : "lg:pl-[6.25rem]",
       )}

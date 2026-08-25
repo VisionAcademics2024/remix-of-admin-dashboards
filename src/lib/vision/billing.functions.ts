@@ -7,7 +7,7 @@ import type { Row } from "./types";
 /**
  * Money in, as a pipeline: to charge → to invoice → unpaid → received.
  *
- * "To charge" is the one queue that is not a charge status — it is attendance
+ * "To charge" is the one queue that is not a charge status - it is attendance
  * that has been taught and not yet billed.
  */
 export const getBillingBoard = createServerFn({ method: "GET" })
@@ -170,7 +170,7 @@ export const createHoursCharge = createServerFn({ method: "POST" })
   });
 
 /**
- * "Bill these together" raises nothing new — it stamps one Xero invoice number
+ * "Bill these together" raises nothing new - it stamps one Xero invoice number
  * across several charges, so a family gets one document while every lesson
  * keeps its own traceable line.
  */
@@ -198,7 +198,7 @@ export const markInvoiced = createServerFn({ method: "POST" })
     return { updated: data.ids.length };
   });
 
-/** Paid requires a date and a method — the database will not accept it otherwise. */
+/** Paid requires a date and a method - the database will not accept it otherwise. */
 export const markPaid = createServerFn({ method: "POST" })
   .middleware([requireStaff])
   .inputValidator((data) =>
@@ -255,7 +255,7 @@ export const adjustCharge = createServerFn({ method: "POST" })
     return { success: true };
   });
 
-/** Never delete a charge that was invoiced — cancel it. */
+/** Never delete a charge that was invoiced - cancel it. */
 export const cancelCharge = createServerFn({ method: "POST" })
   .middleware([requireStaff])
   .inputValidator((data) => z.object({ id: z.string().uuid() }).parse(data))

@@ -143,14 +143,14 @@ function TodayPage() {
                         params={{ id: row.student_id }}
                         className="font-medium hover:underline"
                       >
-                        {row.enrolments?.students?.full_name ?? "—"}
+                        {row.enrolments?.students?.full_name ?? "-"}
                       </Link>
                       <div>
                         <Code>{row.enrolments?.students?.code}</Code>
                       </div>
                     </Td>
                     <Td>
-                      <div>{row.sessions?.class_offerings?.programs?.name ?? "—"}</div>
+                      <div>{row.sessions?.class_offerings?.programs?.name ?? "-"}</div>
                       <Code>{row.sessions?.code}</Code>
                     </Td>
                     <Td className="whitespace-nowrap">

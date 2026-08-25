@@ -26,7 +26,7 @@ export const listClassOfferings = createServerFn({ method: "GET" })
     if (error) throw error;
 
     const enrolledBy = new Map<string, number>();
-    // The single enrolled student, kept only while a class has exactly one — a
+    // The single enrolled student, kept only while a class has exactly one - a
     // private lesson reads better by who is in it than by a generic class name.
     const soleStudentBy = new Map<string, string | null>();
     for (const e of enrolments ?? []) {
@@ -87,7 +87,7 @@ const offeringInput = z.object({
   starts_on: z.string().min(1),
   ends_on: z.string().min(1),
   recurrence: z.enum(["weekly", "fortnightly", "daily", "one_off", "ad_hoc"]),
-  /** Sydney wall-clock "YYYY-MM-DDTHH:mm" — fixes both weekday and time of day. */
+  /** Sydney wall-clock "YYYY-MM-DDTHH:mm" - fixes both weekday and time of day. */
   recurrence_start_local: z.string().optional().or(z.literal("")),
   session_duration_hours: z.coerce.number().positive(),
   room: z.string().optional().or(z.literal("")),
@@ -128,7 +128,7 @@ export const saveClassOffering = createServerFn({ method: "POST" })
   });
 
 /**
- * Idempotent by construction — the unique index on (class_offering_id,
+ * Idempotent by construction - the unique index on (class_offering_id,
  * starts_at) plus "on conflict do nothing" inside the function. Re-running
  * never creates duplicates, which is the bug this replaces.
  */
@@ -166,7 +166,7 @@ export const seedRollForOffering = createServerFn({ method: "POST" })
 
 /**
  * Closing, not deleting. Deleting is allowed only while a class has no
- * enrolments and no lessons — the foreign keys enforce the rest.
+ * enrolments and no lessons - the foreign keys enforce the rest.
  */
 export const closeClassOffering = createServerFn({ method: "POST" })
   .middleware([requireStaff])

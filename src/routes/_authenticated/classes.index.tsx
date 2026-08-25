@@ -129,13 +129,13 @@ function ClassesPage() {
                         <div className="flex items-center gap-2">
                           <Code>{c.code}</Code>
                           <span className="text-xs text-muted-foreground">
-                            {c.programs?.name ?? "—"}
+                            {c.programs?.name ?? "-"}
                           </span>
                         </div>
                       </>
                     ) : (
                       <>
-                        <div className="font-medium">{c.programs?.name ?? "—"}</div>
+                        <div className="font-medium">{c.programs?.name ?? "-"}</div>
                         <div className="flex items-center gap-2">
                           <Code>{c.code}</Code>
                           <span className="text-xs text-muted-foreground">
@@ -149,7 +149,7 @@ function ClassesPage() {
                       </>
                     )}
                   </Td>
-                  <Td>{c.operating_periods?.code ?? "—"}</Td>
+                  <Td>{c.operating_periods?.code ?? "-"}</Td>
                   <Td>
                     <TutorDot colour={c.tutors?.colour} name={c.tutors?.full_name} />
                   </Td>
@@ -239,7 +239,7 @@ function ClassesPage() {
       )}
 
       <p className="text-xs text-muted-foreground">
-        Generating lessons is idempotent — the unique index on (class, start time) means re-running
+        Generating lessons is idempotent - the unique index on (class, start time) means re-running
         never creates duplicates. Changing a lesson's time is an edit on the Timetable, never a
         delete and regenerate.
       </p>

@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * The generated Database type describes the current live tables, which no
  * longer include the renamed `proto_*` tables these legacy screens query.
  * Rather than delete working reference code, reach those tables through a
- * loosely-typed client — the same approach `src/lib/vision/guard.ts` uses.
+ * loosely-typed client - the same approach `src/lib/vision/guard.ts` uses.
  *
  * These screens are quarantined reference material: they are not linked from
  * the navigation, and the `proto_*` tables do not currently exist in the

@@ -216,7 +216,7 @@ function StaffPage() {
         </TableShell>
 
         <p className="mt-3 text-xs text-muted-foreground">
-          Deactivating is a switch, never a delete — deleting the row would lose the audit trail on
+          Deactivating is a switch, never a delete - deleting the row would lose the audit trail on
           per-lesson pay adjustments. A role change takes effect on the person's next request.
         </p>
       </Section>

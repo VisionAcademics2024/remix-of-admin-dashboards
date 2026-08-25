@@ -268,7 +268,7 @@ async function syncEligibility(client: AnyClient, packageId: string, enrolmentId
 }
 
 /**
- * Eligibility is the most misunderstood relationship in the system — a student
+ * Eligibility is the most misunderstood relationship in the system - a student
  * in two classes needs both enrolments ticked or their roll will not validate.
  * It gets its own endpoint so the UI can put it front and centre.
  */
@@ -285,7 +285,7 @@ export const setPackageEligibility = createServerFn({ method: "POST" })
   });
 
 /**
- * Point an existing enrolment at the package its hours draw from — the fix for a
+ * Point an existing enrolment at the package its hours draw from - the fix for a
  * roll that reads "Hours · no package".
  *
  * Three things have to happen together, which is why this is one endpoint:
@@ -293,7 +293,7 @@ export const setPackageEligibility = createServerFn({ method: "POST" })
  *      hours enrolment if it was not one;
  *   2. the package is made eligible for the enrolment, or hours can never be
  *      drawn from it;
- *   3. the roll already seeded for this enrolment is re-pointed at the package —
+ *   3. the roll already seeded for this enrolment is re-pointed at the package -
  *      seeding is do-nothing-on-conflict, so rows created before the package was
  *      set keep their empty package and would otherwise stay "no package".
  *

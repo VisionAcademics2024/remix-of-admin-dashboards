@@ -129,7 +129,7 @@ export const listRange = createServerFn({ method: "GET" })
   });
 
 /**
- * The one enrolled student for each offering that has exactly one — null for
+ * The one enrolled student for each offering that has exactly one - null for
  * classes with none or with two or more. A closed enrolment does not count.
  */
 async function soleStudentByOffering(
@@ -187,7 +187,7 @@ const sessionPatch = z.object({
 });
 
 /**
- * Edit lesson times in place. Never delete and regenerate — that orphans the
+ * Edit lesson times in place. Never delete and regenerate - that orphans the
  * roll and loses attendance marks.
  */
 export const updateSession = createServerFn({ method: "POST" })
@@ -211,12 +211,12 @@ export const updateSession = createServerFn({ method: "POST" })
  * A lesson dragged off the slot it was generated in becomes a make-up: its type
  * flips to `dedicated_make_up` and the slot it came from is remembered. Drag it
  * back onto that exact slot and it becomes an ordinary lesson again, the
- * remembered slot cleared. Only this one lesson changes — every other week's
+ * remembered slot cleared. Only this one lesson changes - every other week's
  * lesson in the class is its own row and stays put.
  *
  * Reading and writing the base table (not the view) so the original slot is
  * available; if the columns that hold it are not present yet, the move and the
- * make-up flag still take effect — only the remembered slot is skipped.
+ * make-up flag still take effect - only the remembered slot is skipped.
  */
 export const moveSession = createServerFn({ method: "POST" })
   .middleware([requireStaff])
@@ -246,8 +246,8 @@ export const moveSession = createServerFn({ method: "POST" })
       Date.parse(data.starts_at) === Date.parse(origStart) &&
       Date.parse(data.ends_at) === Date.parse(origEnd);
 
-    // A moved lesson becomes a make-up, and make-ups stack — a class may hold a
-    // make-up on top of its normal lesson, or several at once — so a move onto
+    // A moved lesson becomes a make-up, and make-ups stack - a class may hold a
+    // make-up on top of its normal lesson, or several at once - so a move onto
     // an occupied slot is fine and needs no clearing. Only two REGULAR lessons
     // at the same start are still refused (the friendly message below), which a
     // move never causes: it always lands as a make-up.
@@ -270,7 +270,7 @@ export const moveSession = createServerFn({ method: "POST" })
 
     let { error } = await client.from("sessions").update(payload).eq("id", data.id);
     // If the remembered-slot columns are not in this database yet, still move
-    // the lesson and set the make-up flag — just without the memory.
+    // the lesson and set the make-up flag - just without the memory.
     if (error && /original_(starts|ends)_at/.test(error.message)) {
       const { original_starts_at, original_ends_at, ...rest } = payload;
       void original_starts_at;
@@ -306,7 +306,7 @@ export const cancelSession = createServerFn({ method: "POST" })
 /**
  * Delete a lesson.
  *
- * Without `force` this stays deliberately hard to reach — allowed only while the
+ * Without `force` this stays deliberately hard to reach - allowed only while the
  * lesson has no roll, so a lesson that has run is cancelled instead. With
  * `force` (an explicit "delete anyway" from the lesson panel) it removes the
  * roll first and then the lesson, for clearing out a spare or duplicate lesson
@@ -327,7 +327,7 @@ export const deleteSession = createServerFn({ method: "POST" })
     if ((count ?? 0) > 0) {
       if (!data.force) {
         throw new Error(
-          "This lesson has a roll. Cancel it instead — deleting would erase the attendance record.",
+          "This lesson has a roll. Cancel it instead - deleting would erase the attendance record.",
         );
       }
       const { error: rollError } = await client

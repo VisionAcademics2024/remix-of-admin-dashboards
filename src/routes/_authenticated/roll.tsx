@@ -161,7 +161,7 @@ function RollPage() {
     <div className="stagger space-y-5">
       <PageHeader
         title="Attendance Roll"
-        description="The full attendance record — corrections, history and make-ups."
+        description="The full attendance record - corrections, history and make-ups."
         actions={
           unmarkedIds.length > 0 ? (
             <Button
@@ -244,7 +244,7 @@ function RollPage() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Un-marking a student refunds their hours automatically — the balance is a view, not a stored
+        Un-marking a student refunds their hours automatically - the balance is a view, not a stored
         number. A PAYG entry with no package is normal and is never flagged.
       </p>
 
@@ -269,8 +269,8 @@ type LessonGrouping = {
 /**
  * One block per lesson, newest first, students alphabetical inside it.
  *
- * The order is taken from the rows as they arrive — already sorted by lesson
- * time — so the groups stay in the order the day actually runs rather than
+ * The order is taken from the rows as they arrive - already sorted by lesson
+ * time - so the groups stay in the order the day actually runs rather than
  * being re-sorted into something unfamiliar.
  */
 function groupByLesson(rows: Row[]): LessonGrouping[] {
@@ -297,8 +297,8 @@ function groupByLesson(rows: Row[]): LessonGrouping[] {
 /**
  * A class, and everyone on its roll.
  *
- * The header carries what belongs to the lesson rather than to a student — the
- * class, the time, the tutor — so it is stated once instead of repeated down
+ * The header carries what belongs to the lesson rather than to a student - the
+ * class, the time, the tutor - so it is stated once instead of repeated down
  * every row, and it is where the whole-class actions live. Marking a class
  * present is one press, not eight.
  */
@@ -363,7 +363,7 @@ function LessonGroup({
             size="sm"
             variant="outline"
             disabled={makeUpable.length === 0}
-            title="The whole class was away — book one make-up lesson for all of them"
+            title="The whole class was away - book one make-up lesson for all of them"
             onClick={() => onMakeUp(makeUpable)}
           >
             Make up the class
@@ -371,7 +371,7 @@ function LessonGroup({
         </div>
       </header>
 
-      {/* The roll sits flush under the header — no card-within-a-card. The one
+      {/* The roll sits flush under the header - no card-within-a-card. The one
           rounding is the section's, clipped at the bottom by overflow-hidden. */}
       <div className="overflow-x-auto bg-[var(--mat-solid)]">
         <table className="table-zebra w-full text-sm">
@@ -396,7 +396,7 @@ function LessonGroup({
                     params={{ id: row.student_id }}
                     className="font-medium hover:underline"
                   >
-                    {row.enrolments?.students?.full_name ?? "—"}
+                    {row.enrolments?.students?.full_name ?? "-"}
                   </Link>
                   <div>
                     <Code>{row.enrolments?.students?.code}</Code>
@@ -493,7 +493,7 @@ function LessonGroup({
 /**
  * The tutor, and a way to set it. A make-up lesson is usually booked before
  * anyone knows who is teaching it, so an empty tutor is a normal state here
- * rather than a fault — but it should be fixable without leaving the roll.
+ * rather than a fault - but it should be fixable without leaving the roll.
  */
 function TutorCell({
   row,
@@ -564,8 +564,8 @@ function TutorCell({
  * Away, and owed a make-up.
  *
  * Two outcomes, because there are only two things that are actually true at
- * this moment: a day has been picked, or it has not. Everything else — who
- * teaches it, which package pays — can be filled in later and should not block
+ * this moment: a day has been picked, or it has not. Everything else - who
+ * teaches it, which package pays - can be filled in later and should not block
  * recording that the student was away.
  */
 function MakeUpDialog({
@@ -657,8 +657,8 @@ function MakeUpDialog({
         <DialogHeader>
           <DialogTitle>
             {many
-              ? `${lead.sessions?.class_offerings?.programs?.name ?? "Class"} — make up the class`
-              : `${who} — make-up`}
+              ? `${lead.sessions?.class_offerings?.programs?.name ?? "Class"} - make up the class`
+              : `${who} - make-up`}
           </DialogTitle>
           <DialogDescription>
             Marks {many ? `all ${rows.length}` : "them"} away for{" "}
@@ -693,7 +693,7 @@ function MakeUpDialog({
               hint={
                 many
                   ? "Creates one lesson and puts the whole class on it. A tutor is optional."
-                  : "Books the make-up. A tutor is optional — decide that later if you need to."
+                  : "Books the make-up. A tutor is optional - decide that later if you need to."
               }
             />
           </div>

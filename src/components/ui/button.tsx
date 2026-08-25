@@ -53,7 +53,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     // A press should feel like a press. Beyond the held-down scale from the
     // `.press` class, every tap fires a quick squash-and-settle pop so the
-    // click plainly registers — even on a fast tap, and even when the action
+    // click plainly registers - even on a fast tap, and even when the action
     // behind it takes a moment to come back. Driven by the Web Animations API
     // rather than a CSS class so a re-render (an optimistic update, say) mid-pop
     // can't cut it short, and skipped when the viewer prefers reduced motion.

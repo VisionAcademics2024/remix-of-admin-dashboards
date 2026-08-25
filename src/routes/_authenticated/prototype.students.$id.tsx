@@ -100,30 +100,30 @@ function StudentDetailPage() {
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="flex items-center gap-2 text-sm">
             <Mail className="h-4 w-4 text-muted-foreground" />
-            <span>{student.email || "—"}</span>
+            <span>{student.email || "-"}</span>
           </div>
           <div className="flex items-center gap-2 text-sm">
             <Phone className="h-4 w-4 text-muted-foreground" />
-            <span>{student.phone || "—"}</span>
+            <span>{student.phone || "-"}</span>
           </div>
           <div className="flex items-center gap-2 text-sm">
             <GraduationCap className="h-4 w-4 text-muted-foreground" />
-            <span>Grade: {student.grade || "—"}</span>
+            <span>Grade: {student.grade || "-"}</span>
           </div>
           <div className="flex items-center gap-2 text-sm">
             <School className="h-4 w-4 text-muted-foreground" />
-            <span>{student.school || "—"}</span>
+            <span>{student.school || "-"}</span>
           </div>
           <Separator className="sm:col-span-2" />
           <div className="text-sm">
             <p className="font-medium">Parent / Guardian</p>
-            <p className="text-muted-foreground">{student.parent_name || "—"}</p>
-            <p className="text-muted-foreground">{student.parent_phone || "—"}</p>
-            <p className="text-muted-foreground">{student.parent_email || "—"}</p>
+            <p className="text-muted-foreground">{student.parent_name || "-"}</p>
+            <p className="text-muted-foreground">{student.parent_phone || "-"}</p>
+            <p className="text-muted-foreground">{student.parent_email || "-"}</p>
           </div>
           <div className="text-sm">
             <p className="font-medium">Notes</p>
-            <p className="text-muted-foreground">{student.notes || "—"}</p>
+            <p className="text-muted-foreground">{student.notes || "-"}</p>
           </div>
         </CardContent>
       </Card>
@@ -178,7 +178,7 @@ function StudentDetailPage() {
                   <div>
                     <p className="font-medium">{record.session_title}</p>
                     <p className="text-sm text-muted-foreground">
-                      {record.start_time ? new Date(record.start_time).toLocaleString() : "—"} ·
+                      {record.start_time ? new Date(record.start_time).toLocaleString() : "-"} ·
                       Tutor: {record.tutor_name}
                     </p>
                   </div>

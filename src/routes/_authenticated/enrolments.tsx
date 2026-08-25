@@ -239,9 +239,9 @@ function EnrolmentsPage() {
                       </Link>
                     </Td>
                     <Td className="max-w-40 truncate">
-                      {e.class_offerings?.programs?.name ?? "—"}
+                      {e.class_offerings?.programs?.name ?? "-"}
                     </Td>
-                    <Td>{e.class_offerings?.operating_periods?.code ?? "—"}</Td>
+                    <Td>{e.class_offerings?.operating_periods?.code ?? "-"}</Td>
                     <Td>
                       {e.method ? (
                         LABELS.billingMethod[e.method as "hours" | "payg"]
@@ -261,13 +261,13 @@ function EnrolmentsPage() {
                             : "Add package"}
                         </Button>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">-</span>
                       )}
                     </Td>
                     <Td className="text-right tabular-nums">{formatMoney(e.base_price)}</Td>
                     <Td className="text-xs">
                       {e.adjustment === "none"
-                        ? "—"
+                        ? "-"
                         : `${LABELS.adjustmentType[e.adjustment as keyof typeof LABELS.adjustmentType]}: ${e.adjustment_value}`}
                     </Td>
                     <Td className="text-right font-medium tabular-nums">
@@ -353,7 +353,7 @@ function EligibilityDialog({
           <DialogTitle>What can {pkg.code} be spent on?</DialogTitle>
           <DialogDescription>
             {pkg.students?.full_name}'s package. A student in two classes needs both enrolments
-            ticked, or their roll will not validate — the database refuses to draw hours from a
+            ticked, or their roll will not validate - the database refuses to draw hours from a
             package that is not eligible.
           </DialogDescription>
         </DialogHeader>
@@ -547,7 +547,7 @@ function scheduleLabel(o: Row): string {
  * Enrol one student into one or more classes, from a start date.
  *
  * This is the answer to "someone joined mid-term": an enrolment carries a
- * starts_on, and the roll is seeded only for lessons on or after that date — so
+ * starts_on, and the roll is seeded only for lessons on or after that date - so
  * you never touch the timetable lesson by lesson. Ticking several classes makes
  * several enrolments at once, all sharing the date and terms. For an hours
  * student you can point the enrolment at the package it draws from here too, and
@@ -746,7 +746,7 @@ function EnrolDialog({
             </div>
             {offeringIds.length > 1 && (
               <p className="text-xs text-muted-foreground">
-                {offeringIds.length} classes — one enrolment each, all from the same start date.
+                {offeringIds.length} classes - one enrolment each, all from the same start date.
               </p>
             )}
           </div>
@@ -803,7 +803,7 @@ function EnrolDialog({
               <p className="text-xs text-muted-foreground">
                 Pick the package these hours come out of and it is marked eligible automatically.
                 {studentId && studentPackages.length === 0
-                  ? " This student has no active package yet — create one after enrolling."
+                  ? " This student has no active package yet - create one after enrolling."
                   : ""}
               </p>
             </div>
@@ -888,7 +888,7 @@ function PackageDialog({
         <DialogHeader>
           <DialogTitle>New hours package</DialogTitle>
           <DialogDescription>
-            A block of hours belonging to one student. Tick which enrolments it may be spent on —
+            A block of hours belonging to one student. Tick which enrolments it may be spent on -
             one package can cover several classes.
           </DialogDescription>
         </DialogHeader>

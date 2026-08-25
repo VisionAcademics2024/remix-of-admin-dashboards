@@ -1,5 +1,5 @@
 /**
- * Mock adapter — tests and isolated previews only.
+ * Mock adapter - tests and isolated previews only.
  *
  * This checkpoint ships the skeleton: the same interface as the live adapter,
  * the shared mock clock, and an explicit refusal for reads whose fixtures do
