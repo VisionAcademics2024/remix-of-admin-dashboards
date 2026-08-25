@@ -48,10 +48,41 @@ export interface ButtonProps
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, onPointerDown, ...props }, ref) => {
     const Comp = asChild ? Slot : "button";
+
+    // A press should feel like a press. Beyond the held-down scale from the
+    // `.press` class, every tap fires a quick squash-and-settle pop so the
+    // click plainly registers — even on a fast tap, and even when the action
+    // behind it takes a moment to come back. Driven by the Web Animations API
+    // rather than a CSS class so a re-render (an optimistic update, say) mid-pop
+    // can't cut it short, and skipped when the viewer prefers reduced motion.
+    const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+      const el = event.currentTarget;
+      if (
+        typeof el.animate === "function" &&
+        !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+      ) {
+        el.animate(
+          [
+            { transform: "scale(1)" },
+            { transform: "scale(0.9)", offset: 0.35 },
+            { transform: "scale(1.04)", offset: 0.7 },
+            { transform: "scale(1)" },
+          ],
+          { duration: 260, easing: "cubic-bezier(0.32, 0.72, 0, 1)" },
+        );
+      }
+      onPointerDown?.(event);
+    };
+
     return (
-      <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        onPointerDown={handlePointerDown}
+        {...props}
+      />
     );
   },
 );
