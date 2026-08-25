@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { claimFirstOwner, requestAccess } from "@/lib/vision/session.functions";
 import { meQueryOptions } from "@/lib/vision/me";
+import visionLogo from "@/assets/vision-logo.png.asset.json";
+
 
 /**
  * Signed in but not yet staff. This lives outside the protected layout on
