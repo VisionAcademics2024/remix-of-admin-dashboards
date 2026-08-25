@@ -42,6 +42,7 @@ import {
   listCommerce,
   saveEnrolment,
   savePackage,
+  setEnrolmentPackage,
   setPackageEligibility,
   updatePackageStatus,
 } from "@/lib/vision/commerce.functions";
@@ -60,6 +61,9 @@ function EnrolmentsPage() {
   const [newPackage, setNewPackage] = useState(false);
   const [newEnrol, setNewEnrol] = useState(false);
   const [editingEligibility, setEditingEligibility] = useState<Row | null>(null);
+  const [pkgFor, setPkgFor] = useState<Row | null>(null);
+
+  const packagesById = new Map(data.packages.map((p: Row) => [p.id, p]));
 
   const eligibilityByPackage = new Map<string, string[]>();
   for (const row of data.eligibility) {
@@ -211,6 +215,7 @@ function EnrolmentsPage() {
                   <Th>Class</Th>
                   <Th>Term</Th>
                   <Th>Method</Th>
+                  <Th>Package</Th>
                   <Th className="text-right">Base</Th>
                   <Th>Adjustment</Th>
                   <Th className="text-right">Agreed</Th>
@@ -244,6 +249,21 @@ function EnrolmentsPage() {
                         <span className="text-muted-foreground">Trial</span>
                       )}
                     </Td>
+                    <Td>
+                      {e.method === "hours" ? (
+                        <Button
+                          size="sm"
+                          variant={e.default_package_id ? "outline" : "destructive"}
+                          onClick={() => setPkgFor(e)}
+                        >
+                          {e.default_package_id
+                            ? (packagesById.get(e.default_package_id)?.code ?? "Package")
+                            : "Add package"}
+                        </Button>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </Td>
                     <Td className="text-right tabular-nums">{formatMoney(e.base_price)}</Td>
                     <Td className="text-xs">
                       {e.adjustment === "none"
@@ -266,6 +286,13 @@ function EnrolmentsPage() {
         </TabsContent>
       </Tabs>
 
+      {pkgFor && (
+        <EnrolmentPackageDialog
+          enrolment={pkgFor}
+          packages={data.packages}
+          onClose={() => setPkgFor(null)}
+        />
+      )}
       {newEnrol && (
         <EnrolDialog
           students={data.students}
@@ -405,6 +432,97 @@ function EligibilityDialog({
               Save eligibility
             </Button>
           </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Attach (or change, or clear) the package an existing hours enrolment draws
+ * from. This is the fix for a roll reading "Hours · no package": it points the
+ * enrolment at the package, marks it eligible, and re-points the roll already on
+ * the books, all in one step.
+ */
+function EnrolmentPackageDialog({
+  enrolment,
+  packages,
+  onClose,
+}: {
+  enrolment: Row;
+  packages: Row[];
+  onClose: () => void;
+}) {
+  const save = useServerFn(setEnrolmentPackage);
+  const queryClient = useQueryClient();
+  const [selected, setSelected] = useState<string>(enrolment.default_package_id ?? "");
+  const [busy, setBusy] = useState(false);
+
+  const candidates = packages.filter(
+    (p: Row) => p.student_id === enrolment.student_id && p.status === "active",
+  );
+
+  async function submit() {
+    setBusy(true);
+    try {
+      await save({ data: { enrolment_id: enrolment.id, package_id: selected || null } });
+      await queryClient.invalidateQueries({ queryKey: ["commerce"] });
+      await queryClient.invalidateQueries({ queryKey: ["roll"] });
+      await queryClient.invalidateQueries({ queryKey: ["today"] });
+      await queryClient.invalidateQueries({ queryKey: ["needs-attention-count"] });
+      toast.success(selected ? "Package attached, and the roll now draws from it." : "Package cleared.");
+      onClose();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Package for {enrolment.code}</DialogTitle>
+          <DialogDescription>
+            {enrolment.students?.full_name}'s hours in {enrolment.class_offerings?.programs?.name ??
+              "this class"}
+            {" "}come out of this package. Setting it fixes lessons already on the roll, not just
+            future ones.
+          </DialogDescription>
+        </DialogHeader>
+
+        {candidates.length === 0 ? (
+          <p className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+            This student has no active package yet. Create one with “New hours package”, then set it
+            here.
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            <Label>Draws from package</Label>
+            <Select value={selected || "none"} onValueChange={(v) => setSelected(v === "none" ? "" : v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a package…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No package</SelectItem>
+                {candidates.map((p: Row) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.code} · {formatHours(p.hours_remaining)} left
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button disabled={busy || candidates.length === 0} onClick={submit}>
+            Save
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

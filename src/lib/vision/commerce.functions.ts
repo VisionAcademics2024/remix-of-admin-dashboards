@@ -284,6 +284,92 @@ export const setPackageEligibility = createServerFn({ method: "POST" })
     return { success: true };
   });
 
+/**
+ * Point an existing enrolment at the package its hours draw from — the fix for a
+ * roll that reads "Hours · no package".
+ *
+ * Three things have to happen together, which is why this is one endpoint:
+ *   1. the enrolment remembers the package (default_package_id), and becomes an
+ *      hours enrolment if it was not one;
+ *   2. the package is made eligible for the enrolment, or hours can never be
+ *      drawn from it;
+ *   3. the roll already seeded for this enrolment is re-pointed at the package —
+ *      seeding is do-nothing-on-conflict, so rows created before the package was
+ *      set keep their empty package and would otherwise stay "no package".
+ *
+ * Passing a null package clears all three.
+ */
+export const setEnrolmentPackage = createServerFn({ method: "POST" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    z
+      .object({
+        enrolment_id: z.string().uuid(),
+        package_id: z.string().uuid().nullable(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+
+    const { data: enrolment, error: readErr } = await client
+      .from("enrolments")
+      .select("id, student_id, method")
+      .eq("id", data.enrolment_id)
+      .maybeSingle();
+    if (readErr) throw readErr;
+    if (!enrolment) throw new Error("That enrolment no longer exists.");
+
+    if (data.package_id) {
+      const { data: pkg, error: pErr } = await client
+        .from("hours_packages")
+        .select("id, student_id")
+        .eq("id", data.package_id)
+        .maybeSingle();
+      if (pErr) throw pErr;
+      if (!pkg) throw new Error("That package no longer exists.");
+      if (pkg.student_id !== enrolment.student_id) {
+        throw new Error("That package belongs to a different student.");
+      }
+    }
+
+    // 1. The enrolment remembers the package. Only hours enrolments draw from
+    //    one, so attaching a package makes it an hours enrolment.
+    const patch: Record<string, unknown> = { default_package_id: data.package_id };
+    if (data.package_id) patch["method"] = "hours";
+    const { error: upErr } = await client
+      .from("enrolments")
+      .update(patch)
+      .eq("id", data.enrolment_id);
+    if (upErr) throw upErr;
+
+    // 2. Eligibility, or the database refuses to spend the package on this roll.
+    if (data.package_id) {
+      const { data: existing } = await client
+        .from("package_eligibility")
+        .select("enrolment_id")
+        .eq("package_id", data.package_id)
+        .eq("enrolment_id", data.enrolment_id);
+      if (!existing || existing.length === 0) {
+        const { error } = await client
+          .from("package_eligibility")
+          .insert({ package_id: data.package_id, enrolment_id: data.enrolment_id });
+        if (error) throw error;
+      }
+    }
+
+    // 3. Re-point the roll already on the books for this enrolment. Trials never
+    //    draw hours, so they are left alone.
+    const { error: attErr } = await client
+      .from("attendance")
+      .update({ package_id: data.package_id })
+      .eq("enrolment_id", data.enrolment_id)
+      .neq("att_type", "trial");
+    if (attErr) throw attErr;
+
+    return { success: true };
+  });
+
 export const updatePackageStatus = createServerFn({ method: "POST" })
   .middleware([requireStaff])
   .inputValidator((data) =>
