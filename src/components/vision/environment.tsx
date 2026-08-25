@@ -58,40 +58,73 @@ export interface EnvironmentDef {
 
 export const ENVIRONMENTS: EnvironmentDef[] = [
   {
-    id: "vestrahorn",
-    name: "Vestrahorn",
+    id: "sonoma",
+    name: "Sonoma",
+    description: "Layered colour waves at sunset. Bright, graphic, dark type.",
+    image: sonoma.url,
+    thumb: sonomaThumb.url,
+    theme: "light",
+  },
+  {
+    id: "ventura",
+    name: "Ventura",
+    description: "Soft gradient bloom of magenta, blue and warm white.",
+    image: ventura.url,
+    thumb: venturaThumb.url,
+    theme: "light",
+  },
+  {
+    id: "mavericks",
+    name: "Mavericks",
+    description: "A long-lens wave rolling under a peach sunset.",
+    image: mavericks.url,
+    thumb: mavericksThumb.url,
+    theme: "light",
+  },
+  {
+    id: "el-capitan",
+    name: "El Capitan",
+    description: "Mist rising through pines below a granite face.",
+    image: elCapitan.url,
+    thumb: elCapitanThumb.url,
+    theme: "light",
+  },
+  {
+    id: "big-sur",
+    name: "Big Sur",
     description: "Twilight over black sand and still water. The calmest to read against.",
-    image: vestrahorn.url,
-    thumb: vestrahornThumb.url,
+    image: bigSur.url,
+    thumb: bigSurThumb.url,
     theme: "dark",
   },
   {
-    id: "yosemite",
-    name: "Yosemite",
+    id: "catalina",
+    name: "Catalina",
     description: "Winter dusk in the valley. Deep, cold, cinematic.",
-    image: yosemite.url,
-    thumb: yosemiteThumb.url,
+    image: catalina.url,
+    thumb: catalinaThumb.url,
     theme: "dark",
   },
   {
-    id: "vernazza",
-    name: "Vernazza",
-    description: "Warm lamplight on the Ligurian coast after sunset.",
-    image: vernazza.url,
-    thumb: vernazzaThumb.url,
+    id: "monterey",
+    name: "Monterey",
+    description: "Warm lamplight on the coast after sunset.",
+    image: sierra.url,
+    thumb: sierraThumb.url,
     theme: "dark",
   },
   {
-    id: "vermilion",
-    name: "Vermilion",
+    id: "mojave",
+    name: "Mojave",
     description: "Red canyon walls under bright daylight. Pale sky, dark type.",
-    image: vermilion.url,
-    thumb: vermilionThumb.url,
+    image: mojave.url,
+    thumb: mojaveThumb.url,
     theme: "light",
   },
 ];
 
-const DEFAULT_ID = "vestrahorn";
+const DEFAULT_ID = "sonoma";
+
 
 const STORAGE_KEY = "vision-environment";
 
