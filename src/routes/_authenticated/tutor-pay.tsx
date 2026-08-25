@@ -36,6 +36,7 @@ import {
   Th,
   toneForStatus,
 } from "@/components/vision/ui";
+import { cn } from "@/lib/utils";
 import {
   addDays,
   formatDate,
@@ -103,33 +104,63 @@ function TutorPayPage() {
       <PageHeader
         title="Tutor Pay"
         description="Owners only. Pay is computed from lessons, not enrolments — a lesson pays its own tutor at the rate in force on its own date."
-        actions={
-          <div className="flex items-center gap-1 rounded-md border p-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setFortnight(addDays(fortnight, -14))}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setFortnight(current)}>
-              This fortnight
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setFortnight(addDays(fortnight, 14))}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        }
       />
 
-      <p className="text-sm text-muted-foreground">
-        {label}: {formatDate(fortnight)} – {formatDate(addDays(fortnight, 13))} · Monday to Sunday,
-        two weeks, anchored to 3 Aug 2026 so the boundaries never drift.
-      </p>
+      {/* The fortnight, stated plainly. Two are always one tap away; the arrows
+          reach any other. */}
+      <div className="glass glass--solid flex flex-wrap items-center justify-between gap-4 rounded-2xl px-5 py-4">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Previous fortnight"
+            onClick={() => setFortnight(addDays(fortnight, -14))}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="min-w-0 text-center">
+            <div className="text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground">
+              {label}
+            </div>
+            <div className="text-xl font-semibold tracking-tight">
+              {formatDate(fortnight).replace(/ \d{4}$/, "")} – {formatDate(addDays(fortnight, 13))}
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Next fortnight"
+            onClick={() => setFortnight(addDays(fortnight, 14))}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          {[current, addDays(current, 14)].map((start, i) => {
+            const active = fortnight === start;
+            return (
+              <button
+                key={start}
+                type="button"
+                onClick={() => setFortnight(start)}
+                className={cn(
+                  "rounded-xl border px-3 py-2 text-left transition-colors",
+                  active ? "border-primary bg-primary/10" : "border-[var(--edge)] hover:bg-accent",
+                )}
+              >
+                <div className="text-xs font-medium">
+                  {i === 0 ? "This fortnight" : "Next fortnight"}
+                </div>
+                <div className="text-xs tabular-nums text-muted-foreground">
+                  {formatDate(start).replace(/ \d{4}$/, "")} –{" "}
+                  {formatDate(addDays(start, 13)).replace(/ \d{4}$/, "")}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Tutors with lessons" value={data.totals.length} />
@@ -161,31 +192,41 @@ function TutorPayPage() {
                     <div>
                       <p className="font-semibold">{t.tutor_name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {t.lessons} lessons · {formatHours(t.hours)} ·{" "}
+                        {t.lessons} {Number(t.lessons) === 1 ? "lesson" : "lessons"} ·{" "}
+                        {formatHours(t.hours)} taught
                         {Number(t.adjustments) !== 0 &&
-                          `adjustments ${formatMoney(t.adjustments)} · `}
-                        <strong className="text-foreground">{formatMoney(t.total_pay)}</strong>
+                          ` · adjustments ${formatMoney(t.adjustments)}`}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {payout && (
-                        <StatusPill tone={toneForStatus("payout", payout.status)}>
-                          {LABELS.payoutStatus[payout.status as keyof typeof LABELS.payoutStatus]}
-                        </StatusPill>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          setPayingOut({
-                            tutor: t,
-                            payout,
-                            rate: lessons.find((l: Row) => l.hourly_rate)?.hourly_rate ?? 0,
-                          })
-                        }
-                      >
-                        {payout ? "Edit payout" : "Create payout"}
-                      </Button>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <div className="text-[0.7rem] uppercase tracking-wide text-muted-foreground">
+                          Fortnight pay
+                        </div>
+                        <div className="text-lg font-semibold tabular-nums">
+                          {formatMoney(t.total_pay)}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {payout && (
+                          <StatusPill tone={toneForStatus("payout", payout.status)}>
+                            {LABELS.payoutStatus[payout.status as keyof typeof LABELS.payoutStatus]}
+                          </StatusPill>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setPayingOut({
+                              tutor: t,
+                              payout,
+                              rate: lessons.find((l: Row) => l.hourly_rate)?.hourly_rate ?? 0,
+                            })
+                          }
+                        >
+                          {payout ? "Edit payout" : "Create payout"}
+                        </Button>
+                      </div>
                     </div>
                   </div>
 
