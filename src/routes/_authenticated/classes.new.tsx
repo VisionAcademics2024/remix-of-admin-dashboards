@@ -119,25 +119,46 @@ function ModeCard({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        "press flex items-start gap-3 rounded-xl border p-4 text-left transition-colors",
+        "press relative flex items-start gap-3 rounded-xl border p-4 text-left transition-all",
         active
-          ? "border-primary bg-primary/10"
-          : "border-[var(--edge)] bg-[var(--mat-thin)] hover:bg-[var(--mat-regular)]",
+          ? // Selected: the solid, accented surface - the active choice, matching the form below.
+            "glass border-2 border-primary shadow-[0_12px_30px_-16px_var(--color-primary)]"
+          : // Unselected: light and recessed, clearly the option not taken.
+            "border border-[var(--edge)] bg-transparent opacity-65 hover:opacity-100 hover:bg-[var(--mat-thin)]",
       )}
     >
       <span
         className={cn(
-          "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
-          active ? "bg-primary text-primary-foreground" : "bg-[var(--mat-thick)] text-foreground/70",
+          "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors",
+          active
+            ? "bg-primary text-primary-foreground shadow-[inset_0_1px_0_0_var(--edge-top)]"
+            : "bg-[var(--mat-thin)] text-foreground/50",
         )}
       >
         <Icon className="h-4 w-4" />
       </span>
       <span className="min-w-0">
-        <span className="block text-sm font-semibold">{title}</span>
-        <span className="block text-xs text-muted-foreground">{description}</span>
+        <span
+          className={cn(
+            "block text-sm font-semibold",
+            active ? "text-foreground" : "text-foreground/70",
+          )}
+        >
+          {title}
+        </span>
+        <span
+          className={cn("block text-xs", active ? "text-muted-foreground" : "text-foreground/50")}
+        >
+          {description}
+        </span>
       </span>
+      {active && (
+        <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          <Check className="h-3 w-3" />
+        </span>
+      )}
     </button>
   );
 }
