@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
-import { ArrowLeft, Check, CircleDashed } from "lucide-react";
+import { ArrowLeft, Check, ChevronsUpDown, CircleDashed } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -15,18 +15,94 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Code, PageHeader, StatusPill, Td, Th } from "@/components/vision/ui";
 import { cn } from "@/lib/utils";
-import { formatHours, sydToday } from "@/lib/format";
+import { formatHours, sydneyLocalToInstant, sydToday } from "@/lib/format";
 import { getCatalogue, saveProgram } from "@/lib/vision/catalogue.functions";
 import {
   generateSessions,
   getClassOffering,
   saveClassOffering,
 } from "@/lib/vision/classes.functions";
+import { createSession } from "@/lib/vision/schedule.functions";
 import { listCommerce, saveEnrolment } from "@/lib/vision/commerce.functions";
 import { LABELS, Row } from "@/lib/vision/types";
+
+type Recurrence = "weekly" | "fortnightly" | "daily" | "one_off" | "ad_hoc";
+
+/** A dropdown that is also free-typeable, for a number of hours. */
+const LENGTH_PRESETS = ["0.5", "1", "1.5", "2", "2.5", "3"];
+
+/**
+ * Type-to-search picker for a student, so you find someone by name instead of
+ * scrolling a long list.
+ */
+function StudentCombobox({
+  students,
+  value,
+  onChange,
+  placeholder = "Type a student's name…",
+}: {
+  students: Row[];
+  value: string;
+  onChange: (id: string) => void;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = students.find((s: Row) => s.id === value);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-normal"
+        >
+          <span className={cn("truncate", !selected && "text-muted-foreground")}>
+            {selected ? `${selected.full_name} · ${selected.code}` : placeholder}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search students…" />
+          <CommandList>
+            <CommandEmpty>No student found.</CommandEmpty>
+            <CommandGroup>
+              {students.map((s: Row) => (
+                <CommandItem
+                  key={s.id}
+                  value={`${s.full_name} ${s.code}`}
+                  onSelect={() => {
+                    onChange(s.id);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn("mr-2 h-4 w-4", value === s.id ? "opacity-100" : "opacity-0")}
+                  />
+                  {s.full_name} · {s.code}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export const Route = createFileRoute("/_authenticated/classes/new")({
   component: ClassBuilderPage,
@@ -178,6 +254,7 @@ function StepOne({
 }) {
   const save = useServerFn(saveClassOffering);
   const generate = useServerFn(generateSessions);
+  const addSession = useServerFn(createSession);
   const saveProg = useServerFn(saveProgram);
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
@@ -189,7 +266,7 @@ function StepOne({
     capacity: 8,
     starts_on: sydToday(),
     ends_on: sydToday(),
-    recurrence: "weekly" as const,
+    recurrence: "weekly" as Recurrence,
     recurrence_start_local: "",
     session_duration_hours: 1.5,
     room: "",
@@ -205,6 +282,9 @@ function StepOne({
   const creatingProgram = form.program_id === "__new__";
   const program = (catalogue?.programs ?? []).find((p: Row) => p.id === form.program_id);
   const isPrivate = form.offering_type === "private_tuition";
+  // A one-off (or ad hoc) is a single lesson, not a repeating class, so it makes
+  // exactly one session instead of filling a whole term.
+  const isOneOff = form.recurrence === "one_off" || form.recurrence === "ad_hoc";
 
   async function createClass() {
     if (creatingProgram && (!newProg.name.trim() || !newProg.code.trim())) {
@@ -228,26 +308,62 @@ function StepOne({
         await queryClient.invalidateQueries({ queryKey: ["catalogue"] });
       }
 
-      const row: Row = await save({ data: { ...form, program_id: programId, status: "active" } });
+      // A one-off has no "runs until" - the single lesson's own date is the end.
+      const endsOn = isOneOff
+        ? form.recurrence_start_local
+          ? form.recurrence_start_local.slice(0, 10)
+          : form.starts_on
+        : form.ends_on;
+
+      const row: Row = await save({
+        data: { ...form, program_id: programId, ends_on: endsOn, status: "active" },
+      });
       await queryClient.invalidateQueries({ queryKey: ["classes"] });
 
-      // Generate its lessons straight away so the class is on the timetable the
-      // moment it exists. If there is nothing to generate from yet, the class is
-      // still made - the lessons can come once a first lesson and recurrence are
-      // set.
+      // Put the lesson(s) on the timetable straight away. A repeating class fills
+      // its term via generate_sessions; a one-off makes exactly one lesson at the
+      // first-lesson time (generate_sessions makes none for one-off on purpose).
       let lessons = 0;
-      try {
-        const gen = await generate({ data: { offering_id: row.id } });
-        lessons = gen.lessons_created;
-      } catch {
-        /* leave lessons at 0; the class was still created */
+      if (isOneOff) {
+        if (form.recurrence_start_local) {
+          try {
+            const startsAt = sydneyLocalToInstant(form.recurrence_start_local);
+            const endsAt = new Date(
+              Date.parse(startsAt) + form.session_duration_hours * 3_600_000,
+            ).toISOString();
+            await addSession({
+              data: {
+                class_offering_id: row.id,
+                tutor_id: form.primary_tutor_id || null,
+                starts_at: startsAt,
+                ends_at: endsAt,
+                room: form.room || "",
+                session_type: "regular",
+              },
+            });
+            lessons = 1;
+          } catch {
+            /* leave lessons at 0; the class was still created */
+          }
+        }
+      } else {
+        try {
+          const gen = await generate({ data: { offering_id: row.id } });
+          lessons = gen.lessons_created;
+        } catch {
+          /* leave lessons at 0; the class was still created */
+        }
       }
       await queryClient.invalidateQueries({ queryKey: ["timetable"] });
 
       toast.success(
         lessons > 0
-          ? `Class ${row.code} created - ${lessons} lesson${lessons === 1 ? "" : "s"} on the timetable.`
-          : `Class ${row.code} created. Set a first lesson and recurrence to generate its lessons.`,
+          ? isOneOff
+            ? `One-off lesson created for ${row.code} - it is on the timetable.`
+            : `Class ${row.code} created - ${lessons} lesson${lessons === 1 ? "" : "s"} on the timetable.`
+          : isOneOff
+            ? `Created ${row.code}. Set a first lesson time to place its lesson on the timetable.`
+            : `Class ${row.code} created. Set a first lesson and recurrence to generate its lessons.`,
       );
       onCreated(row.id, lessons);
     } catch (error) {
@@ -419,7 +535,7 @@ function StepOne({
         <Label>Repeats</Label>
         <Select
           value={form.recurrence}
-          onValueChange={(v: Row) => setForm({ ...form, recurrence: v })}
+          onValueChange={(v: Recurrence) => setForm({ ...form, recurrence: v })}
         >
           <SelectTrigger>
             <SelectValue />
@@ -432,10 +548,15 @@ function StepOne({
             ))}
           </SelectContent>
         </Select>
+        <p className="text-xs text-muted-foreground">
+          {isOneOff
+            ? "A single lesson - use this for a one-off with an existing student, not a whole term."
+            : "A repeating class that fills the term with lessons."}
+        </p>
       </div>
 
       <div className="space-y-1.5">
-        <Label>Runs from</Label>
+        <Label>{isOneOff ? "Lesson date" : "Runs from"}</Label>
         <Input
           type="date"
           value={form.starts_on}
@@ -443,14 +564,16 @@ function StepOne({
         />
       </div>
 
-      <div className="space-y-1.5">
-        <Label>Runs until</Label>
-        <Input
-          type="date"
-          value={form.ends_on}
-          onChange={(e) => setForm({ ...form, ends_on: e.target.value })}
-        />
-      </div>
+      {!isOneOff && (
+        <div className="space-y-1.5">
+          <Label>Runs until</Label>
+          <Input
+            type="date"
+            value={form.ends_on}
+            onChange={(e) => setForm({ ...form, ends_on: e.target.value })}
+          />
+        </div>
+      )}
 
       <div className="space-y-1.5">
         <Label>Lesson length (hours)</Label>
@@ -458,9 +581,15 @@ function StepOne({
           type="number"
           step="0.25"
           min={0.25}
+          list="lesson-length-presets"
           value={form.session_duration_hours}
           onChange={(e) => setForm({ ...form, session_duration_hours: Number(e.target.value) })}
         />
+        <datalist id="lesson-length-presets">
+          {LENGTH_PRESETS.map((v) => (
+            <option key={v} value={v} />
+          ))}
+        </datalist>
         {program && (
           <p className="text-xs text-muted-foreground">
             Program standard {formatHours(program.standard_duration_hours)}.
@@ -504,7 +633,7 @@ function StepOne({
           }
           onClick={createClass}
         >
-          Create class &amp; generate lessons
+          {isOneOff ? "Create one-off lesson" : "Create class & generate lessons"}
         </Button>
       </div>
     </div>
@@ -572,18 +701,12 @@ function StepTwo({
       <div className="grid gap-2.5 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label>Student</Label>
-          <Select value={studentId} onValueChange={setStudentId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Who is enrolling…" />
-            </SelectTrigger>
-            <SelectContent>
-              {(commerce?.students ?? []).map((s: Row) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.full_name} · {s.code}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <StudentCombobox
+            students={commerce?.students ?? []}
+            value={studentId}
+            onChange={setStudentId}
+            placeholder="Who is enrolling…"
+          />
         </div>
 
         <div className="space-y-1.5">
