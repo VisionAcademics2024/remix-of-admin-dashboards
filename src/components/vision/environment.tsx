@@ -13,14 +13,23 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 
 import { cn } from "@/lib/utils";
 
-import vestrahorn from "@/assets/environments/vestrahorn.jpg.asset.json";
-import vestrahornThumb from "@/assets/environments/vestrahorn-thumb.jpg.asset.json";
-import yosemite from "@/assets/environments/yosemite.jpg.asset.json";
-import yosemiteThumb from "@/assets/environments/yosemite-thumb.jpg.asset.json";
-import vernazza from "@/assets/environments/vernazza.jpg.asset.json";
-import vernazzaThumb from "@/assets/environments/vernazza-thumb.jpg.asset.json";
-import vermilion from "@/assets/environments/vermilion.jpg.asset.json";
-import vermilionThumb from "@/assets/environments/vermilion-thumb.jpg.asset.json";
+import sonoma from "@/assets/environments/sonoma.jpg.asset.json";
+import sonomaThumb from "@/assets/environments/sonoma-thumb.jpg.asset.json";
+import ventura from "@/assets/environments/ventura.jpg.asset.json";
+import venturaThumb from "@/assets/environments/ventura-thumb.jpg.asset.json";
+import mavericks from "@/assets/environments/mavericks.jpg.asset.json";
+import mavericksThumb from "@/assets/environments/mavericks-thumb.jpg.asset.json";
+import elCapitan from "@/assets/environments/yosemite2.jpg.asset.json";
+import elCapitanThumb from "@/assets/environments/yosemite2-thumb.jpg.asset.json";
+import bigSur from "@/assets/environments/vestrahorn.jpg.asset.json";
+import bigSurThumb from "@/assets/environments/vestrahorn-thumb.jpg.asset.json";
+import catalina from "@/assets/environments/yosemite.jpg.asset.json";
+import catalinaThumb from "@/assets/environments/yosemite-thumb.jpg.asset.json";
+import sierra from "@/assets/environments/vernazza.jpg.asset.json";
+import sierraThumb from "@/assets/environments/vernazza-thumb.jpg.asset.json";
+import mojave from "@/assets/environments/vermilion.jpg.asset.json";
+import mojaveThumb from "@/assets/environments/vermilion-thumb.jpg.asset.json";
+
 
 /**
  * Environments.
