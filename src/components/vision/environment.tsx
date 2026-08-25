@@ -13,14 +13,23 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 
 import { cn } from "@/lib/utils";
 
-import vestrahorn from "@/assets/environments/vestrahorn.jpg.asset.json";
-import vestrahornThumb from "@/assets/environments/vestrahorn-thumb.jpg.asset.json";
-import yosemite from "@/assets/environments/yosemite.jpg.asset.json";
-import yosemiteThumb from "@/assets/environments/yosemite-thumb.jpg.asset.json";
-import vernazza from "@/assets/environments/vernazza.jpg.asset.json";
-import vernazzaThumb from "@/assets/environments/vernazza-thumb.jpg.asset.json";
-import vermilion from "@/assets/environments/vermilion.jpg.asset.json";
-import vermilionThumb from "@/assets/environments/vermilion-thumb.jpg.asset.json";
+import sonoma from "@/assets/environments/sonoma.jpg.asset.json";
+import sonomaThumb from "@/assets/environments/sonoma-thumb.jpg.asset.json";
+import ventura from "@/assets/environments/ventura.jpg.asset.json";
+import venturaThumb from "@/assets/environments/ventura-thumb.jpg.asset.json";
+import mavericks from "@/assets/environments/mavericks.jpg.asset.json";
+import mavericksThumb from "@/assets/environments/mavericks-thumb.jpg.asset.json";
+import elCapitan from "@/assets/environments/yosemite2.jpg.asset.json";
+import elCapitanThumb from "@/assets/environments/yosemite2-thumb.jpg.asset.json";
+import bigSur from "@/assets/environments/vestrahorn.jpg.asset.json";
+import bigSurThumb from "@/assets/environments/vestrahorn-thumb.jpg.asset.json";
+import catalina from "@/assets/environments/yosemite.jpg.asset.json";
+import catalinaThumb from "@/assets/environments/yosemite-thumb.jpg.asset.json";
+import sierra from "@/assets/environments/vernazza.jpg.asset.json";
+import sierraThumb from "@/assets/environments/vernazza-thumb.jpg.asset.json";
+import mojave from "@/assets/environments/vermilion.jpg.asset.json";
+import mojaveThumb from "@/assets/environments/vermilion-thumb.jpg.asset.json";
+
 
 /**
  * Environments.
@@ -49,40 +58,73 @@ export interface EnvironmentDef {
 
 export const ENVIRONMENTS: EnvironmentDef[] = [
   {
-    id: "vestrahorn",
-    name: "Vestrahorn",
+    id: "sonoma",
+    name: "Sonoma",
+    description: "Layered colour waves at sunset. Bright, graphic, dark type.",
+    image: sonoma.url,
+    thumb: sonomaThumb.url,
+    theme: "light",
+  },
+  {
+    id: "ventura",
+    name: "Ventura",
+    description: "Soft gradient bloom of magenta, blue and warm white.",
+    image: ventura.url,
+    thumb: venturaThumb.url,
+    theme: "light",
+  },
+  {
+    id: "mavericks",
+    name: "Mavericks",
+    description: "A long-lens wave rolling under a peach sunset.",
+    image: mavericks.url,
+    thumb: mavericksThumb.url,
+    theme: "light",
+  },
+  {
+    id: "el-capitan",
+    name: "El Capitan",
+    description: "Mist rising through pines below a granite face.",
+    image: elCapitan.url,
+    thumb: elCapitanThumb.url,
+    theme: "light",
+  },
+  {
+    id: "big-sur",
+    name: "Big Sur",
     description: "Twilight over black sand and still water. The calmest to read against.",
-    image: vestrahorn.url,
-    thumb: vestrahornThumb.url,
+    image: bigSur.url,
+    thumb: bigSurThumb.url,
     theme: "dark",
   },
   {
-    id: "yosemite",
-    name: "Yosemite",
+    id: "catalina",
+    name: "Catalina",
     description: "Winter dusk in the valley. Deep, cold, cinematic.",
-    image: yosemite.url,
-    thumb: yosemiteThumb.url,
+    image: catalina.url,
+    thumb: catalinaThumb.url,
     theme: "dark",
   },
   {
-    id: "vernazza",
-    name: "Vernazza",
-    description: "Warm lamplight on the Ligurian coast after sunset.",
-    image: vernazza.url,
-    thumb: vernazzaThumb.url,
+    id: "monterey",
+    name: "Monterey",
+    description: "Warm lamplight on the coast after sunset.",
+    image: sierra.url,
+    thumb: sierraThumb.url,
     theme: "dark",
   },
   {
-    id: "vermilion",
-    name: "Vermilion",
+    id: "mojave",
+    name: "Mojave",
     description: "Red canyon walls under bright daylight. Pale sky, dark type.",
-    image: vermilion.url,
-    thumb: vermilionThumb.url,
+    image: mojave.url,
+    thumb: mojaveThumb.url,
     theme: "light",
   },
 ];
 
-const DEFAULT_ID = "vestrahorn";
+const DEFAULT_ID = "sonoma";
+
 
 const STORAGE_KEY = "vision-environment";
 
@@ -260,10 +302,7 @@ export function EnvironmentButton() {
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-3">
         <EnvironmentPicker />
-        <p className="mt-3 text-[0.68rem] leading-relaxed text-muted-foreground">
-          Placeholder scenes. Drop real photography into{" "}
-          <span className="code-chip">public/environments/</span> to replace them.
-        </p>
+
       </PopoverContent>
     </Popover>
   );
