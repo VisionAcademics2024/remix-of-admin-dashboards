@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
  *
  * Icons are Lucide, already in the project. SF Symbols is the obvious visual
  * match but its licence does not permit use outside Apple platforms, so the
- * stroke weight here is tuned to sit close to it instead — see
+ * stroke weight here is tuned to sit close to it instead - see
  * docs/DESIGN-SYSTEM.md.
  */
 

@@ -1,7 +1,7 @@
 /**
  * The one contract every screen reads through.
  *
- * Two adapters implement it: `live` (default — wraps the existing server
+ * Two adapters implement it: `live` (default - wraps the existing server
  * functions, which remain the only place business rules execute) and `mock`
  * (deterministic fixtures for tests and isolated previews). No route or
  * component talks to Supabase or to a `*.functions.ts` module directly.
@@ -38,7 +38,7 @@ export interface VisionRepository {
   getCommerceBoard(): Promise<ViewRow>;
   getChargeWorkQueue(): Promise<ViewRow>;
 
-  /* pay — owner only; the server refuses for admins */
+  /* pay - owner only; the server refuses for admins */
   getTutorPay(fortnightStart: SydneyDate): Promise<ViewRow>;
 
   /* configuration and exceptions */

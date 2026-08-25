@@ -157,7 +157,7 @@ export const declineAccessRequest = createServerFn({ method: "POST" })
   });
 
 /**
- * Deactivating is is_active = false, never a delete — deleting the row loses the
+ * Deactivating is is_active = false, never a delete - deleting the row loses the
  * audit trail on session_pay_adjustments.created_by.
  */
 export const updateStaffMember = createServerFn({ method: "POST" })
@@ -183,7 +183,7 @@ export const updateStaffMember = createServerFn({ method: "POST" })
         .eq("role", "owner")
         .eq("is_active", true);
       if ((count ?? 0) <= 1 && user_id === context.staff.user_id) {
-        throw new Error("This is the only active owner — promote someone else first.");
+        throw new Error("This is the only active owner - promote someone else first.");
       }
     }
 

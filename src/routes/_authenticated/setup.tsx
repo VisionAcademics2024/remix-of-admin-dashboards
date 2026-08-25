@@ -149,7 +149,7 @@ function SetupPage() {
             <EmptyState
               icon={Settings}
               title="No programs yet"
-              hint="A program is what is taught — no dates, no tutor. 'Year 5 Private' is a program."
+              hint="A program is what is taught - no dates, no tutor. 'Year 5 Private' is a program."
             />
           ) : (
             <TableShell>
@@ -171,8 +171,8 @@ function SetupPage() {
                     <Td>
                       <Code>{p.code}</Code>
                     </Td>
-                    <Td>{p.year_level ?? "—"}</Td>
-                    <Td>{p.subject ?? "—"}</Td>
+                    <Td>{p.year_level ?? "-"}</Td>
+                    <Td>{p.subject ?? "-"}</Td>
                     <Td className="text-right">{formatHours(p.standard_duration_hours)}</Td>
                     <Td>
                       <StatusPill tone={p.is_active ? "success" : "muted"}>
@@ -234,7 +234,7 @@ function SetupPage() {
                       )}
                     </Td>
                     <Td className="text-right tabular-nums">
-                      {p.basis === "per_hour" ? "—" : Number(p.quantity)}
+                      {p.basis === "per_hour" ? "-" : Number(p.quantity)}
                     </Td>
                     <Td className="text-right tabular-nums">{formatMoney(p.unit_rate)}</Td>
                     <Td className="whitespace-nowrap text-xs">
@@ -298,8 +298,8 @@ function SetupPage() {
                     <Td>
                       <Code>{t.code}</Code>
                     </Td>
-                    <Td>{t.email ?? "—"}</Td>
-                    <Td>{t.mobile ?? "—"}</Td>
+                    <Td>{t.email ?? "-"}</Td>
+                    <Td>{t.mobile ?? "-"}</Td>
                     <Td>
                       <span
                         className="inline-block h-4 w-8 rounded border"
@@ -324,7 +324,7 @@ function SetupPage() {
             </TableShell>
           )}
           <p className="text-xs text-muted-foreground">
-            Pay rates are not here — they live in their own table so they can be hidden from
+            Pay rates are not here - they live in their own table so they can be hidden from
             non-owners at the row level. Set them on the Tutor Pay screen.
           </p>
         </TabsContent>
@@ -600,7 +600,7 @@ function PriceDialog({
 
   const quantityHint: Record<string, string> = {
     per_hour:
-      "Meaningless for a per-hour price — the buyer chooses how many hours, on the enrolment.",
+      "Meaningless for a per-hour price - the buyer chooses how many hours, on the enrolment.",
     per_session: "Number of sessions in the standard block.",
     fixed_hours_price: "Number of hours in the block. The unit rate is the whole block's price.",
   };

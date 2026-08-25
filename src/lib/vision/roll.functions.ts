@@ -23,7 +23,7 @@ export type RollFilter = (typeof ROLL_FILTERS)[number];
 
 /**
  * Every filter computes "today" in Sydney and compares against
- * v_attendance.session_date — never a raw timestamp comparison. The old
+ * v_attendance.session_date - never a raw timestamp comparison. The old
  * system's Today screen showed tomorrow's 8am lessons because a rollup
  * defaulted to GMT.
  */
@@ -76,8 +76,8 @@ export const listRoll = createServerFn({ method: "GET" })
     if (error) throw error;
 
     const result = rows ?? [];
-    // make_up_state is derived in the view, so a settled absence — one whose
-    // make-up has already been attended — drops out here rather than in SQL.
+    // make_up_state is derived in the view, so a settled absence - one whose
+    // make-up has already been attended - drops out here rather than in SQL.
     if (data.filter === "make_ups") {
       return result.filter((r: Row) => r.att_type === "make_up" || r.make_up_state !== "completed");
     }
@@ -93,7 +93,7 @@ function shift(date: string, days: number): string {
 
 /**
  * Marking a student present is the act that spends their money. Nothing else
- * does — and un-marking refunds automatically, because the balance is a view.
+ * does - and un-marking refunds automatically, because the balance is a view.
  */
 export const markAttendance = createServerFn({ method: "POST" })
   .middleware([requireStaff])
@@ -165,9 +165,9 @@ export const setAttendancePackage = createServerFn({ method: "POST" })
  * A make-up is deliberately not a workflow.
  *
  * There are two states worth recording and no more: the student was away and
- * is owed one, or a day has been picked. "Owed" is not a stored flag — it is
+ * is owed one, or a day has been picked. "Owed" is not a stored flag - it is
  * simply an absence with no make-up attached, which v_attendance already
- * derives — so holding one is just marking the absence and writing down why.
+ * derives - so holding one is just marking the absence and writing down why.
  */
 export const holdMakeUp = createServerFn({ method: "POST" })
   .middleware([requireStaff])
@@ -186,7 +186,7 @@ export const holdMakeUp = createServerFn({ method: "POST" })
         status: "absent",
         correction_note: data.note?.trim()
           ? data.note.trim()
-          : "Make-up owed — day not decided yet.",
+          : "Make-up owed - day not decided yet.",
       })
       .in("id", data.ids);
     if (error) throw error;
@@ -224,8 +224,8 @@ export const listLessonsOnDate = createServerFn({ method: "GET" })
 /**
  * Book the make-up on a day.
  *
- * Either onto a lesson that already exists, or — the common case, because a
- * make-up rarely lines up with a scheduled class — onto a new one created for
+ * Either onto a lesson that already exists, or - the common case, because a
+ * make-up rarely lines up with a scheduled class - onto a new one created for
  * it. That new lesson may have no tutor: who teaches it is often decided after
  * the day is, and refusing to record the day until a tutor exists is what made
  * the old flow unusable.
@@ -264,7 +264,7 @@ export const bookMakeUp = createServerFn({ method: "POST" })
         throw new Error("Pick a day and a time for the make-up lesson.");
       }
       // A whole class making up together goes onto one lesson, so the offering
-      // is taken from the group — they all share it.
+      // is taken from the group - they all share it.
       const offeringId = (sources as Row[])
         .map((r) => r.enrolments?.class_offering_id)
         .find(Boolean);
@@ -286,7 +286,7 @@ export const bookMakeUp = createServerFn({ method: "POST" })
           ends_at: endsAt,
           notes:
             sources.length > 1
-              ? `Created for a make-up — ${sources.length} students.`
+              ? `Created for a make-up - ${sources.length} students.`
               : "Created for a make-up.",
         })
         .select("id")

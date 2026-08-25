@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
  * Radix Tabs styles the active trigger directly, so moving between filters
  * reads as one pill blinking out and another blinking in. Here a single
  * indicator is measured against the buttons and translated, so the selection
- * travels — which is the difference between a page that changed and a page
+ * travels - which is the difference between a page that changed and a page
  * that moved.
  *
  * Measured rather than calculated, because the labels are different widths and

@@ -111,7 +111,7 @@ function NeedsAttentionPage() {
       {rows.length > 0 && (
         <p className="text-xs text-muted-foreground">
           Rules live in <Code>v_needs_attention</Code>. Add one by adding a <Code>union all</Code>{" "}
-          branch — anything expressible as a check constraint should be a constraint instead,
+          branch - anything expressible as a check constraint should be a constraint instead,
           because constraints prevent and views only report.
         </p>
       )}

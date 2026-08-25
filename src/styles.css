@@ -5,7 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ===========================================================================
- * Vision CRM — spatial design system
+ * Vision CRM - spatial design system
  *
  * Modelled on visionOS. Three ideas carry the whole thing:
  *
@@ -81,7 +81,7 @@
 /* ---------------------------------------------------------------------------
  * Typography
  *
- * On Apple hardware, -apple-system IS SF Pro — no download, no licence
+ * On Apple hardware, -apple-system IS SF Pro - no download, no licence
  * question. The @font-face blocks below only matter on Windows and Android,
  * and only if you drop the files into public/fonts/ yourself. If they are
  * absent the browser skips them silently and falls through the stack.
@@ -124,10 +124,10 @@
 }
 
 /* ===========================================================================
- * DARK — the primary theme. visionOS is dark glass over a lit environment.
+ * DARK - the primary theme. visionOS is dark glass over a lit environment.
  *
  * Scoped to :root.dark, not .dark. Both would match <html>, but at equal
- * specificity to :root the winner would be decided by source order alone —
+ * specificity to :root the winner would be decided by source order alone -
  * which is far too fragile for the token layer the whole app rests on.
  * ======================================================================== */
 
@@ -194,7 +194,7 @@
 }
 
 /* ===========================================================================
- * LIGHT — the same material logic inverted, for the daylight environment.
+ * LIGHT - the same material logic inverted, for the daylight environment.
  * Glass here is a white film over a pale scene, so text goes dark.
  * ======================================================================== */
 
@@ -352,7 +352,7 @@
 
   /* =======================================================================
    * MATERIALS
-   * .glass is the base. The tiers change fill and blur only — the edge,
+   * .glass is the base. The tiers change fill and blur only - the edge,
    * shadow and radius stay consistent so everything reads as one substance.
    * ==================================================================== */
 
@@ -438,7 +438,7 @@
     transition-duration: var(--dur-fast);
   }
 
-  /* Interactive controls press without lifting — they sit in the surface. */
+  /* Interactive controls press without lifting - they sit in the surface. */
   .press {
     transition:
       transform var(--dur-fast) var(--ease-spatial),
@@ -447,7 +447,7 @@
   .press:active { transform: scale(0.96); }
 
   /* =======================================================================
-   * ORNAMENT — the floating navigation rail
+   * ORNAMENT - the floating navigation rail
    * ==================================================================== */
 
   .ornament {
@@ -600,8 +600,8 @@
  *
  * Deliberately no opacity: a panel that fades up from nothing is exactly the
  * "the whole page reloaded" feeling this replaces. The rows stay on screen the
- * whole way across — the previous filter's data is held until the next arrives
- * — and only the position moves. */
+ * whole way across - the previous filter's data is held until the next arrives
+ * - and only the position moves. */
 @keyframes panel-in-right {
   from { transform: translate3d(26px, 0, 0); }
   to   { transform: none; }

@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
  * Says out loud which data the screen is showing. Mock mode must never be
  * mistaken for the real business.
  *
- * Named for the DATA environment, not the visual one — see
+ * Named for the DATA environment, not the visual one - see
  * components/vision/environment.tsx for the scene behind the glass.
  */
 export function DataModeBadge({ className }: { className?: string }) {

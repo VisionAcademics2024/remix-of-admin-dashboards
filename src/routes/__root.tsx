@@ -80,13 +80,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Vision CRM — Tutoring Operations" },
+      { title: "Vision CRM - Tutoring Operations" },
       {
         name: "description",
         content: "Private operations workspace for Vision Academics.",
       },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Vision CRM — Tutoring Operations" },
+      { property: "og:title", content: "Vision CRM - Tutoring Operations" },
       {
         property: "og:description",
         content: "Private operations workspace for Vision Academics.",

@@ -103,7 +103,7 @@ function TutorPayPage() {
     <div className="stagger space-y-5">
       <PageHeader
         title="Tutor Pay"
-        description="Owners only. Pay is computed from lessons, not enrolments — a lesson pays its own tutor at the rate in force on its own date."
+        description="Owners only. Pay is computed from lessons, not enrolments - a lesson pays its own tutor at the rate in force on its own date."
       />
 
       {/* The fortnight, stated plainly. Two are always one tap away; the arrows
@@ -270,7 +270,7 @@ function TutorPayPage() {
                       {lessons.map((l: Row) => (
                         <tr key={l.session_id}>
                           <Td>
-                            {l.session?.class_offerings?.programs?.name ?? "—"}{" "}
+                            {l.session?.class_offerings?.programs?.name ?? "-"}{" "}
                             <Code>{l.code}</Code>
                           </Td>
                           <Td className="whitespace-nowrap">{formatDate(l.session_date)}</Td>
@@ -280,7 +280,7 @@ function TutorPayPage() {
                           <Td className="text-right tabular-nums">{formatMoney(l.hourly_rate)}</Td>
                           <Td className="text-right tabular-nums">{formatMoney(l.base_pay)}</Td>
                           <Td className="text-right tabular-nums">
-                            {Number(l.adjustment) === 0 ? "—" : formatMoney(l.adjustment)}
+                            {Number(l.adjustment) === 0 ? "-" : formatMoney(l.adjustment)}
                           </Td>
                           <Td className="text-right font-medium tabular-nums">
                             {formatMoney(l.pay)}
@@ -325,7 +325,7 @@ function TutorPayPage() {
                         <StatusPill tone="warning">None set</StatusPill>
                       )}
                     </Td>
-                    <Td>{current ? formatDate(current.effective_from) : "—"}</Td>
+                    <Td>{current ? formatDate(current.effective_from) : "-"}</Td>
                     <Td className="text-xs text-muted-foreground">
                       {rates.length > 1
                         ? rates
@@ -335,7 +335,7 @@ function TutorPayPage() {
                                 `${formatMoney(r.hourly_rate)} from ${formatDate(r.effective_from)}`,
                             )
                             .join(" · ")
-                        : "—"}
+                        : "-"}
                     </Td>
                     <Td className="text-right">
                       <Button size="sm" variant="outline" onClick={() => setRateFor(t)}>
@@ -349,7 +349,7 @@ function TutorPayPage() {
           </TableShell>
           <p className="mt-3 text-xs text-muted-foreground">
             A rate change is a new row, never an edit. Past fortnights keep the rate that was in
-            force at the time — repricing history because someone got a raise is a bug, not a
+            force at the time - repricing history because someone got a raise is a bug, not a
             feature.
           </p>
         </TabsContent>
@@ -359,7 +359,7 @@ function TutorPayPage() {
             <EmptyState
               icon={BadgeDollarSign}
               title="No payouts for this fortnight"
-              hint="Create one from the Hours and pay tab — it copies the computed total across and freezes it."
+              hint="Create one from the Hours and pay tab - it copies the computed total across and freezes it."
             />
           ) : (
             <TableShell>
@@ -383,12 +383,12 @@ function TutorPayPage() {
                       <Td>
                         <Code>{p.code}</Code>
                       </Td>
-                      <Td>{tutor?.full_name ?? "—"}</Td>
+                      <Td>{tutor?.full_name ?? "-"}</Td>
                       <Td className="text-right tabular-nums">
                         {formatHours(Number(p.hours_worked) + Number(p.hours_adjustment))}
                       </Td>
                       <Td className="text-right tabular-nums">{formatMoney(p.rate_at_payout)}</Td>
-                      <Td className="text-right text-xs">{p.adjustment_reason ?? "—"}</Td>
+                      <Td className="text-right text-xs">{p.adjustment_reason ?? "-"}</Td>
                       <Td className="text-right font-medium tabular-nums">
                         {formatMoney(payoutTotal(p))}
                       </Td>
@@ -398,7 +398,7 @@ function TutorPayPage() {
                         </StatusPill>
                       </Td>
                       <Td className="text-xs text-muted-foreground">
-                        {p.paid_date ? formatDate(p.paid_date) : "—"}
+                        {p.paid_date ? formatDate(p.paid_date) : "-"}
                       </Td>
                     </tr>
                   );
@@ -446,7 +446,7 @@ function AdjustmentDialog({
           <DialogTitle>Adjust pay for {lesson.code}</DialogTitle>
           <DialogDescription>
             For a class that ran long, or a bonus being carried. May be negative. Every adjustment
-            requires a written reason — this is enforced by the database, not just asked for.
+            requires a written reason - this is enforced by the database, not just asked for.
           </DialogDescription>
         </DialogHeader>
 
@@ -616,7 +616,7 @@ function PayoutDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Payout — {payload.tutor.tutor_name}</DialogTitle>
+          <DialogTitle>Payout - {payload.tutor.tutor_name}</DialogTitle>
           <DialogDescription>
             Hours and rate are frozen onto the payout at the moment of payment, so a later rate
             change cannot reprice history.

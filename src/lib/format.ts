@@ -4,7 +4,7 @@
  * 04-business-logic.md §9: store every instant as UTC, reason about every
  * calendar question in Australia/Sydney. The old system showed tomorrow's 8am
  * lessons on the Today screen because a rollup defaulted to GMT. Every helper
- * here converts explicitly — never call toLocaleDateString() directly.
+ * here converts explicitly - never call toLocaleDateString() directly.
  */
 
 export const TIMEZONE = "Australia/Sydney";
@@ -59,23 +59,23 @@ export function sydDate(ts: string | Date | null | undefined): string {
 
 /** "12 Aug 2026" */
 export function formatDate(value: string | Date | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = typeof value === "string" ? parseLoose(value) : value;
-  if (!d) return "—";
+  if (!d) return "-";
   return dateFmt.format(d);
 }
 
 /** "Wed 12 Aug" */
 export function formatDay(value: string | Date | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = typeof value === "string" ? parseLoose(value) : value;
-  if (!d) return "—";
+  if (!d) return "-";
   return dayFmt.format(d);
 }
 
 const weekdayFmt = new Intl.DateTimeFormat("en-AU", { timeZone: TIMEZONE, weekday: "short" });
 
-/** "Wed" — just the Sydney weekday, for a recurring class's fixed day. */
+/** "Wed" - just the Sydney weekday, for a recurring class's fixed day. */
 export function formatWeekday(value: string | Date | null | undefined): string {
   if (!value) return "";
   const d = typeof value === "string" ? parseLoose(value) : value;
@@ -83,19 +83,19 @@ export function formatWeekday(value: string | Date | null | undefined): string {
   return weekdayFmt.format(d);
 }
 
-/** "Thu, 23 April 2026" — weekday first, then the full date. */
+/** "Thu, 23 April 2026" - weekday first, then the full date. */
 export function formatDayDate(value: string | Date | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = typeof value === "string" ? parseLoose(value) : value;
-  if (!d) return "—";
+  if (!d) return "-";
   return dayDateFmt.format(d);
 }
 
-/** "5:30 pm" — always Sydney wall clock. */
+/** "5:30 pm" - always Sydney wall clock. */
 export function formatTime(value: string | Date | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = typeof value === "string" ? parseLoose(value) : value;
-  if (!d) return "—";
+  if (!d) return "-";
   return timeFmt.format(d).replace(/\s?([ap])m/i, (_m, p) => ` ${p.toLowerCase()}m`);
 }
 
@@ -107,7 +107,7 @@ export function formatSessionWindow(startsAt: string, endsAt: string): string {
 /**
  * A plain date column (starts_on, paid_date) is already a Sydney calendar date.
  * Parsing "2026-08-12" as a Date yields UTC midnight, which formats as the day
- * before in some zones — so pin it to midday to stay on the intended day.
+ * before in some zones - so pin it to midday to stay on the intended day.
  */
 function parseLoose(value: string): Date | null {
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -120,9 +120,9 @@ function parseLoose(value: string): Date | null {
  * concern, and never rounds in a way that hides a value.
  */
 export function formatMoney(value: number | string | null | undefined): string {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return "-";
   const n = typeof value === "string" ? Number(value) : value;
-  if (Number.isNaN(n)) return "—";
+  if (Number.isNaN(n)) return "-";
   return new Intl.NumberFormat("en-AU", {
     style: "currency",
     currency: CURRENCY,
@@ -133,9 +133,9 @@ export function formatMoney(value: number | string | null | undefined): string {
 
 /** A 1.5 hour lesson is "1.5 h", never "2 h". */
 export function formatHours(value: number | string | null | undefined): string {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return "-";
   const n = typeof value === "string" ? Number(value) : value;
-  if (Number.isNaN(n)) return "—";
+  if (Number.isNaN(n)) return "-";
   const trimmed = Number(n.toFixed(2));
   return `${trimmed} h`;
 }
@@ -234,7 +234,7 @@ export function sydneyMinutesNow(): number {
   return sydneyMinutesOfDay(new Date().toISOString());
 }
 
-/** "9 am", "2:30 pm" — the time-gutter and chip label form. */
+/** "9 am", "2:30 pm" - the time-gutter and chip label form. */
 export function formatClock(minutes: number): string {
   const h24 = Math.floor(minutes / 60) % 24;
   const m = minutes % 60;

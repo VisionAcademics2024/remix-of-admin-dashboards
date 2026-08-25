@@ -28,13 +28,13 @@ export const Route = createFileRoute("/access")({
   },
   head: () => ({
     meta: [
-      { title: "Access — Vision Admin" },
+      { title: "Access - Vision Admin" },
       {
         name: "description",
         content:
           "Claim owner access or request approval to use Vision Admin, the private operations app for Vision Academics.",
       },
-      { property: "og:title", content: "Access — Vision Admin" },
+      { property: "og:title", content: "Access - Vision Admin" },
       {
         property: "og:description",
         content: "Signing in does not grant access on its own. An owner approves each account.",
@@ -111,7 +111,7 @@ function AccessPage() {
           <CardTitle>{me.needsBootstrap ? "Set up Vision Admin" : "No access yet"}</CardTitle>
           <CardDescription>
             {me.needsBootstrap
-              ? "Nobody has been set up yet. Claim owner access to get started — this is only possible while the staff list is empty."
+              ? "Nobody has been set up yet. Claim owner access to get started - this is only possible while the staff list is empty."
               : me.deactivated
                 ? "This account has been deactivated. An owner can re-enable it on the Staff screen."
                 : "Signing in does not grant access on its own. Ask an owner to approve you."}

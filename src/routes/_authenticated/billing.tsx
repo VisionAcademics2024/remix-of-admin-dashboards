@@ -76,7 +76,7 @@ function BillingPage() {
     <div className="stagger space-y-5">
       <PageHeader
         title="Billing"
-        description="Money in, as a pipeline. One charge per lesson, always — the database will not allow a second."
+        description="Money in, as a pipeline. One charge per lesson, always - the database will not allow a second."
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -145,7 +145,7 @@ function BillingPage() {
                         </div>
                       </Td>
                       <Td>
-                        {a.sessions?.class_offerings?.programs?.name ?? "—"}{" "}
+                        {a.sessions?.class_offerings?.programs?.name ?? "-"}{" "}
                         <Code>{a.sessions?.code}</Code>
                       </Td>
                       <Td className="whitespace-nowrap">{formatDay(a.lesson_starts_at)}</Td>
@@ -172,7 +172,7 @@ function BillingPage() {
               <EmptyState
                 icon={Receipt}
                 title="Every package has been invoiced"
-                hint="One charge per package — that is the invoice."
+                hint="One charge per package - that is the invoice."
               />
             ) : (
               <TableShell>
@@ -230,7 +230,7 @@ function BillingPage() {
                 Bill {selected.length || "these"} together
               </Button>
               <p className="text-xs text-muted-foreground">
-                Raises no new charges — stamps one Xero invoice number across the selected ones, so
+                Raises no new charges - stamps one Xero invoice number across the selected ones, so
                 the family gets one document and every lesson keeps its own line.
               </p>
             </div>
@@ -366,11 +366,11 @@ function ChargeTable({
             <Td>{c.source === "hours" ? "Hours package" : "PAYG lesson"}</Td>
             <Td className="text-right tabular-nums">{formatMoney(c.standard_amount)}</Td>
             <Td className="text-right tabular-nums">
-              {Number(c.adjustment) === 0 ? "—" : formatMoney(c.adjustment)}
+              {Number(c.adjustment) === 0 ? "-" : formatMoney(c.adjustment)}
             </Td>
             <Td className="text-right font-medium tabular-nums">{formatMoney(c.final_amount)}</Td>
             <Td className="text-xs text-muted-foreground">
-              {c.xero_invoice_no ?? "—"}
+              {c.xero_invoice_no ?? "-"}
               {c.invoice_date && <div>{formatDate(c.invoice_date)}</div>}
             </Td>
             <Td>
@@ -428,7 +428,7 @@ function RaiseChargeDialog({
           <DialogTitle>{isHours ? "Invoice this package" : "Charge this lesson"}</DialogTitle>
           <DialogDescription>
             {isHours
-              ? "One charge per package — that is the invoice. Nothing further is billed until they buy more hours."
+              ? "One charge per package - that is the invoice. Nothing further is billed until they buy more hours."
               : "One charge, one lesson. Discounts are negative adjustments; the standard amount is the frozen source figure and is never edited."}
           </DialogDescription>
         </DialogHeader>
@@ -459,7 +459,7 @@ function RaiseChargeDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="parent">Parent — billed to the default payer</SelectItem>
+                <SelectItem value="parent">Parent - billed to the default payer</SelectItem>
                 <SelectItem value="internal">Internal (cash/bank)</SelectItem>
               </SelectContent>
             </Select>
@@ -593,7 +593,7 @@ function PaymentDialog({
         <DialogHeader>
           <DialogTitle>Record payment</DialogTitle>
           <DialogDescription>
-            Marking a charge paid requires both a date and a method — the database rejects it
+            Marking a charge paid requires both a date and a method - the database rejects it
             otherwise.
           </DialogDescription>
         </DialogHeader>

@@ -54,7 +54,7 @@ function blankToNull<T extends Record<string, unknown>>(input: T) {
   return Object.fromEntries(Object.entries(input).map(([k, v]) => [k, v === "" ? null : v])) as T;
 }
 
-/** Creating a student must be as fast as typing a name — everything else optional. */
+/** Creating a student must be as fast as typing a name - everything else optional. */
 export const createStudent = createServerFn({ method: "POST" })
   .middleware([requireStaff])
   .inputValidator((data) => studentInput.parse(data))
@@ -82,7 +82,7 @@ export const updateStudent = createServerFn({ method: "POST" })
   });
 
 /**
- * The default payer must already be a guardian of this student — the deferred
+ * The default payer must already be a guardian of this student - the deferred
  * trigger enforces it, this just gives a readable error first.
  */
 export const setDefaultPayer = createServerFn({ method: "POST" })
@@ -264,7 +264,7 @@ export const unlinkGuardian = createServerFn({ method: "POST" })
 
 /* --------------------------------------------------------------- Student detail */
 
-/** Everything about one student on one page — the screen you open when a parent rings. */
+/** Everything about one student on one page - the screen you open when a parent rings. */
 export const getStudentDetail = createServerFn({ method: "GET" })
   .middleware([requireStaff])
   .inputValidator((data) => z.object({ id: z.string().uuid() }).parse(data))

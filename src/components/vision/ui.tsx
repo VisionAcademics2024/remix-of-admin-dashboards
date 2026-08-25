@@ -273,7 +273,7 @@ export function WarningNote({ children }: { children: ReactNode }) {
 
 /**
  * Tables sit on their own near-opaque surface. This is the deliberate
- * exception to the glass rule — see the note at the top of this file.
+ * exception to the glass rule - see the note at the top of this file.
  */
 export function TableShell({ children }: { children: ReactNode }) {
   return (

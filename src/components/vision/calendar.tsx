@@ -21,7 +21,7 @@ import type { Row } from "@/lib/vision/types";
 /**
  * A Google Calendar–shaped time grid.
  *
- * The layout follows Google's conventions closely on purpose — a fixed hour
+ * The layout follows Google's conventions closely on purpose - a fixed hour
  * gutter, day columns with events positioned by their real start and duration,
  * overlapping lessons splitting the column between them, and a red line at the
  * current time. Anyone who has used Google Calendar can already read it, and
@@ -39,7 +39,7 @@ const DAY_MINUTES = 24 * 60;
 /** Dragging snaps to this, the way Google's grid clicks to quarter-hours. */
 const SNAP = 15;
 
-/** Where the grid scrolls to on open — early enough to see the first lesson. */
+/** Where the grid scrolls to on open - early enough to see the first lesson. */
 const DEFAULT_SCROLL_HOUR = 7;
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -69,7 +69,7 @@ export type CalendarEvent = {
   colour?: string | undefined;
   /** Draws as struck through and faded, the way a cancelled event does. */
   cancelled?: boolean | undefined;
-  /** A make-up lesson — moved off its usual slot, or booked as one. */
+  /** A make-up lesson - moved off its usual slot, or booked as one. */
   makeUp?: boolean | undefined;
   badge?: string | undefined;
   row: Row;
@@ -87,8 +87,8 @@ export function toCalendarEvent(s: Row): CalendarEvent {
     // A lesson running past midnight would wrap to a smaller number; clamp it
     // to the end of the day rather than drawing a negative-height block.
     endMinutes: end > start ? end : DAY_MINUTES,
-    // A one-student class reads by who is in it — their name leads, the class
-    // kind follows — exactly as it does on the Classes list.
+    // A one-student class reads by who is in it - their name leads, the class
+    // kind follows - exactly as it does on the Classes list.
     title: s.sole_student_name ? `${s.sole_student_name} · ${program}` : program,
     subtitle: s.tutors?.full_name ?? undefined,
     colour: colourFor(s.tutor_id, s.tutors?.colour),
@@ -102,7 +102,7 @@ export function toCalendarEvent(s: Row): CalendarEvent {
 /**
  * A calendar of pastels, one hue per tutor. A calendar that is not
  * colour-coded is just a list with lines on it, and no tutor in the imported
- * base has a colour set yet — so one is derived from the tutor's id. It is
+ * base has a colour set yet - so one is derived from the tutor's id. It is
  * stable across sessions and machines, and the moment a real colour is saved
  * on the tutor that takes over.
  *
@@ -253,7 +253,7 @@ function EventBlock({
         height,
         left: `calc(${(col / cols) * 100}% + 1px)`,
         width: `calc(${100 / cols}% - 2px)`,
-        // Soft pastel fill, dark text — a whole week of these stays calm, and
+        // Soft pastel fill, dark text - a whole week of these stays calm, and
         // `readableOn` keeps the label legible. A cancelled lesson inverts to an
         // outline, the way a declined event does.
         backgroundColor: event.cancelled ? "transparent" : colour,
@@ -318,7 +318,7 @@ function EventBlock({
       {resizable && (
         <>
           {/* Grip the top edge to change when it starts, the bottom to change
-              when it ends — Google's own affordance. */}
+              when it ends - Google's own affordance. */}
           <span
             onPointerDown={(e) => {
               e.stopPropagation();
@@ -576,7 +576,7 @@ export function TimeGrid({
           <div ref={area} className="relative flex flex-1">
             {/* Hour rules sit behind every column so they line up exactly. The
                 quarter-hour rules only appear once the rows are tall enough to
-                read them — that is what the density slider is for. */}
+                read them - that is what the density slider is for. */}
             <div className="pointer-events-none absolute inset-0">
               {hours.map((h) => (
                 <div key={h}>

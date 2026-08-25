@@ -143,14 +143,14 @@ function TimetablePage() {
   const [editing, setEditing] = useState<Row | null>(null);
 
   // How tall an hour is drawn. Remembered per browser so the density you like
-  // is there next time — quarter-hour lines appear once the rows are tall
+  // is there next time - quarter-hour lines appear once the rows are tall
   // enough to read them.
   const [hourHeight, setHourHeight] = useState<number>(() => {
     try {
       const stored = Number(localStorage.getItem("tt-hour-height"));
       if (stored >= 40 && stored <= 160) return stored;
     } catch {
-      /* private mode, or storage blocked — the default is fine. */
+      /* private mode, or storage blocked - the default is fine. */
     }
     return 48;
   });
@@ -158,7 +158,7 @@ function TimetablePage() {
     try {
       localStorage.setItem("tt-hour-height", String(hourHeight));
     } catch {
-      /* ignore — remembering it is a convenience, not a requirement. */
+      /* ignore - remembering it is a convenience, not a requirement. */
     }
   }, [hourHeight]);
 
@@ -195,8 +195,8 @@ function TimetablePage() {
       await queryClient.invalidateQueries({ queryKey: ["roll"] });
       toast.success(
         make_up
-          ? "Moved — now a make-up. Drag it back to its slot to undo."
-          : "Back in its usual slot — an ordinary lesson again.",
+          ? "Moved - now a make-up. Drag it back to its slot to undo."
+          : "Back in its usual slot - an ordinary lesson again.",
       );
     } catch (error) {
       queryClient.setQueryData(key, previous);
@@ -258,7 +258,7 @@ function TimetablePage() {
           {view !== "month" && (
             <div
               className="hidden items-center gap-2 rounded-full border px-3 py-1.5 sm:flex"
-              title="Row height — taller rows show the quarter-hours"
+              title="Row height - taller rows show the quarter-hours"
             >
               <StretchVertical className="h-4 w-4 shrink-0 text-muted-foreground" />
               <Slider
@@ -386,7 +386,7 @@ function SessionDialog({
 
   // The lesson touches the roll, attendance and today at once, so everything
   // that shows it is refreshed together. Marking a student does not close the
-  // panel — you are usually mid-roll — so `close` is a separate choice.
+  // panel - you are usually mid-roll - so `close` is a separate choice.
   async function invalidate() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["timetable"] }),
@@ -479,7 +479,7 @@ function SessionDialog({
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                A lesson's tutor is its own — changing it here is how cover works, and it is what
+                A lesson's tutor is its own - changing it here is how cover works, and it is what
                 tutor pay counts.
               </p>
             </div>
@@ -542,7 +542,7 @@ function SessionDialog({
                       <AlertDialogTitle>Delete this lesson permanently?</AlertDialogTitle>
                       <AlertDialogDescription>
                         {session.roll_total > 0
-                          ? "The lesson and its roll are removed for good — use this to clear a spare or duplicate lesson off the calendar. To keep the record, cancel it instead."
+                          ? "The lesson and its roll are removed for good - use this to clear a spare or duplicate lesson off the calendar. To keep the record, cancel it instead."
                           : "The lesson is removed for good. It has no roll, so nothing else is affected."}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
@@ -588,7 +588,7 @@ function SessionDialog({
  * The regular jobs on a lesson, gathered where you are looking at it: marking
  * the roll, adding a student, and making the class up. Each writes to the same
  * places the Roll and Class Builder do, so the timetable is not a separate copy
- * of the data — it is another door onto it.
+ * of the data - it is another door onto it.
  */
 function LessonRollPanel({
   session,
@@ -629,7 +629,7 @@ function LessonRollPanel({
     return (
       <div className="space-y-3 py-2">
         <p className="text-sm text-muted-foreground">
-          This lesson has no roll yet. Seeding adds every enrolled student — it is safe to run more
+          This lesson has no roll yet. Seeding adds every enrolled student - it is safe to run more
           than once.
         </p>
         <Button
@@ -683,7 +683,7 @@ function LessonRollPanel({
           >
             <div className="min-w-0">
               <div className="truncate text-sm font-medium">
-                {r.enrolments?.students?.full_name ?? "—"}
+                {r.enrolments?.students?.full_name ?? "-"}
               </div>
               <div className="text-[0.7rem] text-muted-foreground">
                 <Code>{r.enrolments?.students?.code}</Code>
@@ -822,12 +822,12 @@ function AddStudentRow({
   );
 }
 
-/** Make the whole class up onto one new lesson — the same booking the Roll uses. */
+/** Make the whole class up onto one new lesson - the same booking the Roll uses. */
 /**
  * Make the class up by moving this lesson to another day and time, exactly as a
  * drag would. The lesson leaves its slot and reappears at the new one, flagged
  * a make-up; drag it back, or move it home here, and it is ordinary again. No
- * second lesson is created — the class is rescheduled, not duplicated.
+ * second lesson is created - the class is rescheduled, not duplicated.
  */
 function MakeUpClassForm({
   session,
@@ -883,7 +883,7 @@ function MakeUpClassForm({
     <div className="space-y-3 rounded-md border border-[var(--edge)] bg-[var(--mat-thin)] p-3">
       <p className="text-xs text-muted-foreground">
         Moves this class off its slot to the day and time you set, and marks it a make-up. The roll
-        moves with it — no second lesson is made. A tutor is optional.
+        moves with it - no second lesson is made. A tutor is optional.
       </p>
       <div className="grid grid-cols-3 gap-2">
         <div className="space-y-1.5">
