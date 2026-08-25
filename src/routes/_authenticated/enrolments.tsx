@@ -37,7 +37,7 @@ import {
   WarningNote,
   toneForStatus,
 } from "@/components/vision/ui";
-import { formatDate, formatHours, formatMoney, sydToday } from "@/lib/format";
+import { formatDate, formatHours, formatMoney, formatTime, formatWeekday, sydToday } from "@/lib/format";
 import {
   listCommerce,
   saveEnrolment,
@@ -412,6 +412,20 @@ function EligibilityDialog({
 }
 
 /**
+ * A recurring class's fixed day and time, e.g. "Wed 4:00 pm–5:30 pm", derived
+ * from recurrence_start (which fixes both) and the session length. This is what
+ * tells two classes with the same program name apart.
+ */
+function scheduleLabel(o: Row): string {
+  if (!o.recurrence_start) return "";
+  const dur = Number(o.session_duration_hours ?? 0);
+  const end =
+    dur > 0 ? new Date(Date.parse(o.recurrence_start) + dur * 3_600_000).toISOString() : null;
+  const time = end ? `${formatTime(o.recurrence_start)}–${formatTime(end)}` : formatTime(o.recurrence_start);
+  return `${formatWeekday(o.recurrence_start)} ${time}`.trim();
+}
+
+/**
  * Enrol one student into one or more classes, from a start date.
  *
  * This is the answer to "someone joined mid-term": an enrolment carries a
@@ -464,7 +478,7 @@ function EnrolDialog({
     .filter((o: Row) => o.status !== "archived")
     .filter((o: Row) =>
       term
-        ? `${o.programs?.name ?? ""} ${o.code} ${o.operating_periods?.code ?? ""}`
+        ? `${o.programs?.name ?? ""} ${o.code} ${o.operating_periods?.code ?? ""} ${scheduleLabel(o)}`
             .toLowerCase()
             .includes(term)
         : true,
@@ -576,31 +590,40 @@ function EnrolDialog({
               {visibleOfferings.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No classes match.</p>
               ) : (
-                visibleOfferings.map((o: Row) => (
-                  <label
-                    key={o.id}
-                    htmlFor={`enrol-${o.id}`}
-                    className="flex cursor-pointer items-center gap-2"
-                  >
-                    <Checkbox
-                      id={`enrol-${o.id}`}
-                      checked={offeringIds.includes(o.id)}
-                      onCheckedChange={(checked) =>
-                        setOfferingIds(
-                          checked
-                            ? [...offeringIds, o.id]
-                            : offeringIds.filter((x) => x !== o.id),
-                        )
-                      }
-                    />
-                    <span className="min-w-0 flex-1 truncate text-sm">
-                      {o.programs?.name ?? "Class"} · <Code>{o.code}</Code>
-                      {o.operating_periods?.code ? (
-                        <span className="text-muted-foreground"> · {o.operating_periods.code}</span>
-                      ) : null}
-                    </span>
-                  </label>
-                ))
+                visibleOfferings.map((o: Row) => {
+                  const when = scheduleLabel(o);
+                  return (
+                    <label
+                      key={o.id}
+                      htmlFor={`enrol-${o.id}`}
+                      className="flex cursor-pointer items-start gap-2"
+                    >
+                      <Checkbox
+                        id={`enrol-${o.id}`}
+                        className="mt-0.5"
+                        checked={offeringIds.includes(o.id)}
+                        onCheckedChange={(checked) =>
+                          setOfferingIds(
+                            checked
+                              ? [...offeringIds, o.id]
+                              : offeringIds.filter((x) => x !== o.id),
+                          )
+                        }
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm">
+                          {o.programs?.name ?? "Class"}
+                          {when ? <span className="font-medium"> · {when}</span> : null}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          <Code>{o.code}</Code>
+                          {o.operating_periods?.code ? ` · ${o.operating_periods.code}` : ""}
+                          {o.room ? ` · ${o.room}` : ""}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })
               )}
             </div>
             {offeringIds.length > 1 && (

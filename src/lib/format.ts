@@ -73,6 +73,16 @@ export function formatDay(value: string | Date | null | undefined): string {
   return dayFmt.format(d);
 }
 
+const weekdayFmt = new Intl.DateTimeFormat("en-AU", { timeZone: TIMEZONE, weekday: "short" });
+
+/** "Wed" — just the Sydney weekday, for a recurring class's fixed day. */
+export function formatWeekday(value: string | Date | null | undefined): string {
+  if (!value) return "";
+  const d = typeof value === "string" ? parseLoose(value) : value;
+  if (!d) return "";
+  return weekdayFmt.format(d);
+}
+
 /** "Thu, 23 April 2026" — weekday first, then the full date. */
 export function formatDayDate(value: string | Date | null | undefined): string {
   if (!value) return "—";
