@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+import { sydToday } from "@/lib/format";
 import { db, requireStaff } from "./guard";
+import type { Row } from "./types";
 
 const blank = z.string().optional().or(z.literal(""));
 
@@ -147,6 +149,44 @@ const tutorInput = z.object({
   colour: blank,
   notes: blank,
 });
+
+/**
+ * The tutor database: every tutor with their details and pay-rate history, and
+ * the rate in force today worked out for the list. Rates live under owner-only
+ * RLS, so a non-owner simply sees them empty — the details are still theirs to
+ * read and edit.
+ */
+export const listTutors = createServerFn({ method: "GET" })
+  .middleware([requireStaff])
+  .handler(async ({ context }) => {
+    const client = db(context.supabase);
+    const today = sydToday();
+
+    const [{ data: tutors, error }, { data: rates }] = await Promise.all([
+      client.from("tutors").select("*").order("full_name"),
+      client.from("tutor_pay_rates").select("*").order("effective_from", { ascending: false }),
+    ]);
+    if (error) throw error;
+
+    const byTutor = new Map<string, Row[]>();
+    for (const r of rates ?? []) {
+      const list = byTutor.get(r.tutor_id) ?? [];
+      list.push(r);
+      byTutor.set(r.tutor_id, list);
+    }
+
+    return (tutors ?? []).map((t: Row) => {
+      const history = byTutor.get(t.id) ?? [];
+      // History is newest-first, so the first rate already in effect is current.
+      const current = history.find((r: Row) => r.effective_from <= today) ?? null;
+      return {
+        ...t,
+        rates: history,
+        current_rate: current ? Number(current.hourly_rate) : null,
+        current_rate_from: current?.effective_from ?? null,
+      };
+    });
+  });
 
 export const saveTutor = createServerFn({ method: "POST" })
   .middleware([requireStaff])
