@@ -16,8 +16,13 @@ export const getFortnightPay = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const client = db(context.supabase);
 
-    const [totals, lessons, payouts, rates, tutors] = await Promise.all([
-      client.from("v_tutor_fortnight_pay").select("*").eq("fortnight_start", data.fortnight_start),
+    // Totals are worked out here from the lesson rows rather than read from the
+    // v_tutor_fortnight_pay view. The view inner-joins to tutors, so a lesson
+    // whose tutor is not yet assigned vanishes from it — which showed as "no
+    // lessons in this fortnight" even when the timetable was full. Building the
+    // totals in code keeps those lessons visible, grouped under "Unassigned",
+    // and means the screen no longer depends on that view being in the database.
+    const [lessons, payouts, rates, tutors] = await Promise.all([
       client
         .from("v_session_pay")
         .select("*")
@@ -29,7 +34,8 @@ export const getFortnightPay = createServerFn({ method: "GET" })
     ]);
 
     // Lesson detail carries the class and tutor names the pay views leave out.
-    const sessionIds = (lessons.data ?? []).map((l: Row) => l.session_id);
+    const lessonRows = lessons.data ?? [];
+    const sessionIds = lessonRows.map((l: Row) => l.session_id);
     const context_ = sessionIds.length
       ? ((
           await client
@@ -39,10 +45,46 @@ export const getFortnightPay = createServerFn({ method: "GET" })
         ).data ?? [])
       : [];
     const byId = new Map(context_.map((s: Row) => [s.id, s]));
+    const tutorName = new Map((tutors.data ?? []).map((t: Row) => [t.id, t.full_name]));
+
+    // One row per tutor (plus an "Unassigned" bucket, keyed by ""), summed from
+    // the lessons that actually fall in the fortnight.
+    const groups = new Map<
+      string,
+      { tutor_id: string | null; tutor_name: string; lessons: number; hours: number; adjustments: number; total_pay: number }
+    >();
+    for (const l of lessonRows) {
+      const key = l.tutor_id ?? "";
+      const g =
+        groups.get(key) ??
+        ({
+          tutor_id: l.tutor_id ?? null,
+          tutor_name: l.tutor_id ? (tutorName.get(l.tutor_id) ?? "Unknown tutor") : "Unassigned",
+          lessons: 0,
+          hours: 0,
+          adjustments: 0,
+          total_pay: 0,
+        } as const);
+      const next = {
+        tutor_id: g.tutor_id,
+        tutor_name: g.tutor_name,
+        lessons: g.lessons + 1,
+        hours: g.hours + Number(l.payable_hours ?? 0),
+        adjustments: g.adjustments + Number(l.adjustment ?? 0),
+        total_pay: g.total_pay + Number(l.pay ?? 0),
+      };
+      groups.set(key, next);
+    }
+    // Named tutors first (alphabetical), the Unassigned bucket last.
+    const totals = [...groups.values()].sort((a, b) => {
+      if (!a.tutor_id) return 1;
+      if (!b.tutor_id) return -1;
+      return a.tutor_name.localeCompare(b.tutor_name);
+    });
 
     return {
-      totals: totals.data ?? [],
-      lessons: (lessons.data ?? []).map((l: Row) => ({
+      totals,
+      lessons: lessonRows.map((l: Row) => ({
         ...l,
         session: byId.get(l.session_id) ?? null,
       })),

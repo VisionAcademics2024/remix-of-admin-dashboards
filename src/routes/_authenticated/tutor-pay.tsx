@@ -163,7 +163,10 @@ function TutorPayPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Tutors with lessons" value={data.totals.length} />
+        <StatCard
+          label="Tutors with lessons"
+          value={data.totals.filter((t: Row) => t.tutor_id).length}
+        />
         <StatCard label="Payable hours" value={formatHours(grandHours)} />
         <StatCard label="Total pay" value={formatMoney(grandTotal)} icon={BadgeDollarSign} />
       </div>
@@ -185,9 +188,15 @@ function TutorPayPage() {
           ) : (
             data.totals.map((t: Row) => {
               const lessons = data.lessons.filter((l: Row) => l.tutor_id === t.tutor_id);
-              const payout = data.payouts.find((p: Row) => p.tutor_id === t.tutor_id);
+              const payout = t.tutor_id
+                ? data.payouts.find((p: Row) => p.tutor_id === t.tutor_id)
+                : undefined;
+              const unassigned = !t.tutor_id;
               return (
-                <div key={t.tutor_id} className="rounded-lg border">
+                <div
+                  key={t.tutor_id ?? "unassigned"}
+                  className={cn("rounded-lg border", unassigned && "border-warning/50")}
+                >
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 px-4 py-3">
                     <div>
                       <p className="font-semibold">{t.tutor_name}</p>
@@ -207,28 +216,42 @@ function TutorPayPage() {
                           {formatMoney(t.total_pay)}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {payout && (
-                          <StatusPill tone={toneForStatus("payout", payout.status)}>
-                            {LABELS.payoutStatus[payout.status as keyof typeof LABELS.payoutStatus]}
-                          </StatusPill>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            setPayingOut({
-                              tutor: t,
-                              payout,
-                              rate: lessons.find((l: Row) => l.hourly_rate)?.hourly_rate ?? 0,
-                            })
-                          }
-                        >
-                          {payout ? "Edit payout" : "Create payout"}
-                        </Button>
-                      </div>
+                      {unassigned ? (
+                        <StatusPill tone="warning">Assign a tutor</StatusPill>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          {payout && (
+                            <StatusPill tone={toneForStatus("payout", payout.status)}>
+                              {
+                                LABELS.payoutStatus[
+                                  payout.status as keyof typeof LABELS.payoutStatus
+                                ]
+                              }
+                            </StatusPill>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              setPayingOut({
+                                tutor: t,
+                                payout,
+                                rate: lessons.find((l: Row) => l.hourly_rate)?.hourly_rate ?? 0,
+                              })
+                            }
+                          >
+                            {payout ? "Edit payout" : "Create payout"}
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </div>
+                  {unassigned && (
+                    <p className="border-b bg-warning/5 px-4 py-2 text-xs text-muted-foreground">
+                      These lessons have no tutor assigned yet, so no one is paid for them. Open a
+                      lesson on the timetable to set its tutor and it will move to that tutor here.
+                    </p>
+                  )}
 
                   <TableShell>
                     <thead>
