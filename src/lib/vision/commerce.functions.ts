@@ -60,7 +60,9 @@ export const listCommerce = createServerFn({ method: "GET" })
       client.from("students").select("id, code, full_name, status").order("full_name"),
       client
         .from("class_offerings")
-        .select("id, code, capacity, status, programs(name), operating_periods(name, code)")
+        .select(
+          "id, code, capacity, status, recurrence_start, session_duration_hours, room, programs(name), operating_periods(name, code)",
+        )
         .order("starts_on", { ascending: false }),
       client.from("standard_prices").select("*").eq("status", "active").order("name"),
     ]);
