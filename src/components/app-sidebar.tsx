@@ -11,6 +11,7 @@ import {
   LogOut,
   Receipt,
   Settings,
+  Sparkles,
   Sunrise,
   UserCog,
   Users,
@@ -24,7 +25,6 @@ import { getNeedsAttentionCount } from "@/lib/vision/overview.functions";
 import type { StaffRole } from "@/lib/vision/types";
 import { cn } from "@/lib/utils";
 import visionLogo from "@/assets/vision-logo.png.asset.json";
-
 
 /**
  * The ornament.
@@ -55,6 +55,7 @@ const OPERATE: NavItem[] = [
 ];
 
 const MANAGE: NavItem[] = [
+  { title: "Leads & Trials", url: "/leads", icon: Sparkles },
   { title: "Students & Families", url: "/students", icon: GraduationCap },
   { title: "Classes", url: "/classes", icon: LayoutGrid },
   { title: "Enrolments & Hours", url: "/enrolments", icon: Wallet },

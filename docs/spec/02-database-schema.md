@@ -135,6 +135,33 @@ for a fortnight of PAYG lessons on one document while keeping per-lesson traceab
 
 **`tutor_payouts`** — *owner-only.* One row per tutor per fortnight, freezing hours and rate.
 
+### Leads and trials
+
+Added by `20260826120000_leads_trials.sql`. The pre-student pipeline — everything upstream
+of a guardian and a student. Same conventions as everything else: uuid keys, a generated
+`code`, `airtable_id`, a touch trigger, facts only.
+
+**`leads`** — one enquiry. `code` is `LEAD-nnnn`. The child (`student_name`, `year_level`)
+and enquiring parent (`guardian_name`, `guardian_email`, `guardian_mobile`) are free text
+because no records exist yet. `status` drives the pipeline; `source` is categorical for
+attribution. On conversion the row records `converted_student_id` and
+`converted_enrolment_id`. Two check constraints: `lead_lost_needs_reason` (a `lost` lead
+must say why) and `lead_converted_needs_student` (can't mark converted without the student
+it became).
+
+**`lead_contacts`** — the contact log, one row per touchpoint, with a mandatory `summary`
+and an optional `next_action_on`. Cascades when its lead is deleted. Indexed
+`(lead_id, contacted_at desc)` because it is always read newest-first.
+
+**`trials`** — a booked trial or diagnostic for a lead. `code` is `TRL-nnnn`. `kind` is
+`class_trial` (must name a `class_offering_id` — enforced by `trial_class_needs_offering`)
+or `diagnostic_test` (carries a `recommendation`, `score` and `recommended_program_id`).
+`class_offering_id`, `session_id` and `enrolment_id` reuse the existing machinery rather
+than duplicating it. Cascades when its lead is deleted.
+
+All three are gated by `is_staff()` like the other operational tables — no owner-only data
+here.
+
 ---
 
 ## Views
@@ -149,6 +176,7 @@ for a fortnight of PAYG lessons on one document while keeping per-lesson traceab
 | `v_session_pay` | Rate at the time of the lesson, base pay, adjustments, total — **owner-only in effect** |
 | `v_tutor_fortnight_pay` | Per tutor per fortnight totals |
 | `v_needs_attention` | Every exception in the system, as one queryable union |
+| `v_leads` | Latest contact, days since contact, days in pipeline, contact and trial counts, an `is_overdue` flag, and the assigned staff and program-interest names |
 
 All views are `security_invoker = true`, so they respect the caller's RLS rather than the view
 owner's. This is what makes the pay views safely invisible to non-owners: the underlying rate and
