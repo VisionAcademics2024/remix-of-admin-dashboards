@@ -180,8 +180,9 @@ A make-up is a new attendance row on a *different* lesson, linked back to the ab
 
 A make-up consumes hours exactly like a normal lesson. It is not free unless you make it courtesy.
 
-Make-ups are for **students who missed a lesson**. They are not the mechanism for a tutor swap or
-a rescheduled class — both of those are edits to the lesson itself.
+Make-ups are for **students who missed a lesson**, and live entirely in attendance. They are never a
+side effect of moving a block on the timetable: an ordinary reschedule stays an ordinary lesson, and
+a tutor swap or a class-wide time change is an edit to the lesson itself.
 
 ---
 
