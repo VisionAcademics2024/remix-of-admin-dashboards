@@ -1207,6 +1207,8 @@ export type Database = {
           ends_at: string
           id: string
           notes: string | null
+          original_ends_at: string | null
+          original_starts_at: string | null
           replaces_session_id: string | null
           room: string | null
           seq: number
@@ -1214,6 +1216,7 @@ export type Database = {
           starts_at: string
           status: Database["public"]["Enums"]["session_status"]
           tutor_id: string | null
+          updated_at: string
         }
         Insert: {
           airtable_id?: string | null
@@ -1223,6 +1226,8 @@ export type Database = {
           ends_at: string
           id?: string
           notes?: string | null
+          original_ends_at?: string | null
+          original_starts_at?: string | null
           replaces_session_id?: string | null
           room?: string | null
           seq?: number
@@ -1230,6 +1235,7 @@ export type Database = {
           starts_at: string
           status?: Database["public"]["Enums"]["session_status"]
           tutor_id?: string | null
+          updated_at?: string
         }
         Update: {
           airtable_id?: string | null
@@ -1239,6 +1245,8 @@ export type Database = {
           ends_at?: string
           id?: string
           notes?: string | null
+          original_ends_at?: string | null
+          original_starts_at?: string | null
           replaces_session_id?: string | null
           room?: string | null
           seq?: number
@@ -1246,6 +1254,7 @@ export type Database = {
           starts_at?: string
           status?: Database["public"]["Enums"]["session_status"]
           tutor_id?: string | null
+          updated_at?: string
         }
         Relationships: [
           {
