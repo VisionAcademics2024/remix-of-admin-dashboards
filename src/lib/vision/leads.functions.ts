@@ -262,6 +262,10 @@ export const convertLead = createServerFn({ method: "POST" })
         lead_id: z.string().uuid(),
         relationship: blank,
         enrol_offering_id: z.string().uuid().nullish(),
+        // How they join the class: keep them a trial student, or enrol them for real.
+        enrol_status: z.enum(["trial", "active"]).default("trial"),
+        // Required only for an active enrolment (a trial consumes nothing).
+        enrol_method: z.enum(["hours", "payg"]).nullish(),
         enrol_starts_on: blank,
       })
       .parse(data),
@@ -323,15 +327,26 @@ export const convertLead = createServerFn({ method: "POST" })
       .eq("id", student.id);
     if (payerError) throw payerError;
 
-    // 5. Optional trial enrolment, so they land on the roll immediately.
+    // 5. Optional enrolment, so they land on the roll immediately. A trial keeps
+    //    the enrolment open with no billing method; an active enrolment needs one
+    //    (the enrolment_method_required check enforces this). Pricing is left to
+    //    the Enrolments screen, where an active enrolment without a price shows on
+    //    Needs Attention as a reminder.
     let enrolmentId: string | null = null;
     if (data.enrol_offering_id) {
+      const active = data.enrol_status === "active";
+      if (active && !data.enrol_method) {
+        throw new Error(
+          "Choose a billing method (Hours or Pay as you go) for an active enrolment, or enrol them as a trial.",
+        );
+      }
       const { data: enrolment, error: eError } = await client
         .from("enrolments")
         .insert({
           student_id: student.id,
           class_offering_id: data.enrol_offering_id,
-          status: "trial",
+          status: active ? "active" : "trial",
+          method: active ? data.enrol_method : null,
           starts_on: data.enrol_starts_on || sydToday(),
         })
         .select("id")
