@@ -32,7 +32,7 @@ rewrite what was agreed or paid. This is the one place duplication is correct.
 
 | Constraint | Prevents |
 |---|---|
-| `sessions (class_offering_id, starts_at)` unique | Duplicate lessons from re-running generation |
+| `sessions (class_offering_id, starts_at)` unique **partial**, `where session_type = 'regular'` | Duplicate lessons from re-running generation — while still allowing a deliberate `dedicated_make_up` lesson to sit alongside the ordinary lesson in the same slot |
 | `attendance (session_id, enrolment_id)` unique | The same student twice on one roll |
 | `charges (attendance_id)` unique partial | Billing one lesson twice |
 | `charges (package_id)` unique partial | Billing one package twice |
