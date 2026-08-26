@@ -243,7 +243,7 @@ in April. Never do date arithmetic on UTC timestamps and assume the wall clock h
 | Record | Rule |
 |---|---|
 | Class offering | Set status `closed` or `cancelled`. Delete only if it has no enrolments and no lessons. |
-| Session | Set status `cancelled`. Deleting cascades its attendance — which is why cancelling is right when the lesson existed. |
+| Session | Set status `cancelled`. Deletion is refused outright once the lesson has a roll — attendance is never deleted to make room for it, and there is no force option. A lesson with no roll at all may be deleted. |
 | Enrolment | Set `ends_on`, status `closed`, and a closure reason. `on delete restrict` from attendance blocks deletion once there is history. |
 | Hours package | Status `closed` or `expired`. |
 | Charge | Status `cancelled`. Never delete a charge that was invoiced. |
