@@ -108,6 +108,16 @@ Carries its own tutor and room, so both can differ from the class default for a 
 Statuses: `scheduled`, `completed`, `cancelled` and `rescheduled`. Cancelled and rescheduled
 lessons pay nobody and consume nothing.
 
+**Moving a lesson updates that same lesson.** A future lesson whose roll is still unmarked can be
+given a new time in place: the row keeps its id, so every roll entry, hour, charge and pay figure
+hanging off `session_id` follows it without being rewritten. Attendance ids, statuses and
+`source_attendance_id` links are untouched, and the Sydney `session_date` in `v_sessions` simply
+follows the new start. An ordinary move never changes `session_type` or `status`.
+
+A lesson that has already started, has passed, or has any marked roll entry is **protected**: it is
+history, not a plan. Cancel it and add a new lesson instead. Cancelling keeps the roll and the
+record; deleting is only ever possible while a lesson has no roll at all.
+
 ### Attendance
 One student's outcome for one lesson. The unit of both hour consumption and PAYG billing.
 
