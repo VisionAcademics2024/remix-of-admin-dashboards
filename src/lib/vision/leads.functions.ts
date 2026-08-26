@@ -157,12 +157,33 @@ export const logContact = createServerFn({ method: "POST" })
     return { success: true };
   });
 
+/**
+ * Upcoming lessons for one class offering, so a trial can be pinned to a
+ * specific existing session rather than a loose date.
+ */
+export const getOfferingSessions = createServerFn({ method: "GET" })
+  .middleware([requireStaff])
+  .inputValidator((data) => z.object({ offering_id: z.string().uuid() }).parse(data))
+  .handler(async ({ context, data }) => {
+    const { data: rows, error } = await db(context.supabase)
+      .from("sessions")
+      .select("id, starts_at, ends_at, status, tutors(full_name)")
+      .eq("class_offering_id", data.offering_id)
+      .neq("status", "cancelled")
+      .gte("starts_at", new Date().toISOString())
+      .order("starts_at")
+      .limit(50);
+    if (error) throw error;
+    return rows ?? [];
+  });
+
 /* ------------------------------------------------------------------ Save a trial */
 
 const trialInput = z.object({
   lead_id: z.string().uuid(),
   kind: z.enum(["class_trial", "diagnostic_test"]),
   class_offering_id: z.string().uuid().nullish(),
+  session_id: z.string().uuid().nullish(),
   scheduled_for: blank,
   status: z.enum(["proposed", "scheduled", "attended", "no_show", "converted", "declined"]),
   recommendation: z
@@ -215,11 +236,11 @@ export const saveTrial = createServerFn({ method: "POST" })
 
 /**
  * Turn a won lead into a real record. Creates a brand-new guardian and student,
- * links them, and makes the guardian the default payer — in the order the
+ * links them, and makes the guardian the default payer, in the order the
  * deferred payer trigger requires (link before payer). Optionally opens a trial
  * enrolment in a chosen class so the family lands straight on the roll.
  *
- * Everything downstream — sessions, attendance, hours, billing — is the existing
+ * Everything downstream (sessions, attendance, hours, billing) is the existing
  * machinery; this only stitches the pipeline onto it.
  */
 export const convertLead = createServerFn({ method: "POST" })
@@ -260,7 +281,7 @@ export const convertLead = createServerFn({ method: "POST" })
       .single();
     if (gError) throw gError;
 
-    // 2. The student — no payer yet, so the deferred trigger has nothing to reject.
+    // 2. The student, with no payer yet, so the deferred trigger has nothing to reject.
     const foundUs = [lead.source, lead.source_detail].filter(Boolean).join(" · ") || null;
     const { data: student, error: sError } = await client
       .from("students")
@@ -284,7 +305,7 @@ export const convertLead = createServerFn({ method: "POST" })
     });
     if (linkError) throw linkError;
 
-    // 4. Now the payer can be set — the link exists, so the trigger passes.
+    // 4. Now the payer can be set: the link exists, so the trigger passes.
     const { error: payerError } = await client
       .from("students")
       .update({ default_payer_id: guardian.id })

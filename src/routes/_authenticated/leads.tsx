@@ -44,16 +44,18 @@ import {
   Th,
   toneForStatus,
 } from "@/components/vision/ui";
-import { formatDate, sydToday } from "@/lib/format";
+import { formatDate, formatTime, sydToday } from "@/lib/format";
 import {
   convertLead,
   getLead,
   getLeadsBoard,
+  getOfferingSessions,
   logContact,
   saveLead,
   saveTrial,
 } from "@/lib/vision/leads.functions";
 import { LABELS, Row } from "@/lib/vision/types";
+import { cn } from "@/lib/utils";
 
 const boardQueryOptions = () =>
   queryOptions({ queryKey: ["leads-board"], queryFn: () => getLeadsBoard() });
@@ -82,7 +84,7 @@ function LeadsPage() {
     <div className="stagger space-y-5">
       <PageHeader
         title="Leads & Trials"
-        description="The pre-student pipeline: an enquiry, every time we've reached out, and — once won — the trial class or diagnostic that turns them into a student."
+        description="The pre-student pipeline: an enquiry, every time we've reached out, and, once won, the trial class or diagnostic that turns them into a student."
         actions={
           <Button size="sm" onClick={() => setDialog({ kind: "lead" })}>
             <Plus className="mr-1 h-4 w-4" /> New lead
@@ -119,7 +121,7 @@ function LeadsPage() {
           <LeadTable
             rows={open}
             onOpen={(id) => setDialog({ kind: "detail", id })}
-            emptyHint="A lead is an enquiry — a parent who's asked about tutoring but isn't a student yet. Add the first one."
+            emptyHint="A lead is an enquiry: a parent who's asked about tutoring but isn't a student yet. Add the first one."
           />
         </TabsContent>
         <TabsContent value="converted" className="mt-4">
@@ -193,7 +195,7 @@ function LeadTable({
               </div>
             </Td>
             <Td>
-              <div>{l.program_interest_name ?? l.subject_interest ?? "—"}</div>
+              <div>{l.program_interest_name ?? l.subject_interest ?? "-"}</div>
               {l.year_level && <div className="text-xs text-muted-foreground">{l.year_level}</div>}
             </Td>
             <Td>{LABELS.leadSource[l.source as keyof typeof LABELS.leadSource]}</Td>
@@ -212,7 +214,7 @@ function LeadTable({
                 <span className="text-muted-foreground">Never</span>
               )}
             </Td>
-            <Td className="text-right tabular-nums">{l.trial_count || "—"}</Td>
+            <Td className="text-right tabular-nums">{l.trial_count || "-"}</Td>
             <Td className="text-right">
               <Button size="sm" variant="ghost" onClick={() => onOpen(l.id)}>
                 Open
@@ -271,9 +273,9 @@ function LeadDetailDialog({
 
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
               <Field label="Interest">
-                {lead.program_interest_name ?? lead.subject_interest ?? "—"}
+                {lead.program_interest_name ?? lead.subject_interest ?? "-"}
               </Field>
-              <Field label="Year level">{lead.year_level ?? "—"}</Field>
+              <Field label="Year level">{lead.year_level ?? "-"}</Field>
               <Field label="Source">
                 {LABELS.leadSource[lead.source as keyof typeof LABELS.leadSource]}
                 {lead.source_detail ? ` · ${lead.source_detail}` : ""}
@@ -282,7 +284,7 @@ function LeadDetailDialog({
               <Field label="In pipeline">{lead.days_in_pipeline}d</Field>
               <Field label="Next action">
                 <span className={lead.is_overdue ? "text-warning" : undefined}>
-                  {lead.next_action_on ? formatDate(lead.next_action_on) : "—"}
+                  {lead.next_action_on ? formatDate(lead.next_action_on) : "-"}
                 </span>
               </Field>
             </dl>
@@ -451,7 +453,8 @@ function LeadDialog({ row, board, onClose }: { row?: Row; board: Row; onClose: (
         <DialogHeader>
           <DialogTitle>{row ? "Edit lead" : "New lead"}</DialogTitle>
           <DialogDescription>
-            An enquiry about tutoring. The child and the enquiring parent — no student record yet.
+            An enquiry about tutoring. The child and the enquiring parent, with no student record
+            yet.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
@@ -685,6 +688,7 @@ function TrialDialog({
   const [form, setForm] = useState({
     kind: "class_trial",
     class_offering_id: "",
+    session_id: "",
     scheduled_for: "",
     status: "proposed",
     recommendation: "",
@@ -693,8 +697,17 @@ function TrialDialog({
     outcome_notes: "",
     conducted_by: "",
   });
+  // For a class trial: add them to a lesson that already exists, or book a new time.
+  const [placement, setPlacement] = useState<"existing" | "new">("existing");
   const [busy, setBusy] = useState(false);
   const isDiagnostic = form.kind === "diagnostic_test";
+
+  // The chosen class's upcoming lessons, so a trial can sit on a real session.
+  const { data: sessions = [] } = useQuery({
+    queryKey: ["offering-sessions", form.class_offering_id],
+    queryFn: () => getOfferingSessions({ data: { offering_id: form.class_offering_id } }),
+    enabled: !isDiagnostic && !!form.class_offering_id,
+  });
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -702,8 +715,9 @@ function TrialDialog({
         <DialogHeader>
           <DialogTitle>Book a trial</DialogTitle>
           <DialogDescription>
-            Sit them in on an existing class, or record a bespoke diagnostic test. To make a
-            brand-new trial class, create the class offering first, then pick it here.
+            Add them to a lesson that already exists, book a new trial time on a class, or record a
+            bespoke diagnostic test. To start a brand-new trial class, create the class offering
+            first, then pick it here.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
@@ -713,38 +727,130 @@ function TrialDialog({
             options={LABELS.trialKind}
             onChange={(v) => setForm({ ...form, kind: v })}
           />
-          {!isDiagnostic && (
-            <SelectField
-              label="Class to sit in on"
-              value={form.class_offering_id || "none"}
-              options={{
-                none: "Select a class…",
-                ...Object.fromEntries(
-                  (board.offerings as Row[]).map((o) => [
-                    o.id,
-                    `${o.code} · ${o.programs?.name ?? ""}${
-                      o.operating_periods?.code ? ` · ${o.operating_periods.code}` : ""
-                    }`,
-                  ]),
-                ),
-              }}
-              onChange={(v) => setForm({ ...form, class_offering_id: v === "none" ? "" : v })}
-            />
+          {!isDiagnostic ? (
+            <>
+              <SelectField
+                label="Class to sit in on"
+                value={form.class_offering_id || "none"}
+                options={{
+                  none: "Select a class…",
+                  ...Object.fromEntries(
+                    (board.offerings as Row[]).map((o) => [
+                      o.id,
+                      `${o.code} · ${o.programs?.name ?? ""}${
+                        o.operating_periods?.code ? ` · ${o.operating_periods.code}` : ""
+                      }`,
+                    ]),
+                  ),
+                }}
+                onChange={(v) =>
+                  setForm({
+                    ...form,
+                    class_offering_id: v === "none" ? "" : v,
+                    session_id: "",
+                    scheduled_for: "",
+                  })
+                }
+              />
+
+              {form.class_offering_id && (
+                <div className="space-y-1.5">
+                  <Label>When</Label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPlacement("existing");
+                        setForm({ ...form, scheduled_for: "" });
+                      }}
+                      className={cn(
+                        "flex-1 rounded-lg border px-3 py-2 text-sm transition-colors",
+                        placement === "existing"
+                          ? "border-primary/50 bg-primary/15 text-foreground"
+                          : "border-[var(--edge)] text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      Add to an existing lesson
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPlacement("new");
+                        setForm({ ...form, session_id: "", scheduled_for: "" });
+                      }}
+                      className={cn(
+                        "flex-1 rounded-lg border px-3 py-2 text-sm transition-colors",
+                        placement === "new"
+                          ? "border-primary/50 bg-primary/15 text-foreground"
+                          : "border-[var(--edge)] text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      Book a new time
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {form.class_offering_id && placement === "existing" && (
+                <SelectField
+                  label="Lesson"
+                  value={form.session_id || "none"}
+                  options={{
+                    none: (sessions as Row[]).length
+                      ? "Select a lesson…"
+                      : "No upcoming lessons on this class",
+                    ...Object.fromEntries(
+                      (sessions as Row[]).map((s) => [
+                        s.id,
+                        `${formatDate(s.starts_at)} · ${formatTime(s.starts_at)}${
+                          s.tutors?.full_name ? ` · ${s.tutors.full_name}` : ""
+                        }`,
+                      ]),
+                    ),
+                  }}
+                  onChange={(v) => {
+                    const chosen = (sessions as Row[]).find((s) => s.id === v);
+                    setForm({
+                      ...form,
+                      session_id: v === "none" ? "" : v,
+                      scheduled_for: chosen?.starts_at ?? "",
+                    });
+                  }}
+                />
+              )}
+
+              {form.class_offering_id && placement === "new" && (
+                <TextField
+                  label="Scheduled for"
+                  type="date"
+                  value={form.scheduled_for}
+                  onChange={(v) => setForm({ ...form, scheduled_for: v, session_id: "" })}
+                />
+              )}
+
+              <SelectField
+                label="Status"
+                value={form.status}
+                options={LABELS.trialStatus}
+                onChange={(v) => setForm({ ...form, status: v })}
+              />
+            </>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <TextField
+                label="Scheduled for"
+                type="date"
+                value={form.scheduled_for}
+                onChange={(v) => setForm({ ...form, scheduled_for: v })}
+              />
+              <SelectField
+                label="Status"
+                value={form.status}
+                options={LABELS.trialStatus}
+                onChange={(v) => setForm({ ...form, status: v })}
+              />
+            </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
-            <TextField
-              label="Scheduled for"
-              type="date"
-              value={form.scheduled_for}
-              onChange={(v) => setForm({ ...form, scheduled_for: v })}
-            />
-            <SelectField
-              label="Status"
-              value={form.status}
-              options={LABELS.trialStatus}
-              onChange={(v) => setForm({ ...form, status: v })}
-            />
-          </div>
           {isDiagnostic && (
             <>
               <SelectField
@@ -760,7 +866,7 @@ function TrialDialog({
                 <SelectField
                   label="Recommendation"
                   value={form.recommendation || "none"}
-                  options={{ none: "—", ...LABELS.diagnosticRecommendation }}
+                  options={{ none: "-", ...LABELS.diagnosticRecommendation }}
                   onChange={(v) => setForm({ ...form, recommendation: v === "none" ? "" : v })}
                 />
                 <TextField
@@ -774,7 +880,7 @@ function TrialDialog({
                 label="Recommended program"
                 value={form.recommended_program_id || "none"}
                 options={{
-                  none: "—",
+                  none: "-",
                   ...Object.fromEntries((board.programs as Row[]).map((p) => [p.id, p.name])),
                 }}
                 onChange={(v) =>
@@ -803,6 +909,7 @@ function TrialDialog({
                     ...form,
                     lead_id: leadId,
                     class_offering_id: isDiagnostic ? null : form.class_offering_id || null,
+                    session_id: isDiagnostic ? null : form.session_id || null,
                     recommendation: form.recommendation || null,
                     recommended_program_id: form.recommended_program_id || null,
                     conducted_by: form.conducted_by || null,
