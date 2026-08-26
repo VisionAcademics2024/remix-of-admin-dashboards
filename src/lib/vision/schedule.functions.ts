@@ -237,20 +237,9 @@ export const rescheduleSession = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const client = db(context.supabase);
-
-    const nextStart = Date.parse(data.starts_at);
-    const nextEnd = Date.parse(data.ends_at);
-    if (Number.isNaN(nextStart) || Number.isNaN(nextEnd)) {
-      throw new Error("That start or end time is not a real date and time.");
-    }
-    if (nextEnd <= nextStart) {
-      throw new Error("The lesson has to end after it starts.");
-    }
-
     const now = Date.now();
-    if (nextStart <= now) {
-      throw new Error("Pick a time in the future - a lesson cannot be moved into the past.");
-    }
+
+    validateProposedTimes(data.starts_at, data.ends_at, now);
 
     const { data: current, error: readError } = await client
       .from("sessions")
@@ -260,11 +249,7 @@ export const rescheduleSession = createServerFn({ method: "POST" })
     if (readError) throw readError;
     if (!current) throw new Error("That lesson no longer exists.");
 
-    if (Date.parse(current.starts_at) <= now) {
-      throw new Error(
-        "This lesson has already started or has passed. Cancel it and add a new one instead.",
-      );
-    }
+    assertReschedulable(current as RescheduleCurrent, now);
 
     const { data: marked, error: rollError } = await client
       .from("attendance")
@@ -273,19 +258,10 @@ export const rescheduleSession = createServerFn({ method: "POST" })
       .neq("status", "not_marked")
       .limit(1);
     if (rollError) throw rollError;
-    if ((marked ?? []).length > 0) {
-      throw new Error(
-        "The roll for this lesson has been marked, so its time is now part of the record. Cancel it and add a new lesson instead.",
-      );
-    }
+    assertRollUnmarked((marked ?? []).length);
 
-    const payload = {
-      starts_at: new Date(nextStart).toISOString(),
-      ends_at: new Date(nextEnd).toISOString(),
-      // coalesce semantics: only the first move records where it came from.
-      original_starts_at: (current as Row).original_starts_at ?? current.starts_at,
-      original_ends_at: (current as Row).original_ends_at ?? current.ends_at,
-    };
+    const payload = reschedulePatch(current as RescheduleCurrent, data.starts_at, data.ends_at);
+
 
     const { data: saved, error } = await client
       .from("sessions")
