@@ -63,7 +63,7 @@ import {
   deleteSession,
   getSessionRoll,
   listRange,
-  moveSession,
+  rescheduleSession,
   seedRoll,
   updateSession,
 } from "@/lib/vision/schedule.functions";
@@ -167,15 +167,16 @@ function TimetablePage() {
   const { data: catalogue } = useQuery({ queryKey: ["catalogue"], queryFn: () => getCatalogue() });
 
   const queryClient = useQueryClient();
-  const move = useServerFn(moveSession);
+  const reschedule = useServerFn(rescheduleSession);
 
   const events = useMemo(() => sessions.map(toCalendarEvent), [sessions]);
 
-  // Dragging a lesson writes straight through to the session, so the roll,
-  // attendance and everywhere else this lesson shows follow it. Moving it off
-  // its usual slot makes it a make-up; dragging it home again makes it ordinary
-  // once more. The grid is patched in place first so the block does not jump
-  // back before the save returns.
+  // Dragging or stretching a lesson goes through the one canonical reschedule
+  // operation - the same one the edit dialog uses - so the same protections
+  // apply either way: future lessons only, an unmarked roll only, and the same
+  // session row (so the roll, hours and pay follow it). A move is just a move:
+  // it never turns a lesson into a make-up. The grid is patched in place first
+  // so the block does not jump back before the save returns.
   async function moveLesson(row: Row, startISO: string, endISO: string) {
     const key = ["timetable", from, to, tutorId] as const;
     const previous = queryClient.getQueryData<Row[]>(key);
@@ -187,17 +188,11 @@ function TimetablePage() {
       ),
     );
     try {
-      const { make_up } = await move({
-        data: { id: row.id, starts_at: startISO, ends_at: endISO },
-      });
+      await reschedule({ data: { id: row.id, starts_at: startISO, ends_at: endISO } });
       await queryClient.invalidateQueries({ queryKey: ["timetable"] });
       await queryClient.invalidateQueries({ queryKey: ["today"] });
       await queryClient.invalidateQueries({ queryKey: ["roll"] });
-      toast.success(
-        make_up
-          ? "Moved - now a make-up. Drag it back to its slot to undo."
-          : "Back in its usual slot - an ordinary lesson again.",
-      );
+      toast.success("Lesson moved. The roll moved with it.");
     } catch (error) {
       queryClient.setQueryData(key, previous);
       toast.error((error as Error).message);
@@ -373,6 +368,7 @@ function SessionDialog({
 }) {
   const queryClient = useQueryClient();
   const update = useServerFn(updateSession);
+  const reschedule = useServerFn(rescheduleSession);
   const cancel = useServerFn(cancelSession);
   const remove = useServerFn(deleteSession);
 
@@ -400,14 +396,22 @@ function SessionDialog({
   async function saveDetails() {
     setBusy(true);
     try {
+      // Times go through the one reschedule operation, metadata through the
+      // update - so editing here gets exactly the same rules as a drag.
+      const startsAt = fromLocalInput(start);
+      const endsAt = fromLocalInput(end);
+      const timeChanged =
+        Date.parse(startsAt) !== Date.parse(session.starts_at) ||
+        Date.parse(endsAt) !== Date.parse(session.ends_at);
+      if (timeChanged) {
+        await reschedule({ data: { id: session.id, starts_at: startsAt, ends_at: endsAt } });
+      }
       await update({
         data: {
           id: session.id,
           tutor_id: tutor === "none" ? null : tutor,
           room,
           notes,
-          starts_at: fromLocalInput(start),
-          ends_at: fromLocalInput(end),
         },
       });
       toast.success("Lesson updated. The roll is untouched.");
@@ -533,7 +537,17 @@ function SessionDialog({
 
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="sm" className="text-muted-foreground">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground"
+                      disabled={session.roll_total > 0}
+                      title={
+                        session.roll_total > 0
+                          ? "This lesson has a roll - cancel it instead, which keeps the record."
+                          : undefined
+                      }
+                    >
                       Delete
                     </Button>
                   </AlertDialogTrigger>
@@ -541,9 +555,8 @@ function SessionDialog({
                     <AlertDialogHeader>
                       <AlertDialogTitle>Delete this lesson permanently?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        {session.roll_total > 0
-                          ? "The lesson and its roll are removed for good - use this to clear a spare or duplicate lesson off the calendar. To keep the record, cancel it instead."
-                          : "The lesson is removed for good. It has no roll, so nothing else is affected."}
+                        The lesson is removed for good. It has no roll, so no attendance record is
+                        affected. A lesson with a roll can only be cancelled.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -551,9 +564,7 @@ function SessionDialog({
                       <AlertDialogAction
                         onClick={async () => {
                           try {
-                            await remove({
-                              data: { id: session.id, force: session.roll_total > 0 },
-                            });
+                            await remove({ data: { id: session.id } });
                             toast.success("Lesson deleted.");
                             await invalidate();
                             onClose();
@@ -822,12 +833,10 @@ function AddStudentRow({
   );
 }
 
-/** Make the whole class up onto one new lesson - the same booking the Roll uses. */
 /**
- * Make the class up by moving this lesson to another day and time, exactly as a
- * drag would. The lesson leaves its slot and reappears at the new one, flagged
- * a make-up; drag it back, or move it home here, and it is ordinary again. No
- * second lesson is created - the class is rescheduled, not duplicated.
+ * Reschedule the whole class to another day and time, exactly as a drag would -
+ * the same lesson, the same id, the same roll. It stays an ordinary lesson; a
+ * make-up is a per-student decision taken on the roll, not a class-wide move.
  */
 function MakeUpClassForm({
   session,
@@ -838,7 +847,7 @@ function MakeUpClassForm({
   tutors: Row[];
   onChanged: () => Promise<void>;
 }) {
-  const move = useServerFn(moveSession);
+  const reschedule = useServerFn(rescheduleSession);
   const update = useServerFn(updateSession);
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(() => addDays(sydToday(), 7));
@@ -856,12 +865,12 @@ function MakeUpClassForm({
         toast.error("The end time has to be after the start time.");
         return;
       }
-      await move({ data: { id: session.id, starts_at: startsAt, ends_at: endsAt } });
+      await reschedule({ data: { id: session.id, starts_at: startsAt, ends_at: endsAt } });
       const nextTutor = tutorId === "none" ? null : tutorId;
       if (nextTutor !== (session.tutor_id ?? null)) {
         await update({ data: { id: session.id, tutor_id: nextTutor } });
       }
-      toast.success("Class moved. It is now a make-up on that day.");
+      toast.success("Class rescheduled to that day. The roll moved with it.");
       setOpen(false);
       await onChanged();
     } catch (error) {
@@ -874,7 +883,7 @@ function MakeUpClassForm({
   if (!open) {
     return (
       <Button variant="outline" size="sm" className="w-full" onClick={() => setOpen(true)}>
-        Make up the class on another day
+        Move the whole class to another day
       </Button>
     );
   }
@@ -882,8 +891,8 @@ function MakeUpClassForm({
   return (
     <div className="space-y-3 rounded-md border border-[var(--edge)] bg-[var(--mat-thin)] p-3">
       <p className="text-xs text-muted-foreground">
-        Moves this class off its slot to the day and time you set, and marks it a make-up. The roll
-        moves with it - no second lesson is made. A tutor is optional.
+        Moves this class to the day and time you set. The same lesson moves, so the roll goes with
+        it - no second lesson is made, and it stays an ordinary lesson. A tutor is optional.
       </p>
       <div className="grid grid-cols-3 gap-2">
         <div className="space-y-1.5">

@@ -2,6 +2,13 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { db, requireStaff } from "./guard";
+import {
+  assertReschedulable,
+  assertRollUnmarked,
+  reschedulePatch,
+  validateProposedTimes,
+  type RescheduleCurrent,
+} from "./schedule.rules";
 import type { Row } from "./types";
 
 const SESSION_SELECT =
@@ -181,14 +188,16 @@ const sessionPatch = z.object({
   tutor_id: z.string().uuid().nullish(),
   room: z.string().optional().or(z.literal("")),
   status: z.enum(["scheduled", "completed", "cancelled", "rescheduled"]).optional(),
-  starts_at: z.string().optional(),
-  ends_at: z.string().optional(),
   notes: z.string().optional().or(z.literal("")),
 });
 
 /**
- * Edit lesson times in place. Never delete and regenerate - that orphans the
- * roll and loses attendance marks.
+ * Everything about a lesson except when it happens: tutor, room, notes and a
+ * deliberate status change.
+ *
+ * Times are deliberately absent from the patch. `rescheduleSession` is the one
+ * operation allowed to move a lesson, so its protections (future only, roll
+ * unmarked, same row, same id) cannot be bypassed by sending starts_at here.
  */
 export const updateSession = createServerFn({ method: "POST" })
   .middleware([requireStaff])
@@ -206,19 +215,23 @@ export const updateSession = createServerFn({ method: "POST" })
   });
 
 /**
- * Move one lesson on the calendar, and let that mean something.
+ * Move one lesson to a new time, in place.
  *
- * A lesson dragged off the slot it was generated in becomes a make-up: its type
- * flips to `dedicated_make_up` and the slot it came from is remembered. Drag it
- * back onto that exact slot and it becomes an ordinary lesson again, the
- * remembered slot cleared. Only this one lesson changes - every other week's
- * lesson in the class is its own row and stays put.
+ * The canonical - and only - way a lesson's time changes. The same row is
+ * updated, so its id survives and every roll entry, hour, charge and pay figure
+ * that hangs off `session_id` follows the lesson without being rewritten.
  *
- * Reading and writing the base table (not the view) so the original slot is
- * available; if the columns that hold it are not present yet, the move and the
- * make-up flag still take effect - only the remembered slot is skipped.
+ * What it will not do:
+ *  - move a lesson that has already started, or into the past;
+ *  - move a lesson whose roll has been marked (that is history, not a plan);
+ *  - change session_type or status. An ordinary move stays an ordinary lesson.
+ *    A make-up is a student-level decision on attendance, never a side effect
+ *    of dragging a block on the timetable.
+ *
+ * The first move remembers the slot the lesson came from; later moves keep that
+ * first memory. `session_date` is derived in the view from the new starts_at.
  */
-export const moveSession = createServerFn({ method: "POST" })
+export const rescheduleSession = createServerFn({ method: "POST" })
   .middleware([requireStaff])
   .inputValidator((data) =>
     z
@@ -231,61 +244,46 @@ export const moveSession = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const client = db(context.supabase);
+    const now = Date.now();
+
+    validateProposedTimes(data.starts_at, data.ends_at, now);
 
     const { data: current, error: readError } = await client
       .from("sessions")
-      .select("*")
+      .select("id, starts_at, ends_at, original_starts_at, original_ends_at")
       .eq("id", data.id)
       .maybeSingle();
     if (readError) throw readError;
     if (!current) throw new Error("That lesson no longer exists.");
 
-    const origStart = (current as Row).original_starts_at ?? current.starts_at;
-    const origEnd = (current as Row).original_ends_at ?? current.ends_at;
-    const home =
-      Date.parse(data.starts_at) === Date.parse(origStart) &&
-      Date.parse(data.ends_at) === Date.parse(origEnd);
+    assertReschedulable(current as RescheduleCurrent, now);
 
-    // A moved lesson becomes a make-up, and make-ups stack - a class may hold a
-    // make-up on top of its normal lesson, or several at once - so a move onto
-    // an occupied slot is fine and needs no clearing. Only two REGULAR lessons
-    // at the same start are still refused (the friendly message below), which a
-    // move never causes: it always lands as a make-up.
+    const { data: marked, error: rollError } = await client
+      .from("attendance")
+      .select("id")
+      .eq("session_id", data.id)
+      .neq("status", "not_marked")
+      .limit(1);
+    if (rollError) throw rollError;
+    assertRollUnmarked((marked ?? []).length);
 
-    const payload: Record<string, unknown> = home
-      ? {
-          starts_at: origStart,
-          ends_at: origEnd,
-          session_type: "regular",
-          original_starts_at: null,
-          original_ends_at: null,
-        }
-      : {
-          starts_at: data.starts_at,
-          ends_at: data.ends_at,
-          session_type: "dedicated_make_up",
-          original_starts_at: origStart,
-          original_ends_at: origEnd,
-        };
+    const payload = reschedulePatch(current as RescheduleCurrent, data.starts_at, data.ends_at);
 
-    let { error } = await client.from("sessions").update(payload).eq("id", data.id);
-    // If the remembered-slot columns are not in this database yet, still move
-    // the lesson and set the make-up flag - just without the memory.
-    if (error && /original_(starts|ends)_at/.test(error.message)) {
-      const { original_starts_at, original_ends_at, ...rest } = payload;
-      void original_starts_at;
-      void original_ends_at;
-      ({ error } = await client.from("sessions").update(rest).eq("id", data.id));
-    }
+    const { data: saved, error } = await client
+      .from("sessions")
+      .update(payload)
+      .eq("id", data.id)
+      .select("id, starts_at, ends_at, session_type, status")
+      .single();
     if (error) {
       throw new Error(
-        error.message.includes("sessions_no_duplicates") || error.message.includes("duplicate")
+        error.message.includes("sessions_regular_slot") || error.message.includes("duplicate")
           ? "There is already a lesson for this class at that time."
           : error.message,
       );
     }
 
-    return { make_up: !home };
+    return saved;
   });
 
 /** Cancelling preserves the roll. Cancelled lessons pay nobody and consume nothing. */
@@ -306,17 +304,13 @@ export const cancelSession = createServerFn({ method: "POST" })
 /**
  * Delete a lesson.
  *
- * Without `force` this stays deliberately hard to reach - allowed only while the
- * lesson has no roll, so a lesson that has run is cancelled instead. With
- * `force` (an explicit "delete anyway" from the lesson panel) it removes the
- * roll first and then the lesson, for clearing out a spare or duplicate lesson
- * off the calendar even when it carries a roll.
+ * Only ever a lesson with no roll. Attendance is the service-delivery record
+ * and is never deleted here - a lesson that has a roll is cancelled, which
+ * keeps the history intact. There is no force option, by design.
  */
 export const deleteSession = createServerFn({ method: "POST" })
   .middleware([requireStaff])
-  .inputValidator((data) =>
-    z.object({ id: z.string().uuid(), force: z.boolean().default(false) }).parse(data),
-  )
+  .inputValidator((data) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ context, data }) => {
     const client = db(context.supabase);
 
@@ -325,16 +319,9 @@ export const deleteSession = createServerFn({ method: "POST" })
       .select("id", { count: "exact", head: true })
       .eq("session_id", data.id);
     if ((count ?? 0) > 0) {
-      if (!data.force) {
-        throw new Error(
-          "This lesson has a roll. Cancel it instead - deleting would erase the attendance record.",
-        );
-      }
-      const { error: rollError } = await client
-        .from("attendance")
-        .delete()
-        .eq("session_id", data.id);
-      if (rollError) throw rollError;
+      throw new Error(
+        "This lesson has a roll, so it cannot be deleted. Cancel it instead - that keeps the attendance record.",
+      );
     }
 
     const { error } = await client.from("sessions").delete().eq("id", data.id);

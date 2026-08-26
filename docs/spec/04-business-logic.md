@@ -142,14 +142,20 @@ Walk from `recurrence_start` in **Sydney local time**, adding `step` days, until
 - build the start instant from the Sydney wall-clock time of `recurrence_start`, so a 5:30pm class
   stays 5:30pm across the daylight-saving change — **do not add 7×24 hours to a UTC timestamp**
 - `ends_at = starts_at + session_duration_hours`
-- insert; the unique index on `(class_offering_id, starts_at)` makes re-running safe
+- insert; the partial unique index on `(class_offering_id, starts_at) where session_type =
+  'regular'` makes re-running safe
 
 **Make generation idempotent.** Re-running must never create duplicates. The index guarantees it;
-use `on conflict do nothing`.
+use `on conflict do nothing` against that same partial target. Uniqueness applies to regular
+lessons only, so a deliberate `dedicated_make_up` lesson may share a slot with the ordinary one.
 
 ### Changing lesson times
-Edit `starts_at`/`ends_at` on the affected lessons directly. Do **not** delete and regenerate —
-that orphans the roll and loses attendance marks.
+Move the affected lesson **in place** — one canonical operation updates `starts_at`/`ends_at` on the
+same row. Do **not** delete and regenerate: that orphans the roll and loses attendance marks. The
+first move records `original_starts_at`/`original_ends_at`; later moves keep that first memory.
+
+Moving is refused when the lesson has already started or passed, or when any roll entry is marked.
+Those lessons are cancelled instead, which preserves the history.
 
 ---
 
@@ -237,7 +243,7 @@ in April. Never do date arithmetic on UTC timestamps and assume the wall clock h
 | Record | Rule |
 |---|---|
 | Class offering | Set status `closed` or `cancelled`. Delete only if it has no enrolments and no lessons. |
-| Session | Set status `cancelled`. Deleting cascades its attendance — which is why cancelling is right when the lesson existed. |
+| Session | Set status `cancelled`. Deletion is refused outright once the lesson has a roll — attendance is never deleted to make room for it, and there is no force option. A lesson with no roll at all may be deleted. |
 | Enrolment | Set `ends_on`, status `closed`, and a closure reason. `on delete restrict` from attendance blocks deletion once there is history. |
 | Hours package | Status `closed` or `expired`. |
 | Charge | Status `cancelled`. Never delete a charge that was invoiced. |

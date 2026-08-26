@@ -32,7 +32,7 @@ rewrite what was agreed or paid. This is the one place duplication is correct.
 
 | Constraint | Prevents |
 |---|---|
-| `sessions (class_offering_id, starts_at)` unique | Duplicate lessons from re-running generation |
+| `sessions (class_offering_id, starts_at)` unique **partial**, `where session_type = 'regular'` | Duplicate lessons from re-running generation — while still allowing a deliberate `dedicated_make_up` lesson to sit alongside the ordinary lesson in the same slot |
 | `attendance (session_id, enrolment_id)` unique | The same student twice on one roll |
 | `charges (attendance_id)` unique partial | Billing one lesson twice |
 | `charges (package_id)` unique partial | Billing one package twice |
@@ -104,6 +104,12 @@ Never edit an old price. Create a new row and set the old one `inactive`.
 **`sessions`** — one lesson. Duration derives from `starts_at`/`ends_at`; there is no duration
 column to fall out of step. `tutor_id` is per-lesson, which is how cover works.
 `replaces_session_id` links a rescheduled lesson to the one it replaces.
+
+`original_starts_at` / `original_ends_at` remember the slot a lesson was first generated into, and
+are written only by the first reschedule (`coalesce`, so later moves keep the first memory). They
+are null on every row that has never been moved, including all history — the true original slot of
+lessons moved before this was recorded is unknown and is deliberately not invented.
+`updated_at` is a technical timestamp maintained by the shared `set_updated_at()` trigger.
 
 **`session_pay_adjustments`** — *owner-only.* Zero or more adjustments per lesson, each with a
 mandatory note. Kept out of `sessions` so that non-owner staff see no money at all on the

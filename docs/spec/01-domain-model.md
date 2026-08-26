@@ -108,6 +108,16 @@ Carries its own tutor and room, so both can differ from the class default for a 
 Statuses: `scheduled`, `completed`, `cancelled` and `rescheduled`. Cancelled and rescheduled
 lessons pay nobody and consume nothing.
 
+**Moving a lesson updates that same lesson.** A future lesson whose roll is still unmarked can be
+given a new time in place: the row keeps its id, so every roll entry, hour, charge and pay figure
+hanging off `session_id` follows it without being rewritten. Attendance ids, statuses and
+`source_attendance_id` links are untouched, and the Sydney `session_date` in `v_sessions` simply
+follows the new start. An ordinary move never changes `session_type` or `status`.
+
+A lesson that has already started, has passed, or has any marked roll entry is **protected**: it is
+history, not a plan. Cancel it and add a new lesson instead. Cancelling keeps the roll and the
+record; deleting is only ever possible while a lesson has no roll at all.
+
 ### Attendance
 One student's outcome for one lesson. The unit of both hour consumption and PAYG billing.
 
@@ -170,8 +180,9 @@ A make-up is a new attendance row on a *different* lesson, linked back to the ab
 
 A make-up consumes hours exactly like a normal lesson. It is not free unless you make it courtesy.
 
-Make-ups are for **students who missed a lesson**. They are not the mechanism for a tutor swap or
-a rescheduled class — both of those are edits to the lesson itself.
+Make-ups are for **students who missed a lesson**, and live entirely in attendance. They are never a
+side effect of moving a block on the timetable: an ordinary reschedule stays an ordinary lesson, and
+a tutor swap or a class-wide time change is an edit to the lesson itself.
 
 ---
 
