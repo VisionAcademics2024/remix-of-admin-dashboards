@@ -108,6 +108,17 @@ export const saveLead = createServerFn({ method: "POST" })
     return { success: true, id: row?.id as string, code: row?.code as string };
   });
 
+/** Remove a lead outright, and its contact log and trials with it (FK cascade).
+ * A converted lead's student and enrolment are left untouched. */
+export const deleteLead = createServerFn({ method: "POST" })
+  .middleware([requireStaff])
+  .inputValidator((data) => z.object({ id: z.string().uuid() }).parse(data))
+  .handler(async ({ context, data }) => {
+    const { error } = await db(context.supabase).from("leads").delete().eq("id", data.id);
+    if (error) throw error;
+    return { success: true };
+  });
+
 /* --------------------------------------------------------------- Log a contact */
 
 /**

@@ -9,6 +9,7 @@ import {
   MessageSquarePlus,
   Plus,
   Sparkles,
+  Trash2,
   UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -34,6 +35,17 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Code,
   EmptyState,
   PageHeader,
@@ -47,6 +59,7 @@ import {
 import { formatDate, formatTime, sydToday } from "@/lib/format";
 import {
   convertLead,
+  deleteLead,
   getLead,
   getLeadsBoard,
   getOfferingSessions,
@@ -185,7 +198,9 @@ function LeadTable({
         {rows.map((l) => (
           <tr key={l.id}>
             <Td>
-              <div className="font-medium">{l.student_name}</div>
+              <div className="max-w-[16rem] truncate font-medium" title={l.student_name}>
+                {l.student_name}
+              </div>
               <Code>{l.code}</Code>
             </Td>
             <Td>
@@ -244,7 +259,10 @@ function LeadDetailDialog({
     queryKey: ["lead", id],
     queryFn: () => getLead({ data: { id } }),
   });
+  const remove = useServerFn(deleteLead);
+  const queryClient = useQueryClient();
   const [panel, setPanel] = useState<"contact" | "trial" | "convert" | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const lead = data?.lead as Row | undefined;
   const contacts = (data?.contacts ?? []) as Row[];
@@ -311,6 +329,50 @@ function LeadDetailDialog({
               <Button size="sm" variant="ghost" onClick={() => onEdit(lead)}>
                 Edit
               </Button>
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="mr-1 h-4 w-4" /> Delete
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete this lead?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Permanently removes {lead.code} and its contact log and trials. This can't be
+                      undone.
+                      {lead.status === "converted" &&
+                        " The student and enrolment created on conversion are kept."}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={deleting}
+                      onClick={async () => {
+                        setDeleting(true);
+                        try {
+                          await remove({ data: { id } });
+                          await queryClient.invalidateQueries({ queryKey: ["leads-board"] });
+                          toast.success("Lead deleted.");
+                          onClose();
+                        } catch (error) {
+                          toast.error((error as Error).message);
+                          setDeleting(false);
+                        }
+                      }}
+                    >
+                      Delete lead
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
               {lead.status !== "converted" && (
                 <Button size="sm" className="ml-auto" onClick={() => setPanel("convert")}>
                   <UserPlus className="mr-1 h-4 w-4" /> Convert to student
