@@ -141,4 +141,19 @@ describe("one canonical time mutation", () => {
     expect(del).toMatch(/cannot be deleted/);
     expect(timetable).not.toMatch(/force:/);
   });
+
+  it("fails closed when the attendance count query errors", () => {
+    const del = fns.slice(fns.indexOf("export const deleteSession"));
+    // The count query must capture error and throw it before deciding deletion is allowed.
+    expect(del).toMatch(/const\s*\{\s*count,\s*error:\s*countError\s*\}\s*=\s*await/);
+    expect(del).toMatch(/if\s*\(countError\)\s*throw\s*countError;/);
+    expect(del).toMatch(/if\s*\(\(count\s*\?\?\s*0\)\s*>\s*0\)/);
+  });
+
+  it("uses RescheduleClassForm and ordinary-reschedule wording, not make-up wording", () => {
+    expect(timetable).not.toMatch(/MakeUpClassForm/);
+    expect(timetable).toMatch(/RescheduleClassForm/);
+    expect(timetable).not.toMatch(/Move to make-up/);
+    expect(timetable).toMatch(/Reschedule class/);
+  });
 });

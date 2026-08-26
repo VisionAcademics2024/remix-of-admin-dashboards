@@ -753,7 +753,7 @@ function LessonRollPanel({
         onChanged={onChanged}
       />
 
-      <MakeUpClassForm session={session} tutors={tutors} onChanged={onChanged} />
+      <RescheduleClassForm session={session} tutors={tutors} onChanged={onChanged} />
     </div>
   );
 }
@@ -838,7 +838,7 @@ function AddStudentRow({
  * the same lesson, the same id, the same roll. It stays an ordinary lesson; a
  * make-up is a per-student decision taken on the roll, not a class-wide move.
  */
-function MakeUpClassForm({
+function RescheduleClassForm({
   session,
   tutors,
   onChanged,
@@ -929,7 +929,7 @@ function MakeUpClassForm({
           Cancel
         </Button>
         <Button size="sm" disabled={busy} onClick={submit}>
-          Move to make-up
+          Reschedule class
         </Button>
       </div>
     </div>

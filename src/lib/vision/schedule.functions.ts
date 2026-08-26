@@ -314,10 +314,11 @@ export const deleteSession = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const client = db(context.supabase);
 
-    const { count } = await client
+    const { count, error: countError } = await client
       .from("attendance")
       .select("id", { count: "exact", head: true })
       .eq("session_id", data.id);
+    if (countError) throw countError;
     if ((count ?? 0) > 0) {
       throw new Error(
         "This lesson has a roll, so it cannot be deleted. Cancel it instead - that keeps the attendance record.",
