@@ -44,6 +44,17 @@ export type PaymentMethod = "cash" | "bank_transfer" | "other";
 export type PayoutStatus = "draft" | "approved" | "paid";
 export type MakeUpState = "outstanding" | "scheduled" | "completed" | null;
 
+// Leads & trials — the pre-student pipeline.
+export type LeadStatus = "new" | "contacted" | "nurturing" | "trial_booked" | "converted" | "lost";
+export type LeadSource =
+  "referral" | "google" | "social_media" | "walk_in" | "event" | "website" | "other";
+export type ContactChannel = "phone" | "sms" | "email" | "whatsapp" | "in_person" | "other";
+export type TrialKind = "class_trial" | "diagnostic_test";
+export type TrialStatus =
+  "proposed" | "scheduled" | "attended" | "no_show" | "converted" | "declined";
+export type DiagnosticRecommendation =
+  "ready_for_class" | "needs_foundation" | "accelerate" | "not_suitable" | "undecided";
+
 export interface Staff {
   user_id: string;
   full_name: string;
@@ -309,6 +320,69 @@ export interface TutorPayout {
   notes: string | null;
 }
 
+export interface Lead {
+  id: string;
+  code: string;
+  student_name: string;
+  year_level: string | null;
+  subject_interest: string | null;
+  program_interest_id: string | null;
+  guardian_name: string;
+  guardian_email: string | null;
+  guardian_mobile: string | null;
+  status: LeadStatus;
+  source: LeadSource;
+  source_detail: string | null;
+  assigned_to: string | null;
+  next_action_on: string | null;
+  lost_reason: string | null;
+  converted_student_id: string | null;
+  converted_enrolment_id: string | null;
+  converted_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  // v_leads adds:
+  latest_contact_at?: string | null;
+  contact_count?: number;
+  days_since_contact?: number | null;
+  days_in_pipeline?: number;
+  trial_count?: number;
+  is_overdue?: boolean;
+  assigned_name?: string | null;
+  program_interest_name?: string | null;
+}
+
+export interface LeadContact {
+  id: string;
+  lead_id: string;
+  contacted_at: string;
+  channel: ContactChannel;
+  summary: string;
+  next_action_on: string | null;
+  contacted_by: string | null;
+  created_at: string;
+}
+
+export interface Trial {
+  id: string;
+  code: string;
+  lead_id: string;
+  kind: TrialKind;
+  class_offering_id: string | null;
+  session_id: string | null;
+  enrolment_id: string | null;
+  scheduled_for: string | null;
+  status: TrialStatus;
+  recommendation: DiagnosticRecommendation | null;
+  recommended_program_id: string | null;
+  score: string | null;
+  outcome_notes: string | null;
+  conducted_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Human labels. The UI never shows a raw enum value. */
 export const LABELS = {
   sessionStatus: {
@@ -372,6 +446,47 @@ export const LABELS = {
     withdrawn: "Withdrawn",
     transferred: "Transferred",
     other: "Other",
+  },
+  leadStatus: {
+    new: "New",
+    contacted: "Contacted",
+    nurturing: "Nurturing",
+    trial_booked: "Trial booked",
+    converted: "Converted",
+    lost: "Lost",
+  },
+  leadSource: {
+    referral: "Referral",
+    google: "Google",
+    social_media: "Social media",
+    walk_in: "Walk-in",
+    event: "Event",
+    website: "Website",
+    other: "Other",
+  },
+  contactChannel: {
+    phone: "Phone",
+    sms: "SMS",
+    email: "Email",
+    whatsapp: "WhatsApp",
+    in_person: "In person",
+    other: "Other",
+  },
+  trialKind: { class_trial: "Class trial", diagnostic_test: "Diagnostic test" },
+  trialStatus: {
+    proposed: "Proposed",
+    scheduled: "Scheduled",
+    attended: "Attended",
+    no_show: "No-show",
+    converted: "Converted",
+    declined: "Declined",
+  },
+  diagnosticRecommendation: {
+    ready_for_class: "Ready for class",
+    needs_foundation: "Needs foundation",
+    accelerate: "Accelerate",
+    not_suitable: "Not suitable",
+    undecided: "Undecided",
   },
 } as const;
 

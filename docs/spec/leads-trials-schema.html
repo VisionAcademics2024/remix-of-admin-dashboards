@@ -1,0 +1,591 @@
+<title>Leads &amp; Trials Schema</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+  /* ============================================================
+     Tokens — light on bare :root, dark redefines (project is dark-first)
+     Palette lifted from src/styles.css (oklch) so this reads as part
+     of Vision CRM, not a stranger next to it.
+     ============================================================ */
+  :root {
+    --bg:            oklch(0.97 0.006 260);
+    --bg-2:          oklch(0.99 0.003 260);
+    --ink:           oklch(0.22 0.03 268);
+    --ink-soft:      oklch(0.22 0.03 268 / 62%);
+    --ink-faint:     oklch(0.22 0.03 268 / 40%);
+
+    --panel:         oklch(1 0 0 / 70%);
+    --panel-solid:   oklch(1 0 0 / 92%);
+    --edge:          oklch(0.22 0.03 268 / 12%);
+    --edge-top:      oklch(1 0 0 / 80%);
+    --edge-strong:   oklch(0.22 0.03 268 / 22%);
+    --shadow-key:    oklch(0.4 0.05 268 / 14%);
+    --shadow-amb:    oklch(0.4 0.05 268 / 8%);
+
+    --primary:       oklch(0.55 0.17 264);
+    --primary-soft:  oklch(0.55 0.17 264 / 12%);
+    --primary-line:  oklch(0.55 0.17 264 / 38%);
+
+    --success:       oklch(0.55 0.15 152);
+    --success-bg:    oklch(0.55 0.15 152 / 14%);
+    --warning:       oklch(0.58 0.13 70);
+    --warning-bg:    oklch(0.58 0.13 70 / 15%);
+    --danger:        oklch(0.55 0.19 22);
+    --danger-bg:     oklch(0.55 0.19 22 / 13%);
+    --info:          oklch(0.52 0.12 232);
+    --info-bg:       oklch(0.52 0.12 232 / 13%);
+
+    --grid:          oklch(0.22 0.03 268 / 6%);
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable",
+          "Segoe UI", Inter, system-ui, sans-serif;
+  }
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) {
+      --bg:          oklch(0.14 0.02 268);
+      --bg-2:        oklch(0.17 0.024 268);
+      --ink:         oklch(0.98 0.004 260);
+      --ink-soft:    oklch(0.99 0.003 260 / 62%);
+      --ink-faint:   oklch(0.99 0.003 260 / 38%);
+
+      --panel:       oklch(1 0 0 / 9%);
+      --panel-solid: oklch(0.26 0.03 268 / 82%);
+      --edge:        oklch(1 0 0 / 13%);
+      --edge-top:    oklch(1 0 0 / 26%);
+      --edge-strong: oklch(1 0 0 / 24%);
+      --shadow-key:  oklch(0.02 0.01 268 / 55%);
+      --shadow-amb:  oklch(0.02 0.01 268 / 32%);
+
+      --primary:      oklch(0.78 0.13 254);
+      --primary-soft: oklch(0.72 0.15 254 / 18%);
+      --primary-line: oklch(0.72 0.15 254 / 55%);
+
+      --success:     oklch(0.82 0.15 152);
+      --success-bg:  oklch(0.76 0.16 152 / 18%);
+      --warning:     oklch(0.86 0.14 84);
+      --warning-bg:  oklch(0.83 0.15 82 / 18%);
+      --danger:      oklch(0.75 0.18 22);
+      --danger-bg:   oklch(0.68 0.19 22 / 20%);
+      --info:        oklch(0.8 0.12 232);
+      --info-bg:     oklch(0.76 0.13 232 / 18%);
+
+      --grid:        oklch(1 0 0 / 6%);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:          oklch(0.14 0.02 268);
+    --bg-2:        oklch(0.17 0.024 268);
+    --ink:         oklch(0.98 0.004 260);
+    --ink-soft:    oklch(0.99 0.003 260 / 62%);
+    --ink-faint:   oklch(0.99 0.003 260 / 38%);
+    --panel:       oklch(1 0 0 / 9%);
+    --panel-solid: oklch(0.26 0.03 268 / 82%);
+    --edge:        oklch(1 0 0 / 13%);
+    --edge-top:    oklch(1 0 0 / 26%);
+    --edge-strong: oklch(1 0 0 / 24%);
+    --shadow-key:  oklch(0.02 0.01 268 / 55%);
+    --shadow-amb:  oklch(0.02 0.01 268 / 32%);
+    --primary:      oklch(0.78 0.13 254);
+    --primary-soft: oklch(0.72 0.15 254 / 18%);
+    --primary-line: oklch(0.72 0.15 254 / 55%);
+    --success:     oklch(0.82 0.15 152);
+    --success-bg:  oklch(0.76 0.16 152 / 18%);
+    --warning:     oklch(0.86 0.14 84);
+    --warning-bg:  oklch(0.83 0.15 82 / 18%);
+    --danger:      oklch(0.75 0.18 22);
+    --danger-bg:   oklch(0.68 0.19 22 / 20%);
+    --info:        oklch(0.8 0.12 232);
+    --info-bg:     oklch(0.76 0.13 232 / 18%);
+    --grid:        oklch(1 0 0 / 6%);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    font-family: var(--ui);
+    color: var(--ink);
+    background:
+      radial-gradient(1200px 700px at 78% -8%, var(--primary-soft), transparent 60%),
+      linear-gradient(180deg, var(--bg-2), var(--bg) 40%);
+    background-attachment: fixed;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: clamp(28px, 5vw, 68px) clamp(18px, 4vw, 40px) 96px; }
+
+  /* ---- type ---- */
+  h1, h2, h3 { text-wrap: balance; margin: 0; letter-spacing: -0.02em; }
+  h1 { font-size: clamp(2rem, 4.5vw, 3.1rem); font-weight: 640; line-height: 1.04; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.72rem; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--primary);
+    display: inline-flex; align-items: center; gap: 9px;
+  }
+  .eyebrow::before { content: ""; width: 22px; height: 1.5px; background: currentColor; opacity: 0.6; }
+  .lede { color: var(--ink-soft); font-size: clamp(1.02rem, 1.7vw, 1.18rem); max-width: 62ch; margin-top: 18px; }
+  .mono { font-family: var(--mono); }
+
+  /* ---- glass panel ---- */
+  .glass {
+    background: var(--panel);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    backdrop-filter: blur(30px) saturate(180%);
+    border: 1px solid var(--edge);
+    border-radius: 18px;
+    box-shadow: inset 0 1px 0 var(--edge-top), 0 2px 8px -4px var(--shadow-amb), 0 24px 56px -30px var(--shadow-key);
+  }
+  @supports not (backdrop-filter: blur(1px)) {
+    .glass { background: var(--panel-solid); }
+  }
+
+  section { margin-top: clamp(44px, 7vw, 78px); }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }
+  .sec-head h2 { font-size: clamp(1.3rem, 2.6vw, 1.7rem); font-weight: 620; }
+  .sec-head .n { font-family: var(--mono); font-size: 0.8rem; color: var(--ink-faint); font-weight: 600; }
+  .sec-head p { margin: 0; color: var(--ink-soft); font-size: 0.95rem; flex-basis: 100%; max-width: 70ch; }
+
+  /* ============================================================ HERO */
+  header .eyebrow { margin-bottom: 20px; }
+  .hero-meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+  .chip {
+    font-family: var(--mono); font-size: 0.75rem; font-weight: 500;
+    padding: 7px 12px; border-radius: 999px;
+    border: 1px solid var(--edge); background: var(--panel); color: var(--ink-soft);
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .chip b { color: var(--ink); font-weight: 600; }
+  .chip .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* ============================================================ CHAIN */
+  .chain { padding: clamp(20px, 3vw, 34px); overflow-x: auto; }
+  .chain svg { display: block; min-width: 720px; width: 100%; height: auto; }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px 26px; margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--edge); }
+  .legend-item { display: flex; align-items: center; gap: 9px; font-size: 0.84rem; color: var(--ink-soft); }
+  .swatch { width: 26px; height: 16px; border-radius: 5px; border: 1px solid var(--edge-strong); flex: none; }
+  .swatch.new { background: var(--primary-soft); border-color: var(--primary-line); }
+  .swatch.exist { background: var(--panel); }
+  .line-key { width: 26px; height: 0; border-top: 2px solid var(--ink-faint); }
+  .line-key.dash { border-top-style: dashed; }
+
+  /* ============================================================ ER CARDS */
+  .er-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 22px; align-items: start; }
+  .tbl { overflow: hidden; }
+  .tbl.new { border-color: var(--primary-line); box-shadow: inset 0 1px 0 var(--edge-top), 0 0 0 1px var(--primary-soft), 0 24px 56px -30px var(--shadow-key); }
+  .tbl-head { display: flex; align-items: center; gap: 10px; padding: 15px 18px; border-bottom: 1px solid var(--edge); }
+  .tbl.new .tbl-head { background: linear-gradient(180deg, var(--primary-soft), transparent); }
+  .tbl-head .tname { font-family: var(--mono); font-weight: 600; font-size: 1rem; letter-spacing: -0.01em; }
+  .tbl-head .tag {
+    margin-left: auto; font-family: var(--mono); font-size: 0.62rem; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase; padding: 4px 8px; border-radius: 6px;
+  }
+  .tag.tnew { background: var(--primary); color: var(--bg); }
+  .tag.texist { background: var(--panel); color: var(--ink-faint); border: 1px solid var(--edge); }
+  .tbl-note { padding: 11px 18px; font-size: 0.83rem; color: var(--ink-soft); border-bottom: 1px solid var(--edge); background: var(--grid); }
+
+  ul.cols { list-style: none; margin: 0; padding: 6px 0; }
+  ul.cols li {
+    display: grid; grid-template-columns: 1fr auto; gap: 6px 12px;
+    align-items: baseline; padding: 7px 18px;
+    font-size: 0.86rem; border-bottom: 1px solid transparent;
+  }
+  ul.cols li + li { border-top: 1px solid var(--edge); }
+  .cn { font-family: var(--mono); font-weight: 500; color: var(--ink); }
+  .cn.pk { color: var(--primary); }
+  .ct { font-family: var(--mono); font-size: 0.76rem; color: var(--ink-faint); white-space: nowrap; }
+  .badges { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+  .b {
+    font-family: var(--mono); font-size: 0.64rem; font-weight: 600; letter-spacing: 0.04em;
+    padding: 2px 7px; border-radius: 5px; text-transform: uppercase;
+    border: 1px solid transparent; white-space: nowrap;
+  }
+  .b.pk { color: var(--primary); background: var(--primary-soft); border-color: var(--primary-line); }
+  .b.fk { color: var(--info); background: var(--info-bg); }
+  .b.uq { color: var(--ink-soft); border-color: var(--edge-strong); }
+  .b.ck { color: var(--warning); background: var(--warning-bg); }
+  .b.req { color: var(--ink-faint); border-color: var(--edge); }
+  .b.gen { color: var(--success); background: var(--success-bg); }
+  .b .arrow { opacity: 0.6; }
+
+  /* ============================================================ ENUMS */
+  .enum-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .enum { padding: 16px 18px; }
+  .enum .en { font-family: var(--mono); font-weight: 600; font-size: 0.9rem; color: var(--primary); }
+  .enum .vals { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .val { font-family: var(--mono); font-size: 0.74rem; padding: 4px 9px; border-radius: 6px; background: var(--panel); border: 1px solid var(--edge); color: var(--ink-soft); }
+  .val.hl { color: var(--ink); border-color: var(--edge-strong); }
+  .val.s-good { color: var(--success); background: var(--success-bg); border-color: transparent; }
+  .val.s-warn { color: var(--warning); background: var(--warning-bg); border-color: transparent; }
+  .val.s-bad  { color: var(--danger);  background: var(--danger-bg);  border-color: transparent; }
+  .val.s-info { color: var(--info);    background: var(--info-bg);    border-color: transparent; }
+
+  /* ============================================================ RELATIONSHIPS / RULES */
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  @media (max-width: 760px) { .two { grid-template-columns: 1fr; } }
+  .list { padding: 8px 6px; }
+  .list .row { display: flex; gap: 13px; padding: 13px 16px; align-items: flex-start; }
+  .list .row + .row { border-top: 1px solid var(--edge); }
+  .list .ico { flex: none; width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-family: var(--mono); font-size: 0.72rem; font-weight: 700; }
+  .ico.rel { background: var(--info-bg); color: var(--info); }
+  .ico.rule { background: var(--warning-bg); color: var(--warning); }
+  .list .row .txt { font-size: 0.9rem; }
+  .list .row .txt b { font-family: var(--mono); font-weight: 600; font-size: 0.85rem; }
+  .list .row .txt span { color: var(--ink-soft); }
+
+  .view-card { padding: 20px 22px; }
+  .view-card h3 { font-family: var(--mono); font-size: 0.98rem; color: var(--primary); margin-bottom: 6px; }
+  .view-card p { margin: 0 0 14px; color: var(--ink-soft); font-size: 0.9rem; max-width: 68ch; }
+  .derived { display: flex; flex-wrap: wrap; gap: 8px; }
+  .derived .d { font-family: var(--mono); font-size: 0.76rem; padding: 5px 10px; border-radius: 7px; background: var(--success-bg); color: var(--success); }
+
+  footer { margin-top: 72px; padding-top: 24px; border-top: 1px solid var(--edge); color: var(--ink-faint); font-size: 0.82rem; display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: space-between; }
+  footer .mono { color: var(--ink-soft); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .fade { animation: fade 0.6s cubic-bezier(0.32,0.72,0,1) both; }
+    @keyframes fade { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="fade">
+    <span class="eyebrow">Vision CRM · Admin · proposed schema</span>
+    <h1>Leads &amp; Trials</h1>
+    <p class="lede">A pre-student pipeline that sits upstream of the existing chain. It captures an
+      enquiry, records every time we reach out, and — on conversion — routes the family into a
+      trial class or a bespoke diagnostic, then hands them off to a real student and enrolment.</p>
+    <div class="hero-meta">
+      <span class="chip"><span class="dot" style="background:var(--primary)"></span><b>3</b> new tables</span>
+      <span class="chip"><span class="dot" style="background:var(--info)"></span><b>6</b> new enums</span>
+      <span class="chip"><span class="dot" style="background:var(--success)"></span><b>1</b> view</span>
+      <span class="chip">reuses <b>students · enrolments · sessions</b></span>
+      <span class="chip">RLS: <b>is_staff()</b></span>
+    </div>
+  </header>
+
+  <!-- ====================================================== THE CHAIN -->
+  <section>
+    <div class="sec-head">
+      <span class="n">01</span>
+      <h2>Where it slots into the chain</h2>
+      <p>The existing model starts at <span class="mono">guardian → student</span>. Leads live one
+        step before that. A lead is <em>contacted</em>, may be <em>booked</em> into a trial or diagnostic,
+        and only <em>converts</em> into a student + enrolment once they say yes — reusing the machinery
+        that already exists rather than duplicating it.</p>
+    </div>
+
+    <div class="glass chain">
+      <svg viewBox="0 0 900 340" role="img" aria-label="Diagram: leads and trials pipeline feeding into the existing student chain">
+        <defs>
+          <marker id="arw" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+            <path d="M0,0 L8,4.5 L0,9 z" fill="var(--ink-faint)"></path>
+          </marker>
+          <marker id="arwp" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+            <path d="M0,0 L8,4.5 L0,9 z" fill="var(--primary)"></path>
+          </marker>
+        </defs>
+
+        <!-- lanes -->
+        <text x="24" y="30" fill="var(--primary)" font-family="var(--mono)" font-size="12" font-weight="600" letter-spacing="1.5">NEW · PIPELINE</text>
+        <text x="24" y="212" fill="var(--ink-faint)" font-family="var(--mono)" font-size="12" font-weight="600" letter-spacing="1.5">EXISTING · CHAIN</text>
+        <line x1="24" y1="228" x2="876" y2="228" stroke="var(--edge)" stroke-width="1"></line>
+
+        <!-- NEW nodes -->
+        <!-- lead -->
+        <g>
+          <rect x="24" y="44" width="150" height="58" rx="12" fill="var(--primary-soft)" stroke="var(--primary-line)" stroke-width="1.5"></rect>
+          <text x="99" y="70" text-anchor="middle" fill="var(--ink)" font-family="var(--mono)" font-size="14" font-weight="600">leads</text>
+          <text x="99" y="89" text-anchor="middle" fill="var(--ink-soft)" font-size="11">the enquiry</text>
+        </g>
+        <!-- lead_contacts -->
+        <g>
+          <rect x="24" y="128" width="150" height="54" rx="12" fill="var(--panel)" stroke="var(--primary-line)" stroke-width="1.5"></rect>
+          <text x="99" y="151" text-anchor="middle" fill="var(--ink)" font-family="var(--mono)" font-size="13" font-weight="600">lead_contacts</text>
+          <text x="99" y="169" text-anchor="middle" fill="var(--ink-soft)" font-size="11">every touchpoint</text>
+        </g>
+        <!-- trials -->
+        <g>
+          <rect x="242" y="44" width="168" height="58" rx="12" fill="var(--primary-soft)" stroke="var(--primary-line)" stroke-width="1.5"></rect>
+          <text x="326" y="70" text-anchor="middle" fill="var(--ink)" font-family="var(--mono)" font-size="14" font-weight="600">trials</text>
+          <text x="326" y="89" text-anchor="middle" fill="var(--ink-soft)" font-size="11">class trial · diagnostic</text>
+        </g>
+
+        <!-- EXISTING nodes -->
+        <g opacity="0.92">
+          <rect x="242" y="244" width="150" height="56" rx="12" fill="var(--panel)" stroke="var(--edge-strong)" stroke-width="1"></rect>
+          <text x="317" y="268" text-anchor="middle" fill="var(--ink)" font-family="var(--mono)" font-size="13" font-weight="600">class_offering</text>
+          <text x="317" y="286" text-anchor="middle" fill="var(--ink-soft)" font-size="11">+ session</text>
+
+          <rect x="470" y="44" width="150" height="58" rx="12" fill="var(--panel)" stroke="var(--edge-strong)" stroke-width="1"></rect>
+          <text x="545" y="70" text-anchor="middle" fill="var(--ink)" font-family="var(--mono)" font-size="14" font-weight="600">student</text>
+          <text x="545" y="89" text-anchor="middle" fill="var(--ink-soft)" font-size="11">+ guardian</text>
+
+          <rect x="690" y="44" width="186" height="58" rx="12" fill="var(--panel)" stroke="var(--edge-strong)" stroke-width="1"></rect>
+          <text x="783" y="70" text-anchor="middle" fill="var(--ink)" font-family="var(--mono)" font-size="14" font-weight="600">enrolment</text>
+          <text x="783" y="89" text-anchor="middle" fill="var(--ink-soft)" font-size="11">status: trial → active</text>
+
+          <rect x="690" y="244" width="186" height="56" rx="12" fill="var(--panel)" stroke="var(--edge-strong)" stroke-width="1"></rect>
+          <text x="783" y="268" text-anchor="middle" fill="var(--ink)" font-family="var(--mono)" font-size="13" font-weight="600">attendance</text>
+          <text x="783" y="286" text-anchor="middle" fill="var(--ink-soft)" font-size="11">att_type: trial</text>
+        </g>
+
+        <!-- edges (primary = new relationships) -->
+        <!-- lead -> lead_contacts -->
+        <path d="M99,102 L99,126" fill="none" stroke="var(--primary)" stroke-width="1.6" marker-end="url(#arwp)"></path>
+        <!-- lead -> trials -->
+        <path d="M174,73 L240,73" fill="none" stroke="var(--primary)" stroke-width="1.6" marker-end="url(#arwp)"></path>
+        <!-- trials -> class_offering/session -->
+        <path d="M326,102 L320,242" fill="none" stroke="var(--primary)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arwp)"></path>
+        <!-- lead -> student (converts to) -->
+        <path d="M410,66 C440,60 448,64 468,68" fill="none" stroke="var(--primary)" stroke-width="1.6" marker-end="url(#arwp)"></path>
+        <text x="440" y="40" text-anchor="middle" fill="var(--primary)" font-family="var(--mono)" font-size="10.5" font-weight="600">converts to</text>
+        <!-- student -> enrolment (existing) -->
+        <path d="M620,73 L688,73" fill="none" stroke="var(--ink-faint)" stroke-width="1.4" marker-end="url(#arw)"></path>
+        <!-- enrolment -> attendance (existing) -->
+        <path d="M783,102 L783,242" fill="none" stroke="var(--ink-faint)" stroke-width="1.4" marker-end="url(#arw)"></path>
+        <!-- trials -> enrolment (delivered by, dashed) -->
+        <path d="M410,80 C540,120 660,150 700,240" fill="none" stroke="var(--primary)" stroke-width="1.4" stroke-dasharray="5 4" opacity="0.75" marker-end="url(#arwp)"></path>
+      </svg>
+
+      <div class="legend">
+        <span class="legend-item"><span class="swatch new"></span> New table</span>
+        <span class="legend-item"><span class="swatch exist"></span> Existing table (reused)</span>
+        <span class="legend-item"><span class="line-key" style="border-color:var(--primary)"></span> New relationship</span>
+        <span class="legend-item"><span class="line-key dash" style="border-color:var(--primary)"></span> Optional link (nullable FK)</span>
+        <span class="legend-item"><span class="line-key"></span> Existing relationship</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================================================== TABLES -->
+  <section>
+    <div class="sec-head">
+      <span class="n">02</span>
+      <h2>The tables</h2>
+      <p>Same conventions as <span class="mono">docs/spec/03-schema.sql</span>: uuid keys, a
+        generated human <span class="mono">code</span>, <span class="mono">airtable_id</span> for
+        reconciliation, <span class="mono">created_at/updated_at</span> with a touch trigger, and
+        facts only — anything derived lives in a view.</p>
+    </div>
+
+    <div class="er-grid">
+
+      <!-- LEADS -->
+      <div class="glass tbl new">
+        <div class="tbl-head">
+          <span class="tname">leads</span>
+          <span class="tag tnew">New</span>
+        </div>
+        <div class="tbl-note">One enquiry. The child, the enquiring parent, the pipeline state, and — once won — where it landed.</div>
+        <ul class="cols">
+          <li><span class="cn pk">id</span><span class="ct">uuid</span><span class="badges"><span class="b pk">PK</span></span></li>
+          <li><span class="cn">code</span><span class="ct">text</span><span class="badges"><span class="b gen">generated · LEAD-nnnn</span></span></li>
+          <li><span class="cn">student_name</span><span class="ct">text</span><span class="badges"><span class="b req">not null</span></span></li>
+          <li><span class="cn">year_level</span><span class="ct">text</span></li>
+          <li><span class="cn">subject_interest</span><span class="ct">text</span></li>
+          <li><span class="cn">program_interest_id</span><span class="ct">uuid</span><span class="badges"><span class="b fk">FK <span class="arrow">→</span> programs</span></span></li>
+          <li><span class="cn">guardian_name</span><span class="ct">text</span><span class="badges"><span class="b req">not null</span></span></li>
+          <li><span class="cn">guardian_email</span><span class="ct">text</span></li>
+          <li><span class="cn">guardian_mobile</span><span class="ct">text</span></li>
+          <li><span class="cn">status</span><span class="ct">lead_status</span><span class="badges"><span class="b req">default 'new'</span></span></li>
+          <li><span class="cn">source</span><span class="ct">lead_source</span><span class="badges"><span class="b req">default 'other'</span></span></li>
+          <li><span class="cn">source_detail</span><span class="ct">text</span></li>
+          <li><span class="cn">assigned_to</span><span class="ct">uuid</span><span class="badges"><span class="b fk">FK <span class="arrow">→</span> staff</span></span></li>
+          <li><span class="cn">next_action_on</span><span class="ct">date</span></li>
+          <li><span class="cn">lost_reason</span><span class="ct">text</span></li>
+          <li><span class="cn">converted_student_id</span><span class="ct">uuid</span><span class="badges"><span class="b fk">FK <span class="arrow">→</span> students</span></span></li>
+          <li><span class="cn">converted_enrolment_id</span><span class="ct">uuid</span><span class="badges"><span class="b fk">FK <span class="arrow">→</span> enrolments</span></span></li>
+          <li><span class="cn">converted_at</span><span class="ct">timestamptz</span></li>
+          <li><span class="cn">notes</span><span class="ct">text</span></li>
+          <li><span class="cn">airtable_id</span><span class="ct">text</span><span class="badges"><span class="b uq">unique</span></span></li>
+        </ul>
+        <div class="tbl-note" style="border-bottom:none;border-top:1px solid var(--edge)">
+          <span class="b ck">check</span> lost ⇒ lost_reason present &nbsp;·&nbsp;
+          <span class="b ck">check</span> converted ⇒ converted_student_id set
+        </div>
+      </div>
+
+      <!-- LEAD_CONTACTS -->
+      <div class="glass tbl new">
+        <div class="tbl-head">
+          <span class="tname">lead_contacts</span>
+          <span class="tag tnew">New</span>
+        </div>
+        <div class="tbl-note">The log of “when we’ve contacted them”. One row per touchpoint, newest first.</div>
+        <ul class="cols">
+          <li><span class="cn pk">id</span><span class="ct">uuid</span><span class="badges"><span class="b pk">PK</span></span></li>
+          <li><span class="cn">lead_id</span><span class="ct">uuid</span><span class="badges"><span class="b fk">FK <span class="arrow">→</span> leads</span><span class="b req">on delete cascade</span></span></li>
+          <li><span class="cn">contacted_at</span><span class="ct">timestamptz</span><span class="badges"><span class="b req">default now()</span></span></li>
+          <li><span class="cn">channel</span><span class="ct">contact_channel</span><span class="badges"><span class="b req">not null</span></span></li>
+          <li><span class="cn">summary</span><span class="ct">text</span><span class="badges"><span class="b req">not null</span></span></li>
+          <li><span class="cn">next_action_on</span><span class="ct">date</span></li>
+          <li><span class="cn">contacted_by</span><span class="ct">uuid</span><span class="badges"><span class="b fk">FK <span class="arrow">→</span> staff</span></span></li>
+          <li><span class="cn">created_at</span><span class="ct">timestamptz</span></li>
+        </ul>
+        <div class="tbl-note" style="border-bottom:none;border-top:1px solid var(--edge)">
+          <span class="b uq">index</span> (lead_id, contacted_at desc)
+        </div>
+      </div>
+
+      <!-- TRIALS -->
+      <div class="glass tbl new">
+        <div class="tbl-head">
+          <span class="tname">trials</span>
+          <span class="tag tnew">New</span>
+        </div>
+        <div class="tbl-note">A booked trial for a lead — sitting in on a class, or a bespoke diagnostic. Points at the real offering / session that delivers it.</div>
+        <ul class="cols">
+          <li><span class="cn pk">id</span><span class="ct">uuid</span><span class="badges"><span class="b pk">PK</span></span></li>
+          <li><span class="cn">code</span><span class="ct">text</span><span class="badges"><span class="b gen">generated · TRL-nnnn</span></span></li>
+          <li><span class="cn">lead_id</span><span class="ct">uuid</span><span class="badges"><span class="b fk">FK <span class="arrow">→</span> leads</span><span class="b req">on delete cascade</span></span></li>
+          <li><span class="cn">kind</span><span class="ct">trial_kind</span><span class="badges"><span class="b req">default 'class_trial'</span></span></li>
+          <li><span class="cn">class_offering_id</span><span class="ct">uuid</span><span class="badges"><span class="b fk">FK <span class="arrow">→</span> class_offerings</span></span></li>
+          <li><span class="cn">session_id</span><span class="ct">uuid</span><span class="badges"><span class="b fk">FK <span class="arrow">→</span> sessions</span></span></li>
+          <li><span class="cn">enrolment_id</span><span class="ct">uuid</span><span class="badges"><span class="b fk">FK <span class="arrow">→</span> enrolments</span></span></li>
+          <li><span class="cn">scheduled_for</span><span class="ct">timestamptz</span></li>
+          <li><span class="cn">status</span><span class="ct">trial_status</span><span class="badges"><span class="b req">default 'proposed'</span></span></li>
+          <li><span class="cn">recommendation</span><span class="ct">diagnostic_reco</span></li>
+          <li><span class="cn">recommended_program_id</span><span class="ct">uuid</span><span class="badges"><span class="b fk">FK <span class="arrow">→</span> programs</span></span></li>
+          <li><span class="cn">score</span><span class="ct">text</span></li>
+          <li><span class="cn">outcome_notes</span><span class="ct">text</span></li>
+          <li><span class="cn">conducted_by</span><span class="ct">uuid</span><span class="badges"><span class="b fk">FK <span class="arrow">→</span> tutors</span></span></li>
+          <li><span class="cn">airtable_id</span><span class="ct">text</span><span class="badges"><span class="b uq">unique</span></span></li>
+        </ul>
+        <div class="tbl-note" style="border-bottom:none;border-top:1px solid var(--edge)">
+          <span class="b ck">check</span> kind = 'class_trial' ⇒ class_offering_id set
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ====================================================== ENUMS -->
+  <section>
+    <div class="sec-head">
+      <span class="n">03</span>
+      <h2>Enums</h2>
+      <p>Statuses are enums so the pipeline is reportable, not a free-text guess. Source stays
+        categorical for attribution; <span class="mono">year_level</span> and
+        <span class="mono">subject_interest</span> remain free text, matching the existing schema’s
+        stance on things that change.</p>
+    </div>
+
+    <div class="enum-grid">
+      <div class="glass enum">
+        <div class="en">lead_status</div>
+        <div class="vals">
+          <span class="val s-info">new</span>
+          <span class="val hl">contacted</span>
+          <span class="val hl">nurturing</span>
+          <span class="val hl">trial_booked</span>
+          <span class="val s-good">converted</span>
+          <span class="val s-bad">lost</span>
+        </div>
+      </div>
+      <div class="glass enum">
+        <div class="en">trial_status</div>
+        <div class="vals">
+          <span class="val hl">proposed</span>
+          <span class="val s-info">scheduled</span>
+          <span class="val s-good">attended</span>
+          <span class="val s-warn">no_show</span>
+          <span class="val s-good">converted</span>
+          <span class="val s-bad">declined</span>
+        </div>
+      </div>
+      <div class="glass enum">
+        <div class="en">trial_kind</div>
+        <div class="vals">
+          <span class="val hl">class_trial</span>
+          <span class="val hl">diagnostic_test</span>
+        </div>
+      </div>
+      <div class="glass enum">
+        <div class="en">contact_channel</div>
+        <div class="vals">
+          <span class="val">phone</span><span class="val">sms</span><span class="val">email</span>
+          <span class="val">whatsapp</span><span class="val">in_person</span><span class="val">other</span>
+        </div>
+      </div>
+      <div class="glass enum">
+        <div class="en">lead_source</div>
+        <div class="vals">
+          <span class="val">referral</span><span class="val">google</span><span class="val">social_media</span>
+          <span class="val">walk_in</span><span class="val">event</span><span class="val">website</span><span class="val">other</span>
+        </div>
+      </div>
+      <div class="glass enum">
+        <div class="en">diagnostic_recommendation</div>
+        <div class="vals">
+          <span class="val s-good">ready_for_class</span>
+          <span class="val s-warn">needs_foundation</span>
+          <span class="val s-info">accelerate</span>
+          <span class="val s-bad">not_suitable</span>
+          <span class="val">undecided</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================================================== RELATIONSHIPS + RULES -->
+  <section>
+    <div class="sec-head">
+      <span class="n">04</span>
+      <h2>Relationships &amp; rules</h2>
+      <p>How the new tables reach into the existing schema, and the constraints the database
+        enforces so the pipeline can’t record a contradiction.</p>
+    </div>
+
+    <div class="two">
+      <div class="glass list">
+        <div class="row"><span class="ico rel">1·n</span><span class="txt"><b>leads → lead_contacts</b><br><span>Many touchpoints per lead. Deleting a lead cascades its contact log.</span></span></div>
+        <div class="row"><span class="ico rel">1·n</span><span class="txt"><b>leads → trials</b><br><span>A lead may be offered more than one trial (e.g. a diagnostic, then a class trial).</span></span></div>
+        <div class="row"><span class="ico rel">n·1</span><span class="txt"><b>trials → class_offerings / sessions</b><br><span>“Which trial class they’ll join.” Making a <em>new</em> trial class is just creating an offering and pointing here.</span></span></div>
+        <div class="row"><span class="ico rel">1·1</span><span class="txt"><b>leads → students / enrolments</b><br><span>On conversion the lead names the student it became and the trial enrolment that delivers it.</span></span></div>
+        <div class="row"><span class="ico rel">n·1</span><span class="txt"><b>trials → tutors / programs</b><br><span>Who ran the diagnostic, and the program it recommends.</span></span></div>
+      </div>
+
+      <div class="glass list">
+        <div class="row"><span class="ico rule">CK</span><span class="txt"><b>lead_lost_needs_reason</b><br><span>Status <span class="mono">lost</span> requires a written <span class="mono">lost_reason</span> — mirrors the project’s “adjustments need a reason” stance.</span></span></div>
+        <div class="row"><span class="ico rule">CK</span><span class="txt"><b>lead_converted_needs_student</b><br><span>Status <span class="mono">converted</span> can’t be set without a <span class="mono">converted_student_id</span>.</span></span></div>
+        <div class="row"><span class="ico rule">CK</span><span class="txt"><b>trial_class_needs_offering</b><br><span>A <span class="mono">class_trial</span> must point at a class offering; a <span class="mono">diagnostic_test</span> need not.</span></span></div>
+        <div class="row"><span class="ico rule">RLS</span><span class="txt"><b>is_staff() on all three</b><br><span>Operational data — any active staff member, full access. Added to the same policy loop the other 14 tables use.</span></span></div>
+        <div class="row"><span class="ico rule">TG</span><span class="txt"><b>set_updated_at()</b><br><span>The shared touch trigger on <span class="mono">leads</span> and <span class="mono">trials</span>, exactly as everywhere else.</span></span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================================================== VIEW -->
+  <section>
+    <div class="sec-head">
+      <span class="n">05</span>
+      <h2>The derived view</h2>
+      <p>Facts stay in the tables; the working list the admin screen reads comes from a view, so
+        “overdue”, “days since contact” and counts never drift.</p>
+    </div>
+    <div class="glass view-card">
+      <h3>v_leads</h3>
+      <p>Each lead, enriched for the pipeline board — the latest contact, how long it’s been sitting,
+        whether a promised follow-up is past due, and how many trials it’s spawned.
+        <span class="mono">security_invoker = true</span>, like every other view.</p>
+      <div class="derived">
+        <span class="d">latest_contact_at</span>
+        <span class="d">days_since_contact</span>
+        <span class="d">contact_count</span>
+        <span class="d">trial_count</span>
+        <span class="d">is_overdue</span>
+        <span class="d">assigned_name</span>
+        <span class="d">days_in_pipeline</span>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Vision CRM · proposed admin schema · Leads &amp; Trials</span>
+    <span class="mono">3 tables · 6 enums · 1 view · design review draft</span>
+  </footer>
+
+</div>

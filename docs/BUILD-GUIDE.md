@@ -59,6 +59,7 @@ Navigation is grouped daily-use first, exactly as `06-screens.md` asks.
 
 | Screen | URL | What it is for |
 |---|---|---|
+| **Leads & Trials** | `/leads` | The pre-student pipeline. Enquiries as an Open / Converted / Lost board, a contact log per lead, booked class trials and diagnostics, and one-click conversion into a student, guardian and (optionally) a trial enrolment. |
 | **Students & Families** | `/students` | Two tabs, students and guardians. "Manage" on a student opens the family dialog: link guardians, set the default payer, change status. |
 | **Student Detail** | `/students/:id` | Everything about one student on one page — family, enrolments, packages with balances, attendance, charges. The screen to open when a parent rings. |
 | **Enrolments & Hours** | `/enrolments` | The commercial view. Package balances, and the eligibility dialog. |
@@ -132,6 +133,7 @@ src/
       schedule.functions.ts       the week, lesson edits, one-off lessons
       roll.functions.ts           attendance filters, marking, make-ups
       commerce.functions.ts       enrolments, packages, eligibility, pricing
+      leads.functions.ts          leads, contacts, trials, lead conversion
       billing.functions.ts        charges, invoicing, payments
       pay.functions.ts            rates, adjustments, payouts (owner-only)
       overview.functions.ts       Today, Needs Attention
@@ -144,7 +146,7 @@ src/
     route.tsx                     the access gate and app shell
     today.tsx  timetable.tsx  roll.tsx  make-ups.tsx  classes.index.tsx
     classes.new.tsx  students.tsx  students.$id.tsx  enrolments.tsx
-    billing.tsx  needs-attention.tsx  tutor-pay.tsx  setup.tsx  staff.tsx
+    leads.tsx  billing.tsx  needs-attention.tsx  tutor-pay.tsx  setup.tsx  staff.tsx
     prototype.*.tsx               the prototype's screens
 ```
 

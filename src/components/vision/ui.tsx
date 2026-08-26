@@ -232,6 +232,18 @@ export function toneForStatus(kind: string, value: string | null | undefined): B
     "makeup:outstanding": "danger",
     "makeup:scheduled": "info",
     "makeup:completed": "success",
+    "lead:new": "info",
+    "lead:contacted": "neutral",
+    "lead:nurturing": "neutral",
+    "lead:trial_booked": "warning",
+    "lead:converted": "success",
+    "lead:lost": "muted",
+    "trial:proposed": "neutral",
+    "trial:scheduled": "info",
+    "trial:attended": "success",
+    "trial:no_show": "warning",
+    "trial:converted": "success",
+    "trial:declined": "muted",
   };
   return map[`${kind}:${value}`] ?? "neutral";
 }

@@ -192,6 +192,54 @@ Every adjustment requires a written reason. This is enforced, not encouraged.
 
 ---
 
+## Leads and trials
+
+Everything above starts at a guardian and a student. A **lead** is the step before
+that: an enquiry from a family who is not yet on the books. The pipeline is deliberately
+kept separate from the student records so a prospect who never converts leaves no
+half-made student, guardian or enrolment behind.
+
+```
+lead ──── lead_contact        (every time we reached out)
+  │
+  ├──── trial ──── class_offering / session   (a class trial, or a diagnostic test)
+  │
+  └──(converts to)──► student + guardian + enrolment (status = trial)
+```
+
+### Lead
+An enquiry. Carries the child's name and year, the enquiring parent's contact details,
+where they came from, and a pipeline **status**: `new → contacted → nurturing →
+trial_booked → converted → lost`. A lead is not a student — the names are free text
+because no record exists yet. When it is won, it records **which student and enrolment
+it became**; a lost lead must record **why**.
+
+### Lead contact
+One touchpoint — a call, text, email or visit — with a written summary and, optionally,
+the date of the next promised action. This is the answer to "when did we last chase
+them, and what did we say". The first contact on a `new` lead moves it to `contacted`.
+
+### Trial
+A booked trial for a lead. Two kinds:
+
+- `class_trial` — the prospect sits in on a real **class offering** (an existing class,
+  or a new one created for them). Must name the offering.
+- `diagnostic_test` — a bespoke assessment, optionally conducted by a tutor, that
+  records a score and a **recommendation** (`ready_for_class`, `needs_foundation`,
+  `accelerate`, `not_suitable`, `undecided`) and a recommended program.
+
+A trial reuses the existing class/session/attendance machinery; it does not duplicate
+it. Booking one nudges the lead to `trial_booked`.
+
+### Conversion
+Converting a lead creates a brand-new guardian and student, links them, and makes the
+guardian the default payer — in that order, because the default-payer rule requires the
+link to exist first. It can optionally open a **trial enrolment** in a chosen class so
+the family lands straight on the roll. From that point the family is an ordinary student
+and everything downstream — sessions, attendance, hours, billing — is unchanged.
+
+---
+
 ## Vocabulary that trips people up
 
 | People say | System means |
@@ -203,3 +251,6 @@ Every adjustment requires a written reason. This is enforced, not encouraged.
 | "The class" | A `class_offering`, not a `program` |
 | "A lesson" | A `session` |
 | "Billing" | Ambiguous — ask whether they mean enrolling someone or invoicing them |
+| "A lead" | A row in `leads` — an enquiry, not yet a student |
+| "A trial" (pipeline) | A row in `trials` — a booked class trial or diagnostic for a lead |
+| "A trial" (enrolment) | An `enrolment` with `status = trial` — an existing student on trial in a class |
