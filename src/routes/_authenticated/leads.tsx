@@ -1004,19 +1004,22 @@ function ConvertDialog({ lead, board, onClose }: { lead: Row; board: Row; onClos
   const [form, setForm] = useState({
     relationship: "Parent",
     enrol_offering_id: "",
+    enrol_status: "trial",
+    enrol_method: "hours",
     enrol_starts_on: sydToday(),
   });
   const [busy, setBusy] = useState(false);
+  const active = form.enrol_status === "active";
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <DialogContent className="max-h-[88vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Convert to student</DialogTitle>
           <DialogDescription>
             Creates a new student ({lead.student_name}) and guardian ({lead.guardian_name}), links
-            them, and makes the parent the default payer. Optionally opens a trial enrolment so they
-            land straight on the roll.
+            them, and makes the parent the default payer. Optionally enrols them in a class, as a
+            trial or a full student.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
@@ -1027,7 +1030,7 @@ function ConvertDialog({ lead, board, onClose }: { lead: Row; board: Row; onClos
             placeholder="Parent, Mother, Guardian…"
           />
           <SelectField
-            label="Open a trial enrolment in (optional)"
+            label="Enrol in a class (optional)"
             value={form.enrol_offering_id || "none"}
             options={{
               none: "Don't enrol yet",
@@ -1040,13 +1043,67 @@ function ConvertDialog({ lead, board, onClose }: { lead: Row; board: Row; onClos
             }}
             onChange={(v) => setForm({ ...form, enrol_offering_id: v === "none" ? "" : v })}
           />
+
           {form.enrol_offering_id && (
-            <TextField
-              label="Enrolment starts on"
-              type="date"
-              value={form.enrol_starts_on}
-              onChange={(v) => setForm({ ...form, enrol_starts_on: v })}
-            />
+            <>
+              <div className="space-y-1.5">
+                <Label>Enrol as</Label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, enrol_status: "trial" })}
+                    className={cn(
+                      "flex-1 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                      !active
+                        ? "border-primary/50 bg-primary/15 text-foreground"
+                        : "border-[var(--edge)] text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <span className="block font-medium">Trial student</span>
+                    <span className="block text-xs opacity-80">
+                      Sits in, consumes nothing. Convert to active later.
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, enrol_status: "active" })}
+                    className={cn(
+                      "flex-1 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                      active
+                        ? "border-primary/50 bg-primary/15 text-foreground"
+                        : "border-[var(--edge)] text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <span className="block font-medium">Full student</span>
+                    <span className="block text-xs opacity-80">
+                      Active enrolment that bills from day one.
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {active && (
+                <SelectField
+                  label="Billing method"
+                  value={form.enrol_method}
+                  options={LABELS.billingMethod}
+                  onChange={(v) => setForm({ ...form, enrol_method: v })}
+                />
+              )}
+
+              <TextField
+                label="Enrolment starts on"
+                type="date"
+                value={form.enrol_starts_on}
+                onChange={(v) => setForm({ ...form, enrol_starts_on: v })}
+              />
+
+              <p className="text-xs text-muted-foreground">
+                {active
+                  ? "Set the agreed price on Enrolments & Hours — until then it shows on Needs Attention as a reminder."
+                  : "A trial keeps them open with no billing. Push them to a full student anytime from Enrolments & Hours."}
+              </p>
+            </>
           )}
         </div>
         <DialogFooter>
@@ -1063,6 +1120,8 @@ function ConvertDialog({ lead, board, onClose }: { lead: Row; board: Row; onClos
                     lead_id: lead.id,
                     relationship: form.relationship,
                     enrol_offering_id: form.enrol_offering_id || null,
+                    enrol_status: form.enrol_status as "trial" | "active",
+                    enrol_method: active ? (form.enrol_method as "hours" | "payg") : null,
                     enrol_starts_on: form.enrol_starts_on,
                   },
                 });
