@@ -557,6 +557,175 @@ export type Database = {
           },
         ]
       }
+      lead_contacts: {
+        Row: {
+          channel: Database["public"]["Enums"]["contact_channel"]
+          contacted_at: string
+          contacted_by: string | null
+          created_at: string
+          id: string
+          lead_id: string
+          next_action_on: string | null
+          summary: string
+        }
+        Insert: {
+          channel: Database["public"]["Enums"]["contact_channel"]
+          contacted_at?: string
+          contacted_by?: string | null
+          created_at?: string
+          id?: string
+          lead_id: string
+          next_action_on?: string | null
+          summary: string
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["contact_channel"]
+          contacted_at?: string
+          contacted_by?: string | null
+          created_at?: string
+          id?: string
+          lead_id?: string
+          next_action_on?: string | null
+          summary?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_contacts_contacted_by_fkey"
+            columns: ["contacted_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "lead_contacts_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_contacts_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leads: {
+        Row: {
+          airtable_id: string | null
+          assigned_to: string | null
+          code: string | null
+          converted_at: string | null
+          converted_enrolment_id: string | null
+          converted_student_id: string | null
+          created_at: string
+          guardian_email: string | null
+          guardian_mobile: string | null
+          guardian_name: string
+          id: string
+          lost_reason: string | null
+          next_action_on: string | null
+          notes: string | null
+          program_interest_id: string | null
+          seq: number
+          source: Database["public"]["Enums"]["lead_source"]
+          source_detail: string | null
+          status: Database["public"]["Enums"]["lead_status"]
+          student_name: string
+          subject_interest: string | null
+          updated_at: string
+          year_level: string | null
+        }
+        Insert: {
+          airtable_id?: string | null
+          assigned_to?: string | null
+          code?: string | null
+          converted_at?: string | null
+          converted_enrolment_id?: string | null
+          converted_student_id?: string | null
+          created_at?: string
+          guardian_email?: string | null
+          guardian_mobile?: string | null
+          guardian_name: string
+          id?: string
+          lost_reason?: string | null
+          next_action_on?: string | null
+          notes?: string | null
+          program_interest_id?: string | null
+          seq?: number
+          source?: Database["public"]["Enums"]["lead_source"]
+          source_detail?: string | null
+          status?: Database["public"]["Enums"]["lead_status"]
+          student_name: string
+          subject_interest?: string | null
+          updated_at?: string
+          year_level?: string | null
+        }
+        Update: {
+          airtable_id?: string | null
+          assigned_to?: string | null
+          code?: string | null
+          converted_at?: string | null
+          converted_enrolment_id?: string | null
+          converted_student_id?: string | null
+          created_at?: string
+          guardian_email?: string | null
+          guardian_mobile?: string | null
+          guardian_name?: string
+          id?: string
+          lost_reason?: string | null
+          next_action_on?: string | null
+          notes?: string | null
+          program_interest_id?: string | null
+          seq?: number
+          source?: Database["public"]["Enums"]["lead_source"]
+          source_detail?: string | null
+          status?: Database["public"]["Enums"]["lead_status"]
+          student_name?: string
+          subject_interest?: string | null
+          updated_at?: string
+          year_level?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "leads_converted_enrolment_id_fkey"
+            columns: ["converted_enrolment_id"]
+            isOneToOne: false
+            referencedRelation: "enrolments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_converted_enrolment_id_fkey"
+            columns: ["converted_enrolment_id"]
+            isOneToOne: false
+            referencedRelation: "v_enrolments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_converted_student_id_fkey"
+            columns: ["converted_student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_program_interest_id_fkey"
+            columns: ["program_interest_id"]
+            isOneToOne: false
+            referencedRelation: "programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       operating_periods: {
         Row: {
           airtable_id: string | null
@@ -1286,6 +1455,146 @@ export type Database = {
           },
         ]
       }
+      trials: {
+        Row: {
+          airtable_id: string | null
+          class_offering_id: string | null
+          code: string | null
+          conducted_by: string | null
+          created_at: string
+          enrolment_id: string | null
+          id: string
+          kind: Database["public"]["Enums"]["trial_kind"]
+          lead_id: string
+          outcome_notes: string | null
+          recommendation:
+            | Database["public"]["Enums"]["diagnostic_recommendation"]
+            | null
+          recommended_program_id: string | null
+          scheduled_for: string | null
+          score: string | null
+          seq: number
+          session_id: string | null
+          status: Database["public"]["Enums"]["trial_status"]
+          updated_at: string
+        }
+        Insert: {
+          airtable_id?: string | null
+          class_offering_id?: string | null
+          code?: string | null
+          conducted_by?: string | null
+          created_at?: string
+          enrolment_id?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["trial_kind"]
+          lead_id: string
+          outcome_notes?: string | null
+          recommendation?:
+            | Database["public"]["Enums"]["diagnostic_recommendation"]
+            | null
+          recommended_program_id?: string | null
+          scheduled_for?: string | null
+          score?: string | null
+          seq?: number
+          session_id?: string | null
+          status?: Database["public"]["Enums"]["trial_status"]
+          updated_at?: string
+        }
+        Update: {
+          airtable_id?: string | null
+          class_offering_id?: string | null
+          code?: string | null
+          conducted_by?: string | null
+          created_at?: string
+          enrolment_id?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["trial_kind"]
+          lead_id?: string
+          outcome_notes?: string | null
+          recommendation?:
+            | Database["public"]["Enums"]["diagnostic_recommendation"]
+            | null
+          recommended_program_id?: string | null
+          scheduled_for?: string | null
+          score?: string | null
+          seq?: number
+          session_id?: string | null
+          status?: Database["public"]["Enums"]["trial_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trials_class_offering_id_fkey"
+            columns: ["class_offering_id"]
+            isOneToOne: false
+            referencedRelation: "class_offerings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trials_conducted_by_fkey"
+            columns: ["conducted_by"]
+            isOneToOne: false
+            referencedRelation: "tutors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trials_enrolment_id_fkey"
+            columns: ["enrolment_id"]
+            isOneToOne: false
+            referencedRelation: "enrolments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trials_enrolment_id_fkey"
+            columns: ["enrolment_id"]
+            isOneToOne: false
+            referencedRelation: "v_enrolments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trials_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trials_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trials_recommended_program_id_fkey"
+            columns: ["recommended_program_id"]
+            isOneToOne: false
+            referencedRelation: "programs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trials_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trials_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "v_session_pay"
+            referencedColumns: ["session_id"]
+          },
+          {
+            foreignKeyName: "trials_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "v_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tutor_pay_rates: {
         Row: {
           created_at: string
@@ -1802,6 +2111,78 @@ export type Database = {
           },
         ]
       }
+      v_leads: {
+        Row: {
+          airtable_id: string | null
+          assigned_name: string | null
+          assigned_to: string | null
+          code: string | null
+          contact_count: number | null
+          converted_at: string | null
+          converted_enrolment_id: string | null
+          converted_student_id: string | null
+          created_at: string | null
+          days_in_pipeline: number | null
+          days_since_contact: number | null
+          guardian_email: string | null
+          guardian_mobile: string | null
+          guardian_name: string | null
+          id: string | null
+          is_overdue: boolean | null
+          latest_contact_at: string | null
+          lost_reason: string | null
+          next_action_on: string | null
+          notes: string | null
+          program_interest_id: string | null
+          program_interest_name: string | null
+          seq: number | null
+          source: Database["public"]["Enums"]["lead_source"] | null
+          source_detail: string | null
+          status: Database["public"]["Enums"]["lead_status"] | null
+          student_name: string | null
+          subject_interest: string | null
+          trial_count: number | null
+          updated_at: string | null
+          year_level: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "leads_converted_enrolment_id_fkey"
+            columns: ["converted_enrolment_id"]
+            isOneToOne: false
+            referencedRelation: "enrolments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_converted_enrolment_id_fkey"
+            columns: ["converted_enrolment_id"]
+            isOneToOne: false
+            referencedRelation: "v_enrolments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_converted_student_id_fkey"
+            columns: ["converted_student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_program_interest_id_fkey"
+            columns: ["program_interest_id"]
+            isOneToOne: false
+            referencedRelation: "programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v_needs_attention: {
         Row: {
           code: string | null
@@ -2013,7 +2394,35 @@ export type Database = {
       charge_source: "hours" | "payg"
       charge_status: "to_invoice" | "invoiced" | "paid" | "cancelled"
       closure_reason: "completed" | "withdrawn" | "transferred" | "other"
+      contact_channel:
+        | "phone"
+        | "sms"
+        | "email"
+        | "whatsapp"
+        | "in_person"
+        | "other"
+      diagnostic_recommendation:
+        | "ready_for_class"
+        | "needs_foundation"
+        | "accelerate"
+        | "not_suitable"
+        | "undecided"
       enrolment_status: "trial" | "active" | "closed"
+      lead_source:
+        | "referral"
+        | "google"
+        | "social_media"
+        | "walk_in"
+        | "event"
+        | "website"
+        | "other"
+      lead_status:
+        | "new"
+        | "contacted"
+        | "nurturing"
+        | "trial_booked"
+        | "converted"
+        | "lost"
       offering_status: "planned" | "active" | "closed" | "cancelled"
       offering_type: "group_class" | "private_tuition"
       package_status: "draft" | "active" | "closed" | "expired"
@@ -2034,6 +2443,14 @@ export type Database = {
       session_status: "scheduled" | "completed" | "cancelled" | "rescheduled"
       session_type: "regular" | "dedicated_make_up"
       staff_role: "owner" | "admin"
+      trial_kind: "class_trial" | "diagnostic_test"
+      trial_status:
+        | "proposed"
+        | "scheduled"
+        | "attended"
+        | "no_show"
+        | "converted"
+        | "declined"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2175,7 +2592,39 @@ export const Constants = {
       charge_source: ["hours", "payg"],
       charge_status: ["to_invoice", "invoiced", "paid", "cancelled"],
       closure_reason: ["completed", "withdrawn", "transferred", "other"],
+      contact_channel: [
+        "phone",
+        "sms",
+        "email",
+        "whatsapp",
+        "in_person",
+        "other",
+      ],
+      diagnostic_recommendation: [
+        "ready_for_class",
+        "needs_foundation",
+        "accelerate",
+        "not_suitable",
+        "undecided",
+      ],
       enrolment_status: ["trial", "active", "closed"],
+      lead_source: [
+        "referral",
+        "google",
+        "social_media",
+        "walk_in",
+        "event",
+        "website",
+        "other",
+      ],
+      lead_status: [
+        "new",
+        "contacted",
+        "nurturing",
+        "trial_booked",
+        "converted",
+        "lost",
+      ],
       offering_status: ["planned", "active", "closed", "cancelled"],
       offering_type: ["group_class", "private_tuition"],
       package_status: ["draft", "active", "closed", "expired"],
@@ -2197,6 +2646,15 @@ export const Constants = {
       session_status: ["scheduled", "completed", "cancelled", "rescheduled"],
       session_type: ["regular", "dedicated_make_up"],
       staff_role: ["owner", "admin"],
+      trial_kind: ["class_trial", "diagnostic_test"],
+      trial_status: [
+        "proposed",
+        "scheduled",
+        "attended",
+        "no_show",
+        "converted",
+        "declined",
+      ],
     },
   },
 } as const
