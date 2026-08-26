@@ -39,14 +39,17 @@ describe("rescheduling a lesson", () => {
     expect(() =>
       validateProposedTimes("2026-08-20T07:30:00Z", "2026-08-20T09:00:00Z", NOW),
     ).toThrow(/in the future/);
-    expect(() =>
-      validateProposedTimes(new Date(NOW).toISOString(), FUTURE_END, NOW),
-    ).toThrow(/in the future/);
+    expect(() => validateProposedTimes(new Date(NOW).toISOString(), FUTURE_END, NOW)).toThrow(
+      /in the future/,
+    );
   });
 
   it("rejects a lesson that has already started or passed", () => {
     expect(() =>
-      assertReschedulable({ starts_at: "2026-08-01T07:30:00Z", ends_at: "2026-08-01T09:00:00Z" }, NOW),
+      assertReschedulable(
+        { starts_at: "2026-08-01T07:30:00Z", ends_at: "2026-08-01T09:00:00Z" },
+        NOW,
+      ),
     ).toThrow(/already started or has passed/);
     expect(() =>
       assertReschedulable({ starts_at: new Date(NOW).toISOString(), ends_at: FUTURE_END }, NOW),
@@ -80,7 +83,11 @@ describe("rescheduling a lesson", () => {
       original_starts_at: "2026-09-08T07:30:00.000Z",
       original_ends_at: "2026-09-08T09:00:00.000Z",
     };
-    const patch = reschedulePatch(movedOnce, "2026-09-11T07:30:00.000Z", "2026-09-11T09:00:00.000Z");
+    const patch = reschedulePatch(
+      movedOnce,
+      "2026-09-11T07:30:00.000Z",
+      "2026-09-11T09:00:00.000Z",
+    );
     expect(patch.original_starts_at).toBe(movedOnce.original_starts_at);
     expect(patch.original_ends_at).toBe(movedOnce.original_ends_at);
   });

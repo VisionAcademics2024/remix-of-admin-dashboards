@@ -11,7 +11,6 @@ import {
 } from "./schedule.rules";
 import type { Row } from "./types";
 
-
 const SESSION_SELECT =
   "*, tutors(id, full_name, colour), class_offerings(id, code, room, capacity, programs(name, code), operating_periods(name, code))";
 
@@ -270,7 +269,6 @@ export const rescheduleSession = createServerFn({ method: "POST" })
 
     const payload = reschedulePatch(current as RescheduleCurrent, data.starts_at, data.ends_at);
 
-
     const { data: saved, error } = await client
       .from("sessions")
       .update(payload)
@@ -287,7 +285,6 @@ export const rescheduleSession = createServerFn({ method: "POST" })
 
     return saved;
   });
-
 
 /** Cancelling preserves the roll. Cancelled lessons pay nobody and consume nothing. */
 export const cancelSession = createServerFn({ method: "POST" })
@@ -331,7 +328,6 @@ export const deleteSession = createServerFn({ method: "POST" })
     if (error) throw error;
     return { success: true };
   });
-
 
 /** A one-off lesson added by hand, seeded straight away. */
 export const createSession = createServerFn({ method: "POST" })
