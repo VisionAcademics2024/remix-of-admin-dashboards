@@ -100,7 +100,8 @@ describe("one canonical time mutation", () => {
   });
 
   it("keeps starts_at and ends_at out of the updateSession patch", () => {
-    const patch = fns.slice(fns.indexOf("const sessionPatch"), fns.indexOf("export const updateSession"));
+    const start = fns.indexOf("const sessionPatch");
+    const patch = fns.slice(start, fns.indexOf("});", start));
     expect(patch).not.toMatch(/starts_at|ends_at/);
   });
 
@@ -115,9 +116,10 @@ describe("one canonical time mutation", () => {
   });
 
   it("never turns an ordinary move into a make-up", () => {
-    const reschedule = fns.slice(fns.indexOf("export const rescheduleSession"));
+    const start = fns.indexOf("export const rescheduleSession");
+    const reschedule = fns.slice(start, fns.indexOf("export const cancelSession", start));
     expect(reschedule).not.toMatch(/dedicated_make_up/);
-    expect(reschedule.slice(0, reschedule.indexOf("cancelSession"))).not.toMatch(/session_type:/);
+    expect(reschedule).not.toMatch(/session_type:/);
   });
 
   it("keeps the explicit per-student make-up workflow separate", () => {
