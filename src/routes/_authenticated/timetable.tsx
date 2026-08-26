@@ -883,7 +883,7 @@ function MakeUpClassForm({
   if (!open) {
     return (
       <Button variant="outline" size="sm" className="w-full" onClick={() => setOpen(true)}>
-        Make up the class on another day
+        Move the whole class to another day
       </Button>
     );
   }
