@@ -2,7 +2,15 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { db, requireStaff } from "./guard";
+import {
+  assertReschedulable,
+  assertRollUnmarked,
+  reschedulePatch,
+  validateProposedTimes,
+  type RescheduleCurrent,
+} from "./schedule.rules";
 import type { Row } from "./types";
+
 
 const SESSION_SELECT =
   "*, tutors(id, full_name, colour), class_offerings(id, code, room, capacity, programs(name, code), operating_periods(name, code))";
