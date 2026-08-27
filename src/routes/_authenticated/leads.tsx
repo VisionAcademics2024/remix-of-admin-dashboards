@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
@@ -6,7 +6,9 @@ import {
   CalendarClock,
   CheckCircle2,
   FlaskConical,
+  GraduationCap,
   MessageSquarePlus,
+  Pencil,
   Plus,
   Sparkles,
   Trash2,
@@ -262,11 +264,13 @@ function LeadDetailDialog({
   const remove = useServerFn(deleteLead);
   const queryClient = useQueryClient();
   const [panel, setPanel] = useState<"contact" | "trial" | "convert" | null>(null);
+  const [trialToEdit, setTrialToEdit] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const lead = data?.lead as Row | undefined;
   const contacts = (data?.contacts ?? []) as Row[];
   const trials = (data?.trials ?? []) as Row[];
+  const student = data?.student as Row | undefined;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -317,6 +321,46 @@ function LeadDetailDialog({
               <p className="rounded-xl border border-[var(--edge)] bg-[var(--mat-thin)] px-3 py-2 text-sm">
                 {lead.notes}
               </p>
+            )}
+
+            {student && (
+              <div className="rounded-xl border border-success/35 bg-success/10 px-3.5 py-3 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <GraduationCap className="h-4 w-4 text-success" strokeWidth={1.8} />
+                  <span className="font-semibold">Became a student</span>
+                  <Code>{student.code}</Code>
+                  <Link
+                    to="/students/$id"
+                    params={{ id: student.id }}
+                    className="ml-auto text-xs font-medium text-primary underline-offset-2 hover:underline"
+                  >
+                    Open profile →
+                  </Link>
+                </div>
+                <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
+                  <Field label="Student">{student.full_name}</Field>
+                  <Field label="Payer">{student.payer_name ?? "Not set"}</Field>
+                  <Field label="Year level">{student.year_level ?? "-"}</Field>
+                  {student.enrolment && (
+                    <>
+                      <Field label="Class">
+                        {student.enrolment.class_offerings?.programs?.name ??
+                          student.enrolment.class_offerings?.code ??
+                          "-"}
+                      </Field>
+                      <Field label="Enrolment">
+                        <StatusPill tone={toneForStatus("enrolment", student.enrolment.status)}>
+                          {
+                            LABELS.enrolmentStatus[
+                              student.enrolment.status as keyof typeof LABELS.enrolmentStatus
+                            ]
+                          }
+                        </StatusPill>
+                      </Field>
+                    </>
+                  )}
+                </dl>
+              </div>
             )}
 
             <div className="flex flex-wrap gap-2">
@@ -391,35 +435,41 @@ function LeadDetailDialog({
               ) : (
                 <ul className="space-y-1.5">
                   {trials.map((t) => (
-                    <li
-                      key={t.id}
-                      className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-[var(--edge)] bg-[var(--mat-thin)] px-3 py-2 text-sm"
-                    >
-                      <Code>{t.code}</Code>
-                      <span className="font-medium">
-                        {LABELS.trialKind[t.kind as keyof typeof LABELS.trialKind]}
-                      </span>
-                      <StatusPill tone={toneForStatus("trial", t.status)}>
-                        {LABELS.trialStatus[t.status as keyof typeof LABELS.trialStatus]}
-                      </StatusPill>
-                      {t.class_offerings?.programs?.name && (
-                        <span className="text-muted-foreground">
-                          {t.class_offerings.programs.name}
+                    <li key={t.id}>
+                      <button
+                        type="button"
+                        onClick={() => setTrialToEdit(t)}
+                        className="group flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-[var(--edge)] bg-[var(--mat-thin)] px-3 py-2 text-left text-sm transition-colors hover:border-[var(--edge-strong)]"
+                      >
+                        <Code>{t.code}</Code>
+                        <span className="font-medium">
+                          {LABELS.trialKind[t.kind as keyof typeof LABELS.trialKind]}
                         </span>
-                      )}
-                      {t.scheduled_for && (
-                        <span className="text-muted-foreground">{formatDate(t.scheduled_for)}</span>
-                      )}
-                      {t.recommendation && (
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          →{" "}
-                          {
-                            LABELS.diagnosticRecommendation[
-                              t.recommendation as keyof typeof LABELS.diagnosticRecommendation
-                            ]
-                          }
-                        </span>
-                      )}
+                        <StatusPill tone={toneForStatus("trial", t.status)}>
+                          {LABELS.trialStatus[t.status as keyof typeof LABELS.trialStatus]}
+                        </StatusPill>
+                        {t.class_offerings?.programs?.name && (
+                          <span className="text-muted-foreground">
+                            {t.class_offerings.programs.name}
+                          </span>
+                        )}
+                        {t.scheduled_for && (
+                          <span className="text-muted-foreground">
+                            {formatDate(t.scheduled_for)}
+                          </span>
+                        )}
+                        {t.recommendation && (
+                          <span className="text-xs text-muted-foreground">
+                            →{" "}
+                            {
+                              LABELS.diagnosticRecommendation[
+                                t.recommendation as keyof typeof LABELS.diagnosticRecommendation
+                              ]
+                            }
+                          </span>
+                        )}
+                        <Pencil className="ml-auto h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -462,8 +512,16 @@ function LeadDetailDialog({
             </section>
 
             {panel === "contact" && <ContactDialog leadId={id} onClose={() => setPanel(null)} />}
-            {panel === "trial" && (
-              <TrialDialog leadId={id} board={board} onClose={() => setPanel(null)} />
+            {(panel === "trial" || trialToEdit) && (
+              <TrialDialog
+                leadId={id}
+                board={board}
+                trial={trialToEdit ?? undefined}
+                onClose={() => {
+                  setPanel(null);
+                  setTrialToEdit(null);
+                }}
+              />
             )}
             {panel === "convert" && (
               <ConvertDialog lead={lead} board={board} onClose={() => setPanel(null)} />
@@ -739,28 +797,32 @@ function ContactDialog({ leadId, onClose }: { leadId: string; onClose: () => voi
 function TrialDialog({
   leadId,
   board,
+  trial,
   onClose,
 }: {
   leadId: string;
   board: Row;
+  trial?: Row | undefined;
   onClose: () => void;
 }) {
   const save = useServerFn(saveTrial);
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
-    kind: "class_trial",
-    class_offering_id: "",
-    session_id: "",
-    scheduled_for: "",
-    status: "proposed",
-    recommendation: "",
-    recommended_program_id: "",
-    score: "",
-    outcome_notes: "",
-    conducted_by: "",
+    kind: trial?.kind ?? "class_trial",
+    class_offering_id: trial?.class_offering_id ?? "",
+    session_id: trial?.session_id ?? "",
+    scheduled_for: trial?.session_id ? "" : (trial?.scheduled_for ?? ""),
+    status: trial?.status ?? "proposed",
+    recommendation: trial?.recommendation ?? "",
+    recommended_program_id: trial?.recommended_program_id ?? "",
+    score: trial?.score ?? "",
+    outcome_notes: trial?.outcome_notes ?? "",
+    conducted_by: trial?.conducted_by ?? "",
   });
   // For a class trial: add them to a lesson that already exists, or book a new time.
-  const [placement, setPlacement] = useState<"existing" | "new">("existing");
+  const [placement, setPlacement] = useState<"existing" | "new">(
+    trial && !trial.session_id ? "new" : "existing",
+  );
   const [busy, setBusy] = useState(false);
   const isDiagnostic = form.kind === "diagnostic_test";
 
@@ -775,7 +837,7 @@ function TrialDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[88vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Book a trial</DialogTitle>
+          <DialogTitle>{trial ? `Edit trial ${trial.code}` : "Book a trial"}</DialogTitle>
           <DialogDescription>
             Add them to a lesson that already exists, book a new trial time on a class, or record a
             bespoke diagnostic test. To start a brand-new trial class, create the class offering
@@ -969,6 +1031,7 @@ function TrialDialog({
                 await save({
                   data: {
                     ...form,
+                    id: trial?.id,
                     lead_id: leadId,
                     class_offering_id: isDiagnostic ? null : form.class_offering_id || null,
                     session_id: isDiagnostic ? null : form.session_id || null,
@@ -979,7 +1042,7 @@ function TrialDialog({
                 });
                 await queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
                 await queryClient.invalidateQueries({ queryKey: ["leads-board"] });
-                toast.success("Trial booked.");
+                toast.success(trial ? "Trial updated." : "Trial booked.");
                 onClose();
               } catch (error) {
                 toast.error((error as Error).message);
@@ -988,7 +1051,7 @@ function TrialDialog({
               }
             }}
           >
-            Book trial
+            {trial ? "Save changes" : "Book trial"}
           </Button>
         </DialogFooter>
       </DialogContent>

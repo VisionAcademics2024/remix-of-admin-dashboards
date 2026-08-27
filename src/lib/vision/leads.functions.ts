@@ -72,7 +72,43 @@ export const getLead = createServerFn({ method: "GET" })
         .order("created_at", { ascending: false }),
     ]);
 
-    return { lead, contacts: contacts.data ?? [], trials: trials.data ?? [] };
+    // Once converted, surface the student it became so the lead links straight
+    // through to the real profile, its family, and the class it joined.
+    let student: Row | null = null;
+    if (lead.converted_student_id) {
+      const [{ data: s }, { data: enrolment }] = await Promise.all([
+        client
+          .from("students")
+          .select(
+            "id, code, full_name, year_level, status, default_payer_id, " +
+              "student_guardians(relationship, guardians(id, code, full_name, mobile, email))",
+          )
+          .eq("id", lead.converted_student_id)
+          .maybeSingle(),
+        lead.converted_enrolment_id
+          ? client
+              .from("enrolments")
+              .select("id, code, status, method, starts_on, class_offerings(code, programs(name))")
+              .eq("id", lead.converted_enrolment_id)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
+      const sr = s as Row | null;
+      if (sr) {
+        const guardians = ((sr.student_guardians ?? []) as Row[]).map((g) => ({
+          ...g.guardians,
+          relationship: g.relationship,
+        }));
+        student = {
+          ...sr,
+          guardians,
+          payer_name: guardians.find((g: Row) => g.id === sr.default_payer_id)?.full_name ?? null,
+          enrolment: enrolment ?? null,
+        };
+      }
+    }
+
+    return { lead, contacts: contacts.data ?? [], trials: trials.data ?? [], student };
   });
 
 /* --------------------------------------------------------------------- Save a lead */
