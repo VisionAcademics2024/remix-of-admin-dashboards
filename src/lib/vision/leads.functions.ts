@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { sydToday } from "@/lib/format";
+import { sydDate, sydToday } from "@/lib/format";
 import { db, requireStaff } from "./guard";
 import type { Row } from "./types";
 
@@ -224,6 +224,64 @@ export const getOfferingSessions = createServerFn({ method: "GET" })
     return rows ?? [];
   });
 
+/**
+ * Trial students to overlay on the Attendance roll. A trial has no student or
+ * attendance record until conversion, so these are read straight from the
+ * trials table, joined to their session and lead, and filtered to the same date
+ * window the roll is showing. Marking one attended/no-show updates the trial's
+ * own status (via saveTrial), never a real attendance row.
+ */
+export const listTrialRoll = createServerFn({ method: "GET" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    z
+      .object({
+        filter: z.enum(["today", "tomorrow", "this_week", "trials", "all"]).default("today"),
+        today: z.string().min(1),
+        week_start: z.string().min(1),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const { data: rows, error } = await db(context.supabase)
+      .from("trials")
+      .select(
+        "id, code, kind, status, session_id, scheduled_for, class_offering_id, " +
+          "leads(id, code, student_name, year_level, guardian_name, guardian_mobile), " +
+          "class_offerings(code, programs(name)), " +
+          "sessions(code, starts_at, ends_at, tutors(full_name, colour))",
+      )
+      .not("session_id", "is", null)
+      .order("scheduled_for", { ascending: true });
+    if (error) throw error;
+
+    const shiftDate = (d: string, days: number) => {
+      const dt = new Date(`${d}T00:00:00Z`);
+      dt.setUTCDate(dt.getUTCDate() + days);
+      return dt.toISOString().slice(0, 10);
+    };
+    const weekEnd = shiftDate(data.week_start, 6);
+
+    return ((rows ?? []) as Row[])
+      .map((t) => ({
+        ...t,
+        session_date: t.sessions?.starts_at ? sydDate(t.sessions.starts_at) : null,
+      }))
+      .filter((t) => {
+        if (!t.session_date) return false;
+        switch (data.filter) {
+          case "today":
+            return t.session_date === data.today;
+          case "tomorrow":
+            return t.session_date === shiftDate(data.today, 1);
+          case "this_week":
+            return t.session_date >= data.week_start && t.session_date <= weekEnd;
+          default:
+            return true; // "trials" and "all"
+        }
+      });
+  });
+
 /* ------------------------------------------------------------------ Save a trial */
 
 const trialInput = z.object({
@@ -240,13 +298,27 @@ const trialInput = z.object({
   score: blank,
   outcome_notes: blank,
   conducted_by: z.string().uuid().nullish(),
+  // The trial student's own details, edited here and written back to the lead
+  // (there is no student record until conversion).
+  student_name: blank,
+  year_level: blank,
+  guardian_mobile: blank,
+  guardian_email: blank,
 });
 
 export const saveTrial = createServerFn({ method: "POST" })
   .middleware([requireStaff])
   .inputValidator((data) => trialInput.extend({ id: z.string().uuid().optional() }).parse(data))
   .handler(async ({ context, data }) => {
-    const { id, scheduled_for, ...rest } = data;
+    const {
+      id,
+      scheduled_for,
+      student_name,
+      year_level,
+      guardian_mobile,
+      guardian_email,
+      ...rest
+    } = data;
     const client = db(context.supabase);
 
     if (rest.kind === "class_trial" && !rest.class_offering_id) {
@@ -264,6 +336,21 @@ export const saveTrial = createServerFn({ method: "POST" })
       ? await client.from("trials").update(payload).eq("id", id)
       : await client.from("trials").insert(payload);
     if (error) throw error;
+
+    // Persist any edits to the trial student's details onto the lead. student_name
+    // is required on the lead, so only write it when it was actually supplied.
+    const leadPatch: Record<string, unknown> = {};
+    if (student_name) leadPatch["student_name"] = student_name;
+    if (year_level !== undefined) leadPatch["year_level"] = year_level || null;
+    if (guardian_mobile !== undefined) leadPatch["guardian_mobile"] = guardian_mobile || null;
+    if (guardian_email !== undefined) leadPatch["guardian_email"] = guardian_email || null;
+    if (Object.keys(leadPatch).length) {
+      const { error: leadError } = await client
+        .from("leads")
+        .update(leadPatch)
+        .eq("id", data.lead_id);
+      if (leadError) throw leadError;
+    }
 
     // Booking a trial moves the lead along, unless it's already further ahead.
     if (!id) {
