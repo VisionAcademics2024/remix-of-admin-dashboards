@@ -372,12 +372,21 @@ export const getSessionRoll = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const client = db(context.supabase);
 
-    const [session, roll] = await Promise.all([
+    const [session, roll, trials] = await Promise.all([
       client.from("v_sessions").select(SESSION_SELECT).eq("id", data.session_id).maybeSingle(),
       client
         .from("v_attendance")
         .select("*, enrolments(code, method, students(id, code, full_name))")
         .eq("session_id", data.session_id),
+      // Trial students booked onto this exact lesson. They have no enrolment or
+      // attendance row - they live on the trials table until their lead converts
+      // - so they are read separately and shown alongside the enrolled roll.
+      client
+        .from("trials")
+        .select("id, code, status, session_id, scheduled_for, leads(id, code, student_name)")
+        .eq("session_id", data.session_id)
+        .eq("kind", "class_trial")
+        .not("status", "in", "(declined,converted)"),
     ]);
 
     const entries = (roll.data ?? []).sort((a: Row, b: Row) =>
@@ -385,8 +394,11 @@ export const getSessionRoll = createServerFn({ method: "GET" })
         b.enrolments?.students?.full_name ?? "",
       ),
     );
+    const trialEntries = (trials.data ?? []).sort((a: Row, b: Row) =>
+      (a.leads?.student_name ?? "").localeCompare(b.leads?.student_name ?? ""),
+    );
 
-    return { session: session.data, roll: entries };
+    return { session: session.data, roll: entries, trials: trialEntries };
   });
 
 /** Seeding is idempotent, so this is safe to offer as a button on every lesson. */
