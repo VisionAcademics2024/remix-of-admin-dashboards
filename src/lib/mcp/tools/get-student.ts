@@ -40,7 +40,7 @@ export default defineTool({
         .order("starts_on", { ascending: false }),
       supabase
         .from("hours_packages")
-        .select("id, code, status, package_type, hours_purchased, expires_on")
+        .select("id, code, status, package_type, hours_purchased, price, approved_on")
         .eq("student_id", student_id)
         .order("created_at", { ascending: false }),
       supabase
