@@ -515,6 +515,7 @@ function LeadDetailDialog({
             {(panel === "trial" || trialToEdit) && (
               <TrialDialog
                 leadId={id}
+                lead={lead}
                 board={board}
                 trial={trialToEdit ?? undefined}
                 onClose={() => {
@@ -796,11 +797,13 @@ function ContactDialog({ leadId, onClose }: { leadId: string; onClose: () => voi
 
 function TrialDialog({
   leadId,
+  lead,
   board,
   trial,
   onClose,
 }: {
   leadId: string;
+  lead: Row;
   board: Row;
   trial?: Row | undefined;
   onClose: () => void;
@@ -818,6 +821,11 @@ function TrialDialog({
     score: trial?.score ?? "",
     outcome_notes: trial?.outcome_notes ?? "",
     conducted_by: trial?.conducted_by ?? "",
+    // The trial student's own details, held on the lead until conversion.
+    student_name: lead?.student_name ?? "",
+    year_level: lead?.year_level ?? "",
+    guardian_mobile: lead?.guardian_mobile ?? "",
+    guardian_email: lead?.guardian_email ?? "",
   });
   // For a class trial: add them to a lesson that already exists, or book a new time.
   const [placement, setPlacement] = useState<"existing" | "new">(
@@ -845,6 +853,38 @@ function TrialDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
+          <div className="rounded-xl border border-[var(--edge)] bg-[var(--mat-thin)] p-3">
+            <p className="mb-2 text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+              Trial student
+            </p>
+            <div className="grid gap-3">
+              <div className="grid grid-cols-2 gap-3">
+                <TextField
+                  label="Name"
+                  value={form.student_name}
+                  onChange={(v) => setForm({ ...form, student_name: v })}
+                />
+                <TextField
+                  label="Year level"
+                  value={form.year_level}
+                  onChange={(v) => setForm({ ...form, year_level: v })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <TextField
+                  label="Parent mobile"
+                  value={form.guardian_mobile}
+                  onChange={(v) => setForm({ ...form, guardian_mobile: v })}
+                />
+                <TextField
+                  label="Parent email"
+                  value={form.guardian_email}
+                  onChange={(v) => setForm({ ...form, guardian_email: v })}
+                />
+              </div>
+            </div>
+          </div>
+
           <SelectField
             label="Kind"
             value={form.kind}
