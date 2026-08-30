@@ -13,23 +13,36 @@ import { DEV_AUTH_BYPASS } from "@/lib/dev-auth";
 
 
 
+/** Only same-origin relative paths may be used as a post-sign-in destination. */
+function safeNext(next: unknown): string | undefined {
+  if (typeof next !== "string" || !next.startsWith("/") || next.startsWith("//")) return undefined;
+  return next;
+}
+
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
-  beforeLoad: async () => {
+  validateSearch: (s: Record<string, unknown>) => ({ next: safeNext(s["next"]) }),
+  beforeLoad: async ({ search }) => {
     // Temporary login bypass - see src/lib/dev-auth.ts
-    if (DEV_AUTH_BYPASS) throw redirect({ to: "/today" });
+    if (DEV_AUTH_BYPASS && !search.next) throw redirect({ to: "/today" });
     const { data } = await supabase.auth.getUser();
-    if (data.user) throw redirect({ to: "/today" });
+    if (data.user) throw redirect({ href: search.next ?? "/today" });
   },
 });
 
 
 function AuthPage() {
   const navigate = useNavigate();
+  const { next } = Route.useSearch();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  function goOn() {
+    if (next) window.location.href = next;
+    else navigate({ to: "/today", replace: true });
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -40,7 +53,7 @@ function AuthPage() {
       if (error) {
         toast.error(error.message);
       } else {
-        navigate({ to: "/today", replace: true });
+        goOn();
       }
     } else {
       const { data, error } = await supabase.auth.signUp({ email, password });
