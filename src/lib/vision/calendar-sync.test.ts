@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   SYNC_CALENDAR_ID,
   isMappedSession,
+  nextSyncStatusAfterReschedule,
   updateMappedSessionEvent,
   type CalendarApi,
   type SessionForSync,
@@ -117,5 +118,19 @@ describe("google failure is not a scheduling failure", () => {
     expect(rollback).not.toHaveBeenCalled();
     expect(outcome).toMatchObject({ attempted: true, ok: false });
     expect(outcome?.message).toContain("moved on the timetable");
+  });
+});
+
+describe("reschedule status", () => {
+  it("queues a mapped lesson and leaves an unlinked one alone", () => {
+    expect(nextSyncStatusAfterReschedule(mapped)).toBe("pending");
+    expect(
+      nextSyncStatusAfterReschedule({
+        google_calendar_id: null,
+        google_event_id: null,
+        calendar_sync_status: "not_synced",
+      }),
+    ).toBeNull();
+    expect(nextSyncStatusAfterReschedule({ ...mapped, google_calendar_id: "other" })).toBeNull();
   });
 });

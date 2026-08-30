@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { isMappedSession } from "./gcal";
+import { nextSyncStatusAfterReschedule } from "./gcal";
 import { db, requireStaff } from "./guard";
 
 import {
@@ -336,8 +336,8 @@ export const rescheduleSession = createServerFn({ method: "POST" })
     // A lesson that already lives on the Google test calendar is now out of date
     // there, so it is marked pending. A lesson with no mapping stays
     // `not_synced`: nothing is queued and nothing is sent.
-    const mapped = isMappedSession(saved as unknown as Row);
-    if (mapped) {
+    const nextStatus = nextSyncStatusAfterReschedule(saved as unknown as Row);
+    if (nextStatus) {
       const { error: pendingError } = await client
         .from("sessions")
         .update({ calendar_sync_status: "pending" })
@@ -345,7 +345,7 @@ export const rescheduleSession = createServerFn({ method: "POST" })
       if (pendingError) throw pendingError;
     }
 
-    return { ...saved, calendar_sync_status: mapped ? "pending" : saved.calendar_sync_status };
+    return { ...saved, calendar_sync_status: nextStatus ?? saved.calendar_sync_status };
   });
 
 

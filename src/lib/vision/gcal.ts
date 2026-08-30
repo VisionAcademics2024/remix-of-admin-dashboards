@@ -210,3 +210,14 @@ export async function updateMappedSessionEvent(
     );
   }
 }
+
+/**
+ * What a reschedule leaves behind: a linked lesson is now stale on Google, so it
+ * becomes `pending`. An unlinked lesson keeps whatever it had - it is never
+ * queued and never sent.
+ */
+export function nextSyncStatusAfterReschedule(
+  mapping: SessionMapping | null | undefined,
+): "pending" | null {
+  return isMappedSession(mapping) ? "pending" : null;
+}
