@@ -408,7 +408,7 @@ export const LABELS = {
     cancelled: "Cancelled",
   },
   chargeRoute: { parent: "Parent", internal: "Internal (cash/bank)" },
-  paymentMethod: { cash: "Cash", bank_transfer: "Bank transfer", other: "Other" },
+  paymentMethod: { cash: "Cash", card: "Card", bank_transfer: "Bank transfer", other: "Other" },
   offeringType: { group_class: "Group class", private_tuition: "Private tuition" },
   offeringStatus: {
     planned: "Planned",
