@@ -1,0 +1,248 @@
+{
+  "version": 1,
+  "sdk_version": "0.28.0",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://vkafaqxblbjrkbsfchnk.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "admin-dashboards",
+      "version": "0.1.0",
+      "title": "Admin Dashboards"
+    },
+    "tools": [
+      {
+        "name": "list_students",
+        "title": "List students",
+        "description": "Search Vision Academics students by name or student code, optionally filtered by active/inactive status.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "search": {
+              "description": "Part of a student name or code.",
+              "type": "string",
+              "minLength": 1
+            },
+            "status": {
+              "description": "Filter by student status.",
+              "type": "string",
+              "enum": [
+                "active",
+                "inactive"
+              ]
+            },
+            "limit": {
+              "default": 25,
+              "description": "Maximum rows to return.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_student",
+        "title": "Get student detail",
+        "description": "Return one student's profile, their enrolments, their hour packages and their most recent attendance.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "student_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "The student's id, as returned by list_students."
+            },
+            "attendance_limit": {
+              "default": 10,
+              "description": "How many recent attendance rows to include.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          },
+          "required": [
+            "student_id"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_sessions",
+        "title": "List lessons",
+        "description": "List scheduled lessons between two Sydney dates, with their tutor, room, status and payable hours.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "description": "First Sydney date to include, YYYY-MM-DD."
+            },
+            "to": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "description": "Last Sydney date to include, YYYY-MM-DD."
+            },
+            "status": {
+              "description": "Filter by lesson status.",
+              "type": "string",
+              "enum": [
+                "scheduled",
+                "completed",
+                "cancelled",
+                "rescheduled"
+              ]
+            },
+            "limit": {
+              "default": 50,
+              "description": "Maximum lessons to return.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_leads",
+        "title": "List enquiries",
+        "description": "List enquiries (leads) in the pipeline, newest first, optionally filtered by pipeline status.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "status": {
+              "description": "Filter by pipeline status.",
+              "type": "string",
+              "enum": [
+                "new",
+                "contacted",
+                "nurturing",
+                "trial_booked",
+                "converted",
+                "lost"
+              ]
+            },
+            "limit": {
+              "default": 25,
+              "description": "Maximum enquiries to return.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "create_lead",
+        "title": "Create enquiry",
+        "description": "Record a new enquiry (lead) for a prospective student. The enquiry code is assigned by the system.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "student_name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "description": "The prospective student's name."
+            },
+            "guardian_name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "description": "The parent or guardian's name."
+            },
+            "guardian_email": {
+              "description": "Guardian email, if known.",
+              "type": "string",
+              "format": "email",
+              "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+            },
+            "guardian_mobile": {
+              "description": "Guardian mobile, if known.",
+              "type": "string",
+              "maxLength": 40
+            },
+            "year_level": {
+              "description": "School year level, e.g. \"Year 9\".",
+              "type": "string",
+              "maxLength": 20
+            },
+            "subject_interest": {
+              "description": "Subject they asked about.",
+              "type": "string",
+              "maxLength": 120
+            },
+            "source": {
+              "default": "other",
+              "description": "How the enquiry reached the college.",
+              "type": "string",
+              "enum": [
+                "referral",
+                "google",
+                "social_media",
+                "walk_in",
+                "event",
+                "website",
+                "other"
+              ]
+            },
+            "notes": {
+              "description": "Free-text context for the front desk.",
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "student_name",
+            "guardian_name"
+          ]
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
