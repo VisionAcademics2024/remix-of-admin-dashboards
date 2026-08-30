@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+import { isMappedSession } from "./gcal";
 import { db, requireStaff } from "./guard";
+
 import {
   assertReschedulable,
   assertRollUnmarked,
