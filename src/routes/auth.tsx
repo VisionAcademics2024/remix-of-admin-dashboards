@@ -21,7 +21,10 @@ function safeNext(next: unknown): string | undefined {
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
-  validateSearch: (s: Record<string, unknown>) => ({ next: safeNext(s["next"]) }),
+  validateSearch: (s: Record<string, unknown>): { next?: string } => {
+    const next = safeNext(s["next"]);
+    return next ? { next } : {};
+  },
   beforeLoad: async ({ search }) => {
     // Temporary login bypass - see src/lib/dev-auth.ts
     if (DEV_AUTH_BYPASS && !search.next) throw redirect({ to: "/today" });
