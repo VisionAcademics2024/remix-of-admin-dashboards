@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { sydneyLocalToInstant } from "@/lib/format";
+import { sydDate, sydneyLocalToInstant } from "@/lib/format";
 
 import { db, requireStaff } from "./guard";
 import type { Row } from "./types";
@@ -82,8 +82,119 @@ export const listRoll = createServerFn({ method: "GET" })
       return result.filter((r: Row) => r.att_type === "make_up" || r.make_up_state !== "completed");
     }
 
-    return result;
+    // Booked trials for a lead are not enrolments, so they never reach
+    // v_attendance - but the point of booking one onto a session is to see the
+    // trial student on that lesson's roll. They are merged in here as trial rows
+    // and sorted alongside the real ones so a trial sits in its lesson's group.
+    const trialRows = await listTrialRows(client, data.filter, data.today, data.week_start);
+    if (trialRows.length === 0) return result;
+
+    return [...result, ...trialRows].sort((a: Row, b: Row) =>
+      String(b.lesson_starts_at ?? "").localeCompare(String(a.lesson_starts_at ?? "")),
+    );
   });
+
+/** Which filters show a lead's booked trials on the roll, and on which days. */
+function trialShowsOn(
+  filter: RollFilter,
+  sessionDate: string,
+  today: string,
+  weekStart: string,
+): boolean {
+  switch (filter) {
+    case "today":
+      return sessionDate === today;
+    case "tomorrow":
+      return sessionDate === shift(today, 1);
+    case "this_week":
+      return sessionDate >= weekStart && sessionDate <= shift(weekStart, 6);
+    case "trials":
+      return true;
+    case "all":
+      return sessionDate >= shift(today, -120);
+    default:
+      return false;
+  }
+}
+
+/** A trial's status, read as an attendance status for the roll's Mark buttons. */
+function trialStatusToAttendance(status: string): "present" | "absent" | "not_marked" {
+  if (status === "attended") return "present";
+  if (status === "no_show") return "absent";
+  return "not_marked";
+}
+
+/**
+ * Booked lead-trials, shaped to sit on the roll next to real attendance rows.
+ *
+ * A trial belongs to a lead, not a student, so there is no enrolment and no
+ * v_attendance row. These pseudo-rows carry `is_trial_booking` so the roll can
+ * route their Present/Away straight to the trial's status and keep them out of
+ * anything enrolment-shaped (billing, hours, packages, make-ups, bulk marks).
+ */
+async function listTrialRows(
+  client: ReturnType<typeof db>,
+  filter: RollFilter,
+  today: string,
+  weekStart: string,
+): Promise<Row[]> {
+  if (!["today", "tomorrow", "this_week", "trials", "all"].includes(filter)) return [];
+
+  const { data, error } = await client
+    .from("trials")
+    .select(
+      "id, code, status, session_id, " +
+        "leads(id, student_name, year_level), " +
+        "sessions(id, code, starts_at, ends_at, status, tutor_id, class_offering_id, " +
+        "tutors(full_name, colour), class_offerings(code, programs(name)))",
+    )
+    .eq("kind", "class_trial")
+    .not("session_id", "is", null)
+    .not("status", "in", "(declined,converted)")
+    .limit(500);
+  if (error) throw error;
+
+  const rows: Row[] = [];
+  for (const t of (data ?? []) as Row[]) {
+    const s = t.sessions;
+    if (!s?.starts_at) continue;
+    const sessionDate = sydDate(s.starts_at);
+    if (!trialShowsOn(filter, sessionDate, today, weekStart)) continue;
+
+    const attStatus = trialStatusToAttendance(t.status);
+    rows.push({
+      id: `trial-${t.id}`,
+      trial_id: t.id,
+      is_trial_booking: true,
+      code: t.code,
+      session_id: s.id,
+      att_type: "trial",
+      status: attStatus,
+      effective_status: s.status === "cancelled" ? "cancelled" : attStatus,
+      display_name: t.leads?.student_name ?? "Trial student",
+      lead_id: t.leads?.id ?? null,
+      year_level: t.leads?.year_level ?? null,
+      billing_method: null,
+      hours_consumed: 0,
+      make_up_state: null,
+      package_id: null,
+      student_id: null,
+      enrolments: null,
+      session_date: sessionDate,
+      lesson_starts_at: s.starts_at,
+      lesson_tutor_id: s.tutor_id,
+      sessions: {
+        code: s.code,
+        starts_at: s.starts_at,
+        ends_at: s.ends_at,
+        status: s.status,
+        tutors: s.tutors,
+        class_offerings: s.class_offerings,
+      },
+    });
+  }
+  return rows;
+}
 
 function shift(date: string, days: number): string {
   const d = new Date(`${date}T00:00:00Z`);
@@ -111,6 +222,33 @@ export const markAttendance = createServerFn({ method: "POST" })
     if (data.correction_note !== undefined) patch["correction_note"] = data.correction_note || null;
 
     const { error } = await db(context.supabase).from("attendance").update(patch).eq("id", data.id);
+    if (error) throw error;
+    return { success: true };
+  });
+
+/**
+ * Confirm a trial student on the roll. A trial has no enrolment, so its
+ * "attendance" is the trial's own status: marking them present is confirming
+ * they turned up (attended), away is a no-show, and clearing puts it back to
+ * scheduled. It never touches hours or billing - a trial consumes nothing.
+ */
+export const markTrialAttendance = createServerFn({ method: "POST" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    z
+      .object({
+        trial_id: z.string().uuid(),
+        status: z.enum(["not_marked", "present", "absent"]),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const trialStatus =
+      data.status === "present" ? "attended" : data.status === "absent" ? "no_show" : "scheduled";
+    const { error } = await db(context.supabase)
+      .from("trials")
+      .update({ status: trialStatus })
+      .eq("id", data.trial_id);
     if (error) throw error;
     return { success: true };
   });

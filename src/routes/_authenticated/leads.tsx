@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Calendar } from "@/components/ui/calendar";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -58,13 +59,13 @@ import {
   Th,
   toneForStatus,
 } from "@/components/vision/ui";
-import { formatDate, formatTime, sydToday } from "@/lib/format";
+import { formatDate, formatTime, sydDate, sydToday } from "@/lib/format";
 import {
   convertLead,
   deleteLead,
   getLead,
   getLeadsBoard,
-  getOfferingSessions,
+  listTrialSessions,
   logContact,
   saveLead,
   saveTrial,
@@ -811,7 +812,7 @@ function TrialDialog({
     kind: trial?.kind ?? "class_trial",
     class_offering_id: trial?.class_offering_id ?? "",
     session_id: trial?.session_id ?? "",
-    scheduled_for: trial?.session_id ? "" : (trial?.scheduled_for ?? ""),
+    scheduled_for: trial?.scheduled_for ?? "",
     status: trial?.status ?? "proposed",
     recommendation: trial?.recommendation ?? "",
     recommended_program_id: trial?.recommended_program_id ?? "",
@@ -819,19 +820,30 @@ function TrialDialog({
     outcome_notes: trial?.outcome_notes ?? "",
     conducted_by: trial?.conducted_by ?? "",
   });
-  // For a class trial: add them to a lesson that already exists, or book a new time.
-  const [placement, setPlacement] = useState<"existing" | "new">(
-    trial && !trial.session_id ? "new" : "existing",
-  );
   const [busy, setBusy] = useState(false);
   const isDiagnostic = form.kind === "diagnostic_test";
 
-  // The chosen class's upcoming lessons, so a trial can sit on a real session.
-  const { data: sessions = [] } = useQuery({
-    queryKey: ["offering-sessions", form.class_offering_id],
-    queryFn: () => getOfferingSessions({ data: { offering_id: form.class_offering_id } }),
-    enabled: !isDiagnostic && !!form.class_offering_id,
+  // Every upcoming lesson across all live classes, so the trial can be pinned to
+  // one exact session straight from the calendar - no picking a class first.
+  const { data: sessions = [], isLoading: sessionsLoading } = useQuery({
+    queryKey: ["trial-sessions"],
+    queryFn: () => listTrialSessions(),
+    enabled: !isDiagnostic,
   });
+
+  // The day the calendar is focused on. When editing an already-booked trial it
+  // opens on the lesson's own day.
+  const [day, setDay] = useState<Date | undefined>(() =>
+    trial?.scheduled_for ? ymdToDate(sydDate(trial.scheduled_for)) : undefined,
+  );
+
+  const sessionDates = new Set((sessions as Row[]).map((s) => s.session_date));
+  const enabledDays = [...sessionDates].map(ymdToDate);
+  const selectedYmd = day ? dateToYmd(day) : null;
+  const daySessions = selectedYmd
+    ? (sessions as Row[]).filter((s) => s.session_date === selectedYmd)
+    : [];
+  const chosen = (sessions as Row[]).find((s) => s.id === form.session_id);
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -839,9 +851,9 @@ function TrialDialog({
         <DialogHeader>
           <DialogTitle>{trial ? `Edit trial ${trial.code}` : "Book a trial"}</DialogTitle>
           <DialogDescription>
-            Add them to a lesson that already exists, book a new trial time on a class, or record a
-            bespoke diagnostic test. To start a brand-new trial class, create the class offering
-            first, then pick it here.
+            Sit them in on a single class session - pick the exact lesson from the calendar - or
+            record a bespoke diagnostic test. Once booked, they appear on that lesson's roll with a
+            Trial tag, where you confirm they turned up.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
@@ -853,103 +865,108 @@ function TrialDialog({
           />
           {!isDiagnostic ? (
             <>
-              <SelectField
-                label="Class to sit in on"
-                value={form.class_offering_id || "none"}
-                options={{
-                  none: "Select a class…",
-                  ...Object.fromEntries(
-                    (board.offerings as Row[]).map((o) => [
-                      o.id,
-                      `${o.code} · ${o.programs?.name ?? ""}${
-                        o.operating_periods?.code ? ` · ${o.operating_periods.code}` : ""
-                      }`,
-                    ]),
-                  ),
-                }}
-                onChange={(v) =>
-                  setForm({
-                    ...form,
-                    class_offering_id: v === "none" ? "" : v,
-                    session_id: "",
-                    scheduled_for: "",
-                  })
-                }
-              />
-
-              {form.class_offering_id && (
-                <div className="space-y-1.5">
-                  <Label>When</Label>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPlacement("existing");
-                        setForm({ ...form, scheduled_for: "" });
-                      }}
-                      className={cn(
-                        "flex-1 rounded-lg border px-3 py-2 text-sm transition-colors",
-                        placement === "existing"
-                          ? "border-primary/50 bg-primary/15 text-foreground"
-                          : "border-[var(--edge)] text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      Add to an existing lesson
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPlacement("new");
-                        setForm({ ...form, session_id: "", scheduled_for: "" });
-                      }}
-                      className={cn(
-                        "flex-1 rounded-lg border px-3 py-2 text-sm transition-colors",
-                        placement === "new"
-                          ? "border-primary/50 bg-primary/15 text-foreground"
-                          : "border-[var(--edge)] text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      Book a new time
-                    </button>
+              <div className="space-y-1.5">
+                <Label>Pick a lesson to sit in on</Label>
+                <p className="text-xs text-muted-foreground">
+                  Days with lessons are highlighted. Tap a day, then choose the exact session.
+                </p>
+                {sessionsLoading ? (
+                  <div className="py-8 text-center text-sm text-muted-foreground">
+                    Loading lessons…
                   </div>
+                ) : enabledDays.length === 0 ? (
+                  <div className="rounded-xl border border-[var(--edge)] bg-[var(--mat-thin)] px-3 py-3 text-sm text-muted-foreground">
+                    No upcoming lessons on any active class. Generate the timetable for a class first,
+                    then book the trial onto one of its sessions.
+                  </div>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-[auto_1fr]">
+                    <div className="rounded-xl border border-[var(--edge)] bg-[var(--mat-thin)]">
+                      <Calendar
+                        mode="single"
+                        selected={day}
+                        onSelect={setDay}
+                        disabled={(d) => !sessionDates.has(dateToYmd(d))}
+                        modifiers={{ hasSession: enabledDays }}
+                        modifiersClassNames={{
+                          hasSession:
+                            "font-semibold underline underline-offset-4 decoration-primary/70",
+                        }}
+                      />
+                    </div>
+                    <div className="min-w-0 space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">
+                        {selectedYmd
+                          ? `Lessons on ${formatDate(selectedYmd)}`
+                          : "Lessons on the chosen day"}
+                      </Label>
+                      {!day ? (
+                        <p className="rounded-lg border border-dashed border-[var(--edge)] px-3 py-6 text-center text-sm text-muted-foreground">
+                          Pick a highlighted day to see its lessons.
+                        </p>
+                      ) : daySessions.length === 0 ? (
+                        <p className="rounded-lg border border-dashed border-[var(--edge)] px-3 py-6 text-center text-sm text-muted-foreground">
+                          No lessons on this day.
+                        </p>
+                      ) : (
+                        <ul className="max-h-[248px] space-y-1.5 overflow-y-auto pr-1">
+                          {daySessions.map((s) => {
+                            const active = form.session_id === s.id;
+                            return (
+                              <li key={s.id}>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setForm({
+                                      ...form,
+                                      session_id: s.id,
+                                      class_offering_id: s.class_offering_id,
+                                      scheduled_for: s.starts_at,
+                                    })
+                                  }
+                                  className={cn(
+                                    "w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                                    active
+                                      ? "border-primary/50 bg-primary/15 text-foreground"
+                                      : "border-[var(--edge)] text-muted-foreground hover:text-foreground",
+                                  )}
+                                >
+                                  <div className="truncate font-medium text-foreground">
+                                    {s.class_offerings?.programs?.name ??
+                                      s.class_offerings?.code ??
+                                      "Lesson"}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {formatTime(s.starts_at)}–{formatTime(s.ends_at)}
+                                    {s.tutors?.full_name ? ` · ${s.tutors.full_name}` : ""}
+                                    {s.class_offerings?.code ? ` · ${s.class_offerings.code}` : ""}
+                                  </div>
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {form.session_id && (
+                <div className="rounded-xl border border-primary/40 bg-primary/10 px-3 py-2 text-sm">
+                  <span className="text-muted-foreground">Sitting in on </span>
+                  {chosen
+                    ? `${
+                        chosen.class_offerings?.programs?.name ??
+                        chosen.class_offerings?.code ??
+                        "a lesson"
+                      } · ${formatDate(chosen.starts_at)} · ${formatTime(chosen.starts_at)}`
+                    : trial?.scheduled_for
+                      ? `${
+                          trial.class_offerings?.programs?.name ?? "a lesson"
+                        } · ${formatDate(trial.scheduled_for)}`
+                      : "the selected lesson"}
                 </div>
-              )}
-
-              {form.class_offering_id && placement === "existing" && (
-                <SelectField
-                  label="Lesson"
-                  value={form.session_id || "none"}
-                  options={{
-                    none: (sessions as Row[]).length
-                      ? "Select a lesson…"
-                      : "No upcoming lessons on this class",
-                    ...Object.fromEntries(
-                      (sessions as Row[]).map((s) => [
-                        s.id,
-                        `${formatDate(s.starts_at)} · ${formatTime(s.starts_at)}${
-                          s.tutors?.full_name ? ` · ${s.tutors.full_name}` : ""
-                        }`,
-                      ]),
-                    ),
-                  }}
-                  onChange={(v) => {
-                    const chosen = (sessions as Row[]).find((s) => s.id === v);
-                    setForm({
-                      ...form,
-                      session_id: v === "none" ? "" : v,
-                      scheduled_for: chosen?.starts_at ?? "",
-                    });
-                  }}
-                />
-              )}
-
-              {form.class_offering_id && placement === "new" && (
-                <TextField
-                  label="Scheduled for"
-                  type="date"
-                  value={form.scheduled_for}
-                  onChange={(v) => setForm({ ...form, scheduled_for: v, session_id: "" })}
-                />
               )}
 
               <SelectField
@@ -1024,7 +1041,7 @@ function TrialDialog({
             Cancel
           </Button>
           <Button
-            disabled={busy || (!isDiagnostic && !form.class_offering_id)}
+            disabled={busy || (!isDiagnostic && !form.session_id)}
             onClick={async () => {
               setBusy(true);
               try {
@@ -1206,6 +1223,22 @@ function ConvertDialog({ lead, board, onClose }: { lead: Row; board: Row; onClos
       </DialogContent>
     </Dialog>
   );
+}
+
+/* ------------------------------------------------------------------ Date helpers */
+
+/** A "YYYY-MM-DD" day string to a local-midnight Date the calendar can match. */
+function ymdToDate(ymd: string): Date {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(y!, (m ?? 1) - 1, d ?? 1);
+}
+
+/** A calendar Date back to the "YYYY-MM-DD" the session list is keyed by. */
+function dateToYmd(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 /* ---------------------------------------------------------------------- Fields */

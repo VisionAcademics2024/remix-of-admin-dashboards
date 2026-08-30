@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { sydToday } from "@/lib/format";
+import { sydDate, sydToday } from "@/lib/format";
 import { db, requireStaff } from "./guard";
 import type { Row } from "./types";
 
@@ -222,6 +222,37 @@ export const getOfferingSessions = createServerFn({ method: "GET" })
       .limit(50);
     if (error) throw error;
     return rows ?? [];
+  });
+
+/**
+ * Every upcoming lesson across every live class, so a trial can be booked
+ * straight onto a single session from a calendar - "sit them in on this exact
+ * lesson" - rather than picking a class and then a date. Make-up lessons, which
+ * are dedicated to a specific absent student, are left out; a trial joins a real
+ * class session. Dates are computed in Sydney so the calendar groups a late
+ * lesson under the day it is actually taught.
+ */
+export const listTrialSessions = createServerFn({ method: "GET" })
+  .middleware([requireStaff])
+  .handler(async ({ context }) => {
+    const { data: rows, error } = await db(context.supabase)
+      .from("sessions")
+      .select(
+        "id, class_offering_id, code, starts_at, ends_at, status, session_type, " +
+          "tutors(full_name, colour), class_offerings(code, status, programs(name))",
+      )
+      .neq("status", "cancelled")
+      .neq("session_type", "dedicated_make_up")
+      .gte("starts_at", new Date().toISOString())
+      .order("starts_at")
+      .limit(400);
+    if (error) throw error;
+
+    // Only lessons on a class that is still running - a closed or cancelled
+    // offering should never take a new trial.
+    return (rows ?? [])
+      .filter((r: Row) => ["planned", "active"].includes(r.class_offerings?.status))
+      .map((r: Row) => ({ ...r, session_date: sydDate(r.starts_at) }));
   });
 
 /* ------------------------------------------------------------------ Save a trial */

@@ -52,6 +52,7 @@ import {
   listRoll,
   markAttendance,
   markRollBulk,
+  markTrialAttendance,
   setLessonTutor,
   type RollFilter,
 } from "@/lib/vision/roll.functions";
@@ -113,13 +114,16 @@ function RollPage() {
 
   const queryClient = useQueryClient();
   const mark = useServerFn(markAttendance);
+  const markTrial = useServerFn(markTrialAttendance);
   const bulk = useServerFn(markRollBulk);
 
   const active = FILTERS[index]!;
   const term = search.trim().toLowerCase();
   const visible = term
     ? rows.filter((r: Row) =>
-        `${r.enrolments?.students?.full_name ?? ""} ${r.enrolments?.students?.code ?? ""} ${r.code}`
+        `${r.enrolments?.students?.full_name ?? r.display_name ?? ""} ${
+          r.enrolments?.students?.code ?? ""
+        } ${r.code}`
           .toLowerCase()
           .includes(term),
       )
@@ -132,17 +136,25 @@ function RollPage() {
     await queryClient.invalidateQueries({ queryKey: ["needs-attention-count"] });
   }
 
-  async function setStatus(id: string, status: "present" | "absent" | "not_marked") {
+  async function setStatus(row: Row, status: "present" | "absent" | "not_marked") {
     // Flip the row the instant it is tapped, before the server answers, so the
     // button colour confirms the press with no wait. If the save fails the row
     // is rolled back to what it was and the error shown.
     const key = ["roll", filter, today];
     const previous = queryClient.getQueryData<Row[]>(key);
     queryClient.setQueryData<Row[]>(key, (old) =>
-      (old ?? []).map((r) => (r.id === id ? { ...r, status, effective_status: status } : r)),
+      (old ?? []).map((r) => (r.id === row.id ? { ...r, status, effective_status: status } : r)),
     );
     try {
-      await mark({ data: { id, status } });
+      // A trial booking is not an attendance row - its "attendance" is the
+      // trial's own status, so it takes a different write path.
+      if (row.is_trial_booking) {
+        await markTrial({ data: { trial_id: row.trial_id, status } });
+        await queryClient.invalidateQueries({ queryKey: ["leads-board"] });
+        if (row.lead_id) await queryClient.invalidateQueries({ queryKey: ["lead", row.lead_id] });
+      } else {
+        await mark({ data: { id: row.id, status } });
+      }
       await refresh();
     } catch (error) {
       if (previous) queryClient.setQueryData(key, previous);
@@ -155,7 +167,11 @@ function RollPage() {
   // are grouped by the lesson they belong to so the sheet matches the room.
   const groups = groupByLesson(visible);
 
-  const unmarkedIds = visible.filter((r: Row) => r.status === "not_marked").map((r: Row) => r.id);
+  // Trial bookings are not attendance rows, so they never join a bulk mark - the
+  // bulk endpoint writes to the attendance table by id, which they have none of.
+  const unmarkedIds = visible
+    .filter((r: Row) => r.status === "not_marked" && !r.is_trial_booking)
+    .map((r: Row) => r.id);
 
   return (
     <div className="stagger space-y-5">
@@ -286,8 +302,8 @@ function groupByLesson(rows: Row[]): LessonGrouping[] {
   }
   for (const group of groups.values()) {
     group.rows.sort((a, b) =>
-      (a.enrolments?.students?.full_name ?? "").localeCompare(
-        b.enrolments?.students?.full_name ?? "",
+      (a.enrolments?.students?.full_name ?? a.display_name ?? "").localeCompare(
+        b.enrolments?.students?.full_name ?? b.display_name ?? "",
       ),
     );
   }
@@ -333,15 +349,19 @@ function LessonGroup({
   /** Column names are stated once at the top, not above every class. */
   showColumns: boolean;
   tutors: Row[];
-  onSetStatus: (id: string, status: "present" | "absent" | "not_marked") => Promise<void>;
+  onSetStatus: (row: Row, status: "present" | "absent" | "not_marked") => Promise<void>;
   onMakeUp: (rows: Row[]) => void;
   onBulk: (ids: string[], status: "present" | "absent" | "not_marked") => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
   const { lesson, rows } = group;
   const marked = rows.filter((r: Row) => r.status !== "not_marked").length;
-  const unmarkedIds = rows.filter((r: Row) => r.status === "not_marked").map((r: Row) => r.id);
-  const makeUpable = rows.filter((r: Row) => r.att_type !== "make_up");
+  // Trial bookings carry no attendance id, so they stay out of the bulk actions
+  // (mark-all, make up the class) that write to the attendance table by id.
+  const unmarkedIds = rows
+    .filter((r: Row) => r.status === "not_marked" && !r.is_trial_booking)
+    .map((r: Row) => r.id);
+  const makeUpable = rows.filter((r: Row) => r.att_type !== "make_up" && !r.is_trial_booking);
   const complete = marked === rows.length;
 
   return (
@@ -412,16 +432,29 @@ function LessonGroup({
             {rows.map((row: Row) => (
               <tr key={row.id}>
                 <Td>
-                  <Link
-                    to="/students/$id"
-                    params={{ id: row.student_id }}
-                    className="font-medium hover:underline"
-                  >
-                    {row.enrolments?.students?.full_name ?? "-"}
-                  </Link>
-                  <div>
-                    <Code>{row.enrolments?.students?.code}</Code>
-                  </div>
+                  {row.is_trial_booking ? (
+                    // A trial is a lead, not a student yet - no profile to link to.
+                    <>
+                      <div className="font-medium">{row.display_name ?? "Trial student"}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Lead
+                        {row.year_level ? ` · ${row.year_level}` : ""}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Link
+                        to="/students/$id"
+                        params={{ id: row.student_id }}
+                        className="font-medium hover:underline"
+                      >
+                        {row.enrolments?.students?.full_name ?? "-"}
+                      </Link>
+                      <div>
+                        <Code>{row.enrolments?.students?.code}</Code>
+                      </div>
+                    </>
+                  )}
                 </Td>
                 <Td>
                   <StatusPill
@@ -467,35 +500,38 @@ function LessonGroup({
                     <Button
                       size="sm"
                       variant={row.status === "present" ? "default" : "outline"}
-                      title="Present"
-                      aria-label="Present"
-                      onClick={() => onSetStatus(row.id, "present")}
+                      title={row.is_trial_booking ? "Attended" : "Present"}
+                      aria-label={row.is_trial_booking ? "Attended" : "Present"}
+                      onClick={() => onSetStatus(row, "present")}
                     >
                       <Check className="h-4 w-4" />
                     </Button>
                     <Button
                       size="sm"
                       variant={row.status === "absent" ? "destructive" : "outline"}
-                      title="Away"
-                      aria-label="Away"
-                      onClick={() => onSetStatus(row.id, "absent")}
+                      title={row.is_trial_booking ? "No-show" : "Away"}
+                      aria-label={row.is_trial_booking ? "No-show" : "Away"}
+                      onClick={() => onSetStatus(row, "absent")}
                     >
                       <X className="h-4 w-4" />
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      title="Away, and owed a make-up"
-                      disabled={row.att_type === "make_up"}
-                      onClick={() => onMakeUp([row])}
-                    >
-                      Make up
-                    </Button>
+                    {/* A trial owes no make-up - it consumes nothing to begin with. */}
+                    {!row.is_trial_booking && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        title="Away, and owed a make-up"
+                        disabled={row.att_type === "make_up"}
+                        onClick={() => onMakeUp([row])}
+                      >
+                        Make up
+                      </Button>
+                    )}
                     {row.status !== "not_marked" && (
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => onSetStatus(row.id, "not_marked")}
+                        onClick={() => onSetStatus(row, "not_marked")}
                       >
                         Clear
                       </Button>
