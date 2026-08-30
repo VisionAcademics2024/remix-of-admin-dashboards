@@ -27,6 +27,7 @@ import {
   Code,
   EmptyState,
   PageHeader,
+  Section,
   StatusPill,
   Td,
   Th,
@@ -43,8 +44,10 @@ import {
   sydToday,
   weekStart,
 } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { getCatalogue } from "@/lib/vision/catalogue.functions";
-import type { Row } from "@/lib/vision/types";
+import { listTrialRoll, saveTrial } from "@/lib/vision/leads.functions";
+import { LABELS, type Row } from "@/lib/vision/types";
 import {
   bookMakeUp,
   holdMakeUp,
@@ -259,6 +262,8 @@ function RollPage() {
         </div>
       </div>
 
+      <TrialRollSection filter={filter} today={today} />
+
       <p className="text-xs text-muted-foreground">
         Un-marking a student refunds their hours automatically - the balance is a view, not a stored
         number. A PAYG entry with no package is normal and is never flagged.
@@ -273,6 +278,140 @@ function RollPage() {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Trial students overlaid on the roll. They have no student or attendance record
+ * until conversion, so they are read straight from the trials table and shown as
+ * a clearly-labelled block. Marking one updates the trial's own status, not a
+ * real attendance row.
+ */
+const TRIAL_ROLL_FILTERS: RollFilter[] = ["today", "tomorrow", "this_week", "trials", "all"];
+
+function TrialRollSection({ filter, today }: { filter: RollFilter; today: string }) {
+  const queryClient = useQueryClient();
+  const save = useServerFn(saveTrial);
+  const enabled = TRIAL_ROLL_FILTERS.includes(filter);
+
+  const queryKey = ["trial-roll", filter, today];
+  const { data: trials = [] } = useQuery({
+    queryKey,
+    queryFn: () => listTrialRoll({ data: { filter, today, week_start: weekStart(today) } }),
+    enabled,
+  });
+
+  if (!enabled || trials.length === 0) return null;
+
+  async function mark(trial: Row, status: "scheduled" | "attended" | "no_show") {
+    queryClient.setQueryData(queryKey, (old: Row[] | undefined) =>
+      (old ?? []).map((t) => (t.id === trial.id ? { ...t, status } : t)),
+    );
+    try {
+      await save({
+        data: {
+          id: trial.id,
+          lead_id: trial.leads?.id,
+          kind: trial.kind,
+          class_offering_id: trial.class_offering_id,
+          session_id: trial.session_id,
+          scheduled_for: trial.scheduled_for ?? "",
+          status,
+        },
+      });
+    } catch (error) {
+      toast.error((error as Error).message);
+      await queryClient.invalidateQueries({ queryKey });
+    }
+  }
+
+  return (
+    <Section
+      title="Trial students"
+      count={trials.length}
+      description="Prospects sitting in on a lesson. They become a real student only when their lead is converted."
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr>
+              <Th>Trial student</Th>
+              <Th>Class</Th>
+              <Th>When</Th>
+              <Th>Tutor</Th>
+              <Th className="text-right">Mark</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {(trials as Row[]).map((t) => (
+              <tr key={t.id}>
+                <Td>
+                  <div className="flex items-center gap-2 font-medium">
+                    {t.leads?.student_name ?? "Trial"}
+                    <StatusPill tone="info">Trial</StatusPill>
+                  </div>
+                  <Link
+                    to="/leads"
+                    className="text-xs text-primary underline-offset-2 hover:underline"
+                  >
+                    {t.leads?.code ?? t.code}
+                  </Link>
+                </Td>
+                <Td>{t.class_offerings?.programs?.name ?? t.class_offerings?.code ?? "-"}</Td>
+                <Td className="whitespace-nowrap">
+                  {t.sessions?.starts_at ? (
+                    <>
+                      {formatDay(t.sessions.starts_at)} · {formatTime(t.sessions.starts_at)}
+                    </>
+                  ) : (
+                    "-"
+                  )}
+                </Td>
+                <Td>
+                  <TutorDot
+                    colour={t.sessions?.tutors?.colour}
+                    name={t.sessions?.tutors?.full_name}
+                  />
+                </Td>
+                <Td>
+                  <div className="flex items-center justify-end gap-1.5">
+                    <button
+                      type="button"
+                      title="Attended"
+                      onClick={() => mark(t, "attended")}
+                      className={cn(
+                        "flex h-7 w-7 items-center justify-center rounded-lg border transition-colors",
+                        t.status === "attended"
+                          ? "border-success/40 bg-success/20 text-success"
+                          : "border-[var(--edge)] text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      <Check className="h-4 w-4" strokeWidth={2} />
+                    </button>
+                    <button
+                      type="button"
+                      title="No-show"
+                      onClick={() => mark(t, "no_show")}
+                      className={cn(
+                        "flex h-7 w-7 items-center justify-center rounded-lg border transition-colors",
+                        t.status === "no_show"
+                          ? "border-warning/40 bg-warning/20 text-warning"
+                          : "border-[var(--edge)] text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      <X className="h-4 w-4" strokeWidth={2} />
+                    </button>
+                    <StatusPill tone={toneForStatus("trial", t.status)}>
+                      {LABELS.trialStatus[t.status as keyof typeof LABELS.trialStatus]}
+                    </StatusPill>
+                  </div>
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Section>
   );
 }
 
