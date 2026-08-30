@@ -27,6 +27,7 @@ import { Route as AuthenticatedTimetableRouteImport } from './routes/_authentica
 import { Route as AuthenticatedTodayRouteImport } from './routes/_authenticated/today'
 import { Route as AuthenticatedTutorPayRouteImport } from './routes/_authenticated/tutor-pay'
 import { Route as AuthenticatedTutorsRouteImport } from './routes/_authenticated/tutors'
+import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
 import { Route as AuthenticatedClassesIndexRouteImport } from './routes/_authenticated/classes.index'
 import { Route as AuthenticatedClassesNewRouteImport } from './routes/_authenticated/classes.new'
@@ -131,6 +132,11 @@ const AuthenticatedTutorsRoute = AuthenticatedTutorsRouteImport.update({
   path: '/tutors',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
+  id: '/.lovable/oauth/consent',
+  path: '/.lovable/oauth/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const Char91DotmcpChar93InvokeToolToolRoute =
   Char91DotmcpChar93InvokeToolToolRouteImport.update({
     id: '/.mcp/invoke-tool/$tool',
@@ -214,6 +220,7 @@ export interface FileRoutesByFullPath {
   '/today': typeof AuthenticatedTodayRoute
   '/tutor-pay': typeof AuthenticatedTutorPayRoute
   '/tutors': typeof AuthenticatedTutorsRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/classes/new': typeof AuthenticatedClassesNewRoute
   '/prototype/dashboard': typeof AuthenticatedPrototypeDashboardRoute
@@ -244,6 +251,7 @@ export interface FileRoutesByTo {
   '/today': typeof AuthenticatedTodayRoute
   '/tutor-pay': typeof AuthenticatedTutorPayRoute
   '/tutors': typeof AuthenticatedTutorsRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/classes/new': typeof AuthenticatedClassesNewRoute
   '/prototype/dashboard': typeof AuthenticatedPrototypeDashboardRoute
@@ -276,6 +284,7 @@ export interface FileRoutesById {
   '/_authenticated/today': typeof AuthenticatedTodayRoute
   '/_authenticated/tutor-pay': typeof AuthenticatedTutorPayRoute
   '/_authenticated/tutors': typeof AuthenticatedTutorsRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/_authenticated/classes/new': typeof AuthenticatedClassesNewRoute
   '/_authenticated/prototype/dashboard': typeof AuthenticatedPrototypeDashboardRoute
@@ -308,6 +317,7 @@ export interface FileRouteTypes {
     | '/today'
     | '/tutor-pay'
     | '/tutors'
+    | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/classes/new'
     | '/prototype/dashboard'
@@ -338,6 +348,7 @@ export interface FileRouteTypes {
     | '/today'
     | '/tutor-pay'
     | '/tutors'
+    | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/classes/new'
     | '/prototype/dashboard'
@@ -369,6 +380,7 @@ export interface FileRouteTypes {
     | '/_authenticated/today'
     | '/_authenticated/tutor-pay'
     | '/_authenticated/tutors'
+    | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/_authenticated/classes/new'
     | '/_authenticated/prototype/dashboard'
@@ -390,6 +402,7 @@ export interface RootRouteChildren {
   McpRoute: typeof McpRoute
   Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
   Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
   Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
 }
 
@@ -520,6 +533,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/tutors'
       preLoaderRoute: typeof AuthenticatedTutorsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/.lovable/oauth/consent': {
+      id: '/.lovable/oauth/consent'
+      path: '/.lovable/oauth/consent'
+      fullPath: '/.lovable/oauth/consent'
+      preLoaderRoute: typeof DotlovableOauthConsentRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/.mcp/invoke-tool/$tool': {
       id: '/.mcp/invoke-tool/$tool'
@@ -675,6 +695,7 @@ const rootRouteChildren: RootRouteChildren = {
   Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
   Char91DotwellKnownChar93OauthProtectedResourceRoute:
     Char91DotwellKnownChar93OauthProtectedResourceRoute,
+  DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
   Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
 }
 export const routeTree = rootRouteImport
