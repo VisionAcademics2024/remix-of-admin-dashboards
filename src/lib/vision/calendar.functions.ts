@@ -11,10 +11,10 @@ import { SYNC_CALENDAR_ID, syncSessionToCalendar, type SessionForSync, type Sync
 export const syncSessionToGoogle = createServerFn({ method: "POST" })
   .middleware([requireOwner])
   .inputValidator((data) => z.object({ session_id: z.string().uuid() }).parse(data))
-  .handler(async ({ context, data }) => {
+  .handler(async ({ context, data: input }) => {
     const client = db(context.supabase);
 
-    const { data, error: readError } = await client
+    const { data: found, error: readError } = await client
       .from("sessions")
       .select(
         "id, code, starts_at, ends_at, room, status, google_event_id, tutors(full_name), class_offerings(code, room, programs(name))",
@@ -22,11 +22,11 @@ export const syncSessionToGoogle = createServerFn({ method: "POST" })
       .eq("id", input.session_id)
       .maybeSingle();
     if (readError) throw readError;
-    if (!data) throw new Error("That lesson no longer exists.");
+    if (!found) throw new Error("That lesson no longer exists.");
 
     // The generated Database type still describes the prototype tables, so the
     // joined shape is narrowed here rather than inferred.
-    const row = data as {
+    const row = found as {
       id: string;
       code: string;
       starts_at: string;
