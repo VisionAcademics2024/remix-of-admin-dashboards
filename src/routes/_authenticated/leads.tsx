@@ -193,6 +193,7 @@ function LeadTable({
           <Th>Interest</Th>
           <Th>Source</Th>
           <Th>Status</Th>
+          <Th>Trial dates</Th>
           <Th>Last contact</Th>
           <Th className="text-right">Trials</Th>
           <Th className="text-right" />
@@ -222,6 +223,26 @@ function LeadTable({
               <StatusPill tone={toneForStatus("lead", l.status)}>
                 {LABELS.leadStatus[l.status as keyof typeof LABELS.leadStatus]}
               </StatusPill>
+            </Td>
+            <Td className="whitespace-nowrap text-xs">
+              {l.trial_booked_at || l.trial_scheduled_for ? (
+                <div className="space-y-0.5">
+                  <div className="text-muted-foreground">
+                    Booked{" "}
+                    <span className="text-foreground">
+                      {l.trial_booked_at ? formatDate(l.trial_booked_at) : "-"}
+                    </span>
+                  </div>
+                  <div className="text-muted-foreground">
+                    Coming in{" "}
+                    <span className="text-foreground">
+                      {l.trial_scheduled_for ? formatDate(l.trial_scheduled_for) : "TBC"}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <span className="text-muted-foreground">-</span>
+              )}
             </Td>
             <Td className="whitespace-nowrap">
               {l.latest_contact_at ? (

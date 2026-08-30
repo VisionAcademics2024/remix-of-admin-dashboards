@@ -19,7 +19,7 @@ export const getLeadsBoard = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const client = db(context.supabase);
 
-    const [leads, programs, tutors, staff, offerings] = await Promise.all([
+    const [leads, programs, tutors, staff, offerings, trials] = await Promise.all([
       client.from("v_leads").select("*").order("created_at", { ascending: false }),
       client.from("programs").select("id, name, code").eq("is_active", true).order("name"),
       client
@@ -33,10 +33,31 @@ export const getLeadsBoard = createServerFn({ method: "GET" })
         .select("id, code, status, programs(name), operating_periods(name, code)")
         .in("status", ["planned", "active"])
         .order("starts_on", { ascending: false }),
+      // The trial dates the board shows next to the status: when it was booked
+      // (created_at) and when they're coming in (scheduled_for). Most-recent
+      // first, so the first row seen per lead is the one to surface.
+      client
+        .from("trials")
+        .select("lead_id, created_at, scheduled_for, status")
+        .order("created_at", { ascending: false }),
     ]);
 
+    // The latest trial per lead - its booked date and its coming-in date.
+    const latestTrial = new Map<string, Row>();
+    for (const t of trials.data ?? []) {
+      if (!latestTrial.has(t.lead_id)) latestTrial.set(t.lead_id, t);
+    }
+    const leadRows = (leads.data ?? []).map((l: Row) => {
+      const t = latestTrial.get(l.id);
+      return {
+        ...l,
+        trial_booked_at: t?.created_at ?? null,
+        trial_scheduled_for: t?.scheduled_for ?? null,
+      };
+    });
+
     return {
-      leads: leads.data ?? [],
+      leads: leadRows,
       programs: programs.data ?? [],
       tutors: tutors.data ?? [],
       staff: staff.data ?? [],
