@@ -182,7 +182,6 @@ async function calendarMappingBySession(
   return result;
 }
 
-
 /**
  * The one enrolled student for each offering that has exactly one - null for
  * classes with none or with two or more. A closed enrolment does not count.
@@ -347,7 +346,6 @@ export const rescheduleSession = createServerFn({ method: "POST" })
 
     return { ...saved, calendar_sync_status: nextStatus ?? saved.calendar_sync_status };
   });
-
 
 /** Cancelling preserves the roll. Cancelled lessons pay nobody and consume nothing. */
 export const cancelSession = createServerFn({ method: "POST" })

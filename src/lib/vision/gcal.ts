@@ -165,8 +165,8 @@ export function isMappedSession(
   if (!mapping) return false;
   return Boolean(
     mapping.google_calendar_id &&
-      mapping.google_event_id &&
-      mapping.google_calendar_id === calendarId,
+    mapping.google_event_id &&
+    mapping.google_calendar_id === calendarId,
   );
 }
 

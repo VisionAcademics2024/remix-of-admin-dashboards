@@ -198,12 +198,19 @@ function TimetablePage() {
       });
       // The move is saved. Google is a follow-on for the linked lessons only, and
       // its failure never puts the block back.
-      const google = await syncAfterReschedule(saved, (id) => sync({ data: { session_id: id } }), row.id);
+      const google = await syncAfterReschedule(
+        saved,
+        (id) => sync({ data: { session_id: id } }),
+        row.id,
+      );
       await queryClient.invalidateQueries({ queryKey: ["timetable"] });
       await queryClient.invalidateQueries({ queryKey: ["today"] });
       await queryClient.invalidateQueries({ queryKey: ["roll"] });
       if (google.ok) toast.success("Lesson moved. The roll moved with it.");
-      else toast.warning(`Lesson moved. ${google.message ?? ""} Retry the Google sync from the lesson.`);
+      else
+        toast.warning(
+          `Lesson moved. ${google.message ?? ""} Retry the Google sync from the lesson.`,
+        );
     } catch (error) {
       queryClient.setQueryData(key, previous);
       toast.error((error as Error).message);
@@ -532,8 +539,6 @@ function SessionDialog({
             </div>
 
             <GoogleSyncRow session={session} onSynced={invalidate} />
-
-
 
             <DialogFooter className="flex-col gap-2 pt-1 sm:flex-row sm:justify-between">
               <div className="flex gap-2">
@@ -941,13 +946,7 @@ function AddStudentRow({
  * never creates events, so an unlinked lesson gets no control at all. A failed
  * retry keeps the dialog open and stays visibly failed.
  */
-function GoogleSyncRow({
-  session,
-  onSynced,
-}: {
-  session: Row;
-  onSynced: () => Promise<void>;
-}) {
+function GoogleSyncRow({ session, onSynced }: { session: Row; onSynced: () => Promise<void> }) {
   const sync = useServerFn(syncSessionToGoogle);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(session.calendar_sync_status === "failed");
