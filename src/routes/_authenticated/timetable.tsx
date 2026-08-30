@@ -531,6 +531,10 @@ function SessionDialog({
               />
             </div>
 
+            <GoogleSyncRow session={session} onSynced={invalidate} />
+
+
+
             <DialogFooter className="flex-col gap-2 pt-1 sm:flex-row sm:justify-between">
               <div className="flex gap-2">
                 <AlertDialog>
