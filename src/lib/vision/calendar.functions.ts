@@ -87,7 +87,7 @@ export const syncSessionToGoogle = createServerFn({ method: "POST" })
     };
 
     const store: SyncStore = {
-      markPending: (id) => setStatus({ calendar_sync_status: "pending" }).then(() => void id),
+      markPending: async () => setStatus({ calendar_sync_status: "pending" }),
       markSynced: async (_id, calendarId, eventId) => {
         await setStatus({
           google_calendar_id: calendarId,
