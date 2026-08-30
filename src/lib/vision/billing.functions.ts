@@ -61,12 +61,22 @@ export const getBillingBoard = createServerFn({ method: "GET" })
       chargeRows.filter((c: Row) => c.package_id).map((c: Row) => c.package_id),
     );
 
+    // Purchased packages still to charge - including the zero-priced ones a
+    // mid-term join opens, so the student shows with their hours and an empty
+    // price for the admin to firm. Courtesy (free) packages are never charged.
+    const pkgToCharge = (packagesToCharge.data ?? []).filter(
+      (p: Row) => !chargedPackages.has(p.id) && p.package_type !== "courtesy",
+    );
+    // A student whose hours already sit in a package to charge is handled there,
+    // so don't also nag about the enrolment having no price.
+    const pkgStudentIds = new Set(pkgToCharge.map((p: Row) => p.student_id));
+
     return {
-      newEnrolments: newEnrolments.data ?? [],
-      toCharge: (uncharged.data ?? []).filter((a: Row) => !chargedAttendance.has(a.id)),
-      packagesToCharge: (packagesToCharge.data ?? []).filter(
-        (p: Row) => !chargedPackages.has(p.id) && Number(p.price) > 0,
+      newEnrolments: (newEnrolments.data ?? []).filter(
+        (e: Row) => !pkgStudentIds.has(e.students?.id),
       ),
+      toCharge: (uncharged.data ?? []).filter((a: Row) => !chargedAttendance.has(a.id)),
+      packagesToCharge: pkgToCharge,
       toInvoice: chargeRows.filter((c: Row) => c.status === "to_invoice"),
       unpaid: chargeRows.filter((c: Row) => c.status === "invoiced"),
       received: chargeRows.filter((c: Row) => c.status === "paid"),

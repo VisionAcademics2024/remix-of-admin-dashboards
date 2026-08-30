@@ -2,10 +2,21 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
-import { ArrowLeft, CalendarPlus, Check, ChevronsUpDown, CircleDashed, Layers } from "lucide-react";
+import {
+  ArrowLeft,
+  CalendarPlus,
+  Check,
+  ChevronsUpDown,
+  CircleDashed,
+  Layers,
+  Plus,
+  UserPlus,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -27,7 +38,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Code, PageHeader, StatusPill, Td, Th } from "@/components/vision/ui";
 import { cn } from "@/lib/utils";
-import { formatHours, formatTime, formatWeekday, sydneyLocalToInstant, sydToday } from "@/lib/format";
+import {
+  formatDayDate,
+  formatHours,
+  formatTime,
+  formatWeekday,
+  sydneyLocalToInstant,
+  sydToday,
+} from "@/lib/format";
 import { getCatalogue, saveProgram } from "@/lib/vision/catalogue.functions";
 import {
   generateSessions,
@@ -36,7 +54,9 @@ import {
   saveClassOffering,
 } from "@/lib/vision/classes.functions";
 import { createSession } from "@/lib/vision/schedule.functions";
-import { listCommerce, saveEnrolment } from "@/lib/vision/commerce.functions";
+import { addMidTermStudent, listCommerce, saveEnrolment } from "@/lib/vision/commerce.functions";
+import { listTrialSessions } from "@/lib/vision/leads.functions";
+import { listStudents } from "@/lib/vision/people.functions";
 import { LABELS, Row } from "@/lib/vision/types";
 
 // The class builder makes repeating classes; single lessons are the session
@@ -63,7 +83,7 @@ export const Route = createFileRoute("/_authenticated/classes/new")({
 });
 
 function ClassBuilderPage() {
-  const [mode, setMode] = useState<"class" | "session">("class");
+  const [mode, setMode] = useState<"class" | "session" | "student">("class");
   const { data: catalogue } = useQuery({ queryKey: ["catalogue"], queryFn: () => getCatalogue() });
 
   return (
@@ -76,11 +96,11 @@ function ClassBuilderPage() {
 
       <PageHeader
         title="Builder"
-        description="Make a repeating class, or a single one-off session for a class that already exists. Pick which below."
+        description="Make a repeating class, add a single one-off session, or drop a mid-term student onto the exact lessons they'll attend. Pick which below."
       />
 
       {/* The choice, side by side. What you pick decides the steps underneath. */}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
         <ModeCard
           icon={Layers}
           title="Class builder"
@@ -95,9 +115,22 @@ function ClassBuilderPage() {
           active={mode === "session"}
           onClick={() => setMode("session")}
         />
+        <ModeCard
+          icon={UserPlus}
+          title="Add a student"
+          description="Attach a mid-term joiner to specific lessons — no full term."
+          active={mode === "student"}
+          onClick={() => setMode("student")}
+        />
       </div>
 
-      {mode === "class" ? <ClassFlow catalogue={catalogue} /> : <SessionFlow catalogue={catalogue} />}
+      {mode === "class" ? (
+        <ClassFlow catalogue={catalogue} />
+      ) : mode === "session" ? (
+        <SessionFlow catalogue={catalogue} />
+      ) : (
+        <MidTermFlow />
+      )}
     </div>
   );
 }
@@ -1107,6 +1140,363 @@ function StepTwo({
         }}
       >
         Add student
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * Add a mid-term student onto the exact lessons they'll attend, across one or
+ * more classes, without generating a whole term. They land on those rolls and
+ * in Billing (active but unpriced) for the admin to firm the price.
+ */
+function MidTermFlow() {
+  const add = useServerFn(addMidTermStudent);
+  const queryClient = useQueryClient();
+  const { data: students } = useQuery({ queryKey: ["students"], queryFn: () => listStudents() });
+  const { data: classes } = useQuery({ queryKey: ["classes"], queryFn: () => listClassOfferings() });
+  const { data: sessions = [] } = useQuery({
+    queryKey: ["trial-sessions"],
+    queryFn: () => listTrialSessions(),
+  });
+
+  const [studentId, setStudentId] = useState("");
+  const [plan, setPlan] = useState<"hours" | "payg">("hours");
+  const [hours, setHours] = useState("10");
+  const [addedIds, setAddedIds] = useState<string[]>([]);
+  const [picks, setPicks] = useState<Record<string, string[]>>({});
+  const [custom, setCustom] = useState<
+    Record<string, Array<{ tempId: string; starts_at: string; ends_at: string; label: string }>>
+  >({});
+  const [busy, setBusy] = useState(false);
+  const [doneCount, setDoneCount] = useState<number | null>(null);
+
+  const classById = (id: string) => (classes ?? []).find((c: Row) => c.id === id);
+  const upcomingFor = (id: string) =>
+    (sessions as Row[]).filter((s) => s.class_offering_id === id);
+  const notAdded = (classes ?? []).filter((c: Row) => !addedIds.includes(c.id));
+
+  const totalFor = (id: string) => (picks[id]?.length ?? 0) + (custom[id]?.length ?? 0);
+  const total = addedIds.reduce((n, id) => n + totalFor(id), 0);
+  const classesWithPicks = addedIds.filter((id) => totalFor(id) > 0).length;
+  const student = (students ?? []).find((s: Row) => s.id === studentId);
+
+  function addClass(id: string) {
+    if (!id || addedIds.includes(id)) return;
+    setAddedIds((a) => [...a, id]);
+  }
+  function removeClass(id: string) {
+    setAddedIds((a) => a.filter((x) => x !== id));
+    setPicks((p) => {
+      const next = { ...p };
+      delete next[id];
+      return next;
+    });
+    setCustom((c) => {
+      const next = { ...c };
+      delete next[id];
+      return next;
+    });
+  }
+  function toggle(id: string, sid: string) {
+    setPicks((p) => {
+      const cur = p[id] ?? [];
+      return { ...p, [id]: cur.includes(sid) ? cur.filter((x) => x !== sid) : [...cur, sid] };
+    });
+  }
+  function addDate(id: string, local: string, length: number) {
+    if (!local) return;
+    const starts_at = sydneyLocalToInstant(local);
+    const ends_at = new Date(Date.parse(starts_at) + (length || 1.5) * 3_600_000).toISOString();
+    const tempId = `c-${id}-${Date.now()}`;
+    setCustom((c) => ({
+      ...c,
+      [id]: [...(c[id] ?? []), { tempId, starts_at, ends_at, label: formatDayDate(starts_at) }],
+    }));
+  }
+  function removeCustom(id: string, tempId: string) {
+    setCustom((c) => ({ ...c, [id]: (c[id] ?? []).filter((x) => x.tempId !== tempId) }));
+  }
+
+  async function submit() {
+    setBusy(true);
+    try {
+      const payload = addedIds
+        .filter((id) => totalFor(id) > 0)
+        .map((id) => ({
+          class_offering_id: id,
+          session_ids: picks[id] ?? [],
+          new_sessions: (custom[id] ?? []).map((c) => ({
+            starts_at: c.starts_at,
+            ends_at: c.ends_at,
+          })),
+        }));
+      const res = await add({
+        data: {
+          student_id: studentId,
+          method: plan,
+          hours: plan === "hours" ? Number(hours) || 0 : 0,
+          classes: payload,
+        },
+      });
+      await queryClient.invalidateQueries({ queryKey: ["roll"] });
+      await queryClient.invalidateQueries({ queryKey: ["timetable"] });
+      await queryClient.invalidateQueries({ queryKey: ["today"] });
+      await queryClient.invalidateQueries({ queryKey: ["billing"] });
+      setDoneCount(res.lessons ?? total);
+      toast.success(`${student?.full_name ?? "Student"} added to ${res.lessons} lessons.`);
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (doneCount !== null) {
+    return (
+      <Card className="border-success/40">
+        <CardContent className="space-y-3 py-6 text-center">
+          <p className="text-sm">
+            <span className="font-semibold">{student?.full_name}</span> is now on {doneCount}{" "}
+            {doneCount === 1 ? "lesson" : "lessons"}. Their name shows on those rolls, and they're in
+            Billing to price.
+          </p>
+          <div className="flex justify-center gap-2">
+            <Button variant="outline" asChild>
+              <Link to="/roll">Open the roll</Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/billing">Open Billing</Link>
+            </Button>
+            <Button
+              onClick={() => {
+                setDoneCount(null);
+                setStudentId("");
+                setAddedIds([]);
+                setPicks({});
+                setCustom({});
+              }}
+            >
+              Add another student
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* 1. Student */}
+      <StepCard step={1} title="The student" done={!!studentId}>
+        <div className="space-y-1.5">
+          <Label>Who's joining</Label>
+          <Select value={studentId || "none"} onValueChange={(v) => setStudentId(v === "none" ? "" : v)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Choose a student…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Choose a student…</SelectItem>
+              {(students ?? []).map((s: Row) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.full_name}
+                  {s.year_level ? ` · ${s.year_level}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Not a student yet? Add them on Students &amp; Families first. Pricing is set later in Billing.
+          </p>
+        </div>
+      </StepCard>
+
+      {/* 2. Classes & dates */}
+      <StepCard
+        step={2}
+        title="Classes & the dates they'll come"
+        done={total > 0}
+        summary={total > 0 ? `${total} lessons` : undefined}
+      >
+        <div className="space-y-3">
+          <Select value="none" onValueChange={(v) => v !== "none" && addClass(v)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Add a class they've joined…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Add a class they've joined…</SelectItem>
+              {notAdded.map((c: Row) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.code} · {c.programs?.name ?? "Class"}
+                  {classWhen(c) ? ` · ${classWhen(c)}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {addedIds.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              No classes yet. Pick one above to choose the lessons they'll sit in on.
+            </p>
+          )}
+
+          {addedIds.map((id) => {
+            const c = classById(id);
+            const lessons = upcomingFor(id);
+            const chosen = picks[id] ?? [];
+            return (
+              <div key={id} className="overflow-hidden rounded-lg border border-[var(--edge)]">
+                <div className="flex flex-wrap items-center gap-2 border-b border-[var(--edge)] bg-[var(--mat-thin)] px-3 py-2">
+                  <span className="font-medium">{c?.programs?.name ?? "Class"}</span>
+                  <Code>{c?.code}</Code>
+                  <span className="text-xs text-muted-foreground">{c ? classWhen(c) : ""}</span>
+                  <span className="ml-auto text-xs font-medium text-primary">{totalFor(id)} selected</span>
+                  <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => removeClass(id)}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="max-h-56 space-y-0.5 overflow-y-auto p-2">
+                  {lessons.length === 0 && (custom[id]?.length ?? 0) === 0 && (
+                    <p className="px-1 py-2 text-xs text-muted-foreground">
+                      No upcoming lessons on the timetable. Add a specific date below.
+                    </p>
+                  )}
+                  {lessons.map((s: Row) => {
+                    const on = chosen.includes(s.id);
+                    return (
+                      <label
+                        key={s.id}
+                        className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm hover:bg-[var(--mat-thin)]"
+                      >
+                        <Checkbox checked={on} onCheckedChange={() => toggle(id, s.id)} />
+                        <span className="font-medium">{formatDayDate(s.starts_at)}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatTime(s.starts_at)}
+                          {s.tutors?.full_name ? ` · ${s.tutors.full_name}` : ""}
+                        </span>
+                      </label>
+                    );
+                  })}
+                  {(custom[id] ?? []).map((cl) => (
+                    <div
+                      key={cl.tempId}
+                      className="flex items-center gap-2.5 rounded-md bg-primary/10 px-2 py-1.5 text-sm"
+                    >
+                      <Check className="h-4 w-4 text-primary" />
+                      <span className="font-medium">{cl.label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatTime(cl.starts_at)} · added date
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="ml-auto h-6 px-1.5"
+                        onClick={() => removeCustom(id, cl.tempId)}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <AddDateRow
+                  defaultLength={Number(c?.session_duration_hours ?? 1.5)}
+                  onAdd={(local, length) => addDate(id, local, length)}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </StepCard>
+
+      {/* 3. Billing */}
+      <StepCard step={3} title="How they're billed" done={plan === "payg" || Number(hours) > 0}>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label>Plan</Label>
+            <Select value={plan} onValueChange={(v: "hours" | "payg") => setPlan(v)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="hours">Hours — a prepaid block</SelectItem>
+                <SelectItem value="payg">PAYG — pay per lesson</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {plan === "hours" && (
+            <div className="space-y-1.5">
+              <Label>Hours they're paying for</Label>
+              <Input type="number" min="0" step="0.5" value={hours} onChange={(e) => setHours(e.target.value)} />
+            </div>
+          )}
+        </div>
+        <p className="mt-3 rounded-md bg-[var(--mat-thin)] px-3 py-2 text-sm text-muted-foreground">
+          {plan === "hours" ? (
+            <>
+              Shows in Billing as <span className="font-medium text-foreground">{student?.full_name ?? "the student"} · {hours || 0} hours</span> with the price left empty for you to set.
+            </>
+          ) : (
+            <>Each attended lesson lands in Billing to charge, with no price set until you firm it.</>
+          )}
+        </p>
+      </StepCard>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--edge)] bg-[var(--mat-thin)] px-4 py-3">
+        <p className="text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">{total}</span> lessons across{" "}
+          <span className="font-medium text-foreground">{classesWithPicks}</span> classes · they'll
+          appear on those rolls.
+        </p>
+        <Button
+          disabled={busy || !studentId || total === 0 || (plan === "hours" && Number(hours) <= 0)}
+          onClick={submit}
+        >
+          Add to {total} {total === 1 ? "lesson" : "lessons"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** A date-and-length row for attaching an off-timetable lesson to a class. */
+function AddDateRow({
+  defaultLength,
+  onAdd,
+}: {
+  defaultLength: number;
+  onAdd: (local: string, length: number) => void;
+}) {
+  const [local, setLocal] = useState("");
+  const [length, setLength] = useState(String(defaultLength));
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-t border-[var(--edge)] px-3 py-2">
+      <span className="text-xs text-muted-foreground">Not on the timetable yet?</span>
+      <Input
+        type="datetime-local"
+        className="h-8 w-auto"
+        value={local}
+        onChange={(e) => setLocal(e.target.value)}
+      />
+      <Input
+        type="number"
+        step="0.25"
+        min={0.25}
+        className="h-8 w-20"
+        value={length}
+        onChange={(e) => setLength(e.target.value)}
+        title="Lesson length (hours)"
+      />
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-8"
+        disabled={!local}
+        onClick={() => {
+          onAdd(local, Number(length) || defaultLength);
+          setLocal("");
+        }}
+      >
+        <Plus className="mr-1 h-3.5 w-3.5" /> Add date
       </Button>
     </div>
   );
