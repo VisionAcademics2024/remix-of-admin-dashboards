@@ -4,12 +4,14 @@ import {
   SYNC_CALENDAR_ID,
   isMappedSession,
   nextSyncStatusAfterReschedule,
+  withPendingSync,
   updateMappedSessionEvent,
   type CalendarApi,
   type SessionForSync,
   type SyncStore,
 } from "./gcal";
-import { syncAfterReschedule } from "./calendar-sync";
+import { nextSyncView, syncAfterReschedule, syncTone, syncViewFromSession } from "./calendar-sync";
+import { reschedulePatch } from "./schedule.rules";
 
 const mapped = {
   google_calendar_id: SYNC_CALENDAR_ID,
@@ -132,5 +134,100 @@ describe("reschedule status", () => {
       }),
     ).toBeNull();
     expect(nextSyncStatusAfterReschedule({ ...mapped, google_calendar_id: "other" })).toBeNull();
+  });
+});
+
+describe("atomic reschedule payload", () => {
+  it("folds pending into the one update for a mapped lesson", () => {
+    const patch = {
+      starts_at: "2026-09-02T06:00:00.000Z",
+      ends_at: "2026-09-02T07:30:00.000Z",
+      original_starts_at: "2026-09-01T06:00:00.000Z",
+      original_ends_at: "2026-09-01T07:30:00.000Z",
+    };
+    expect(withPendingSync(patch, mapped)).toEqual({ ...patch, calendar_sync_status: "pending" });
+  });
+
+  it("leaves an unlinked lesson's payload and status untouched", () => {
+    const patch = { starts_at: "a", ends_at: "b" };
+    const out = withPendingSync(patch, {
+      google_calendar_id: null,
+      google_event_id: null,
+      calendar_sync_status: "not_synced",
+    });
+    expect(out).toEqual(patch);
+    expect("calendar_sync_status" in out).toBe(false);
+  });
+
+  it("reschedules a mapped lesson with a single sessions update", async () => {
+    const updates: Record<string, unknown>[] = [];
+    // The point of the atomic payload: one write, so a status failure cannot
+    // report a scheduling failure after the lesson has already moved.
+    const save = async (payload: Record<string, unknown>) => {
+      updates.push(payload);
+    };
+    await save(
+      withPendingSync(
+        reschedulePatch(
+          { starts_at: "2026-09-01T06:00:00Z", ends_at: "2026-09-01T07:30:00Z" },
+          "2026-09-02T06:00:00Z",
+          "2026-09-02T07:30:00Z",
+        ),
+        mapped,
+      ),
+    );
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatchObject({ calendar_sync_status: "pending" });
+  });
+});
+
+describe("failed status persistence", () => {
+  it("surfaces the status-write failure while saying the move is saved", async () => {
+    const api = { updateEvent: vi.fn().mockRejectedValue(new Error("google 503")) };
+    const store: SyncStore = {
+      markPending: async () => {},
+      markSynced: async () => {},
+      markFailed: async () => {
+        throw new Error("row is locked");
+      },
+    };
+    await expect(updateMappedSessionEvent(session, api, store)).rejects.toThrow(
+      /that move is saved.*failed state could not be recorded.*google 503.*row is locked/s,
+    );
+  });
+
+  it("still reports the saved move when the failed state is recorded", async () => {
+    const api = { updateEvent: vi.fn().mockRejectedValue(new Error("google 503")) };
+    const s = store();
+    await expect(updateMappedSessionEvent(session, api, s)).rejects.toThrow(
+      /that move is saved, but Google Calendar was not updated/,
+    );
+    expect(s.calls).toEqual(["pending", "failed"]);
+  });
+});
+
+describe("dialog sync view", () => {
+  it("a successful retry cannot stay failed", () => {
+    const start = syncViewFromSession("failed", "2026-08-01T00:00:00Z");
+    expect(start.status).toBe("failed");
+    const running = nextSyncView(start, { type: "start" });
+    expect(running.status).toBe("pending");
+    const done = nextSyncView(running, { type: "success", at: "2026-08-30T02:00:00Z" });
+    expect(done).toEqual({ status: "synced", lastSyncedAt: "2026-08-30T02:00:00Z" });
+    expect(syncTone(done.status)).toBe("success");
+  });
+
+  it("a failed retry stays visible and keeps the last known sync time", () => {
+    const view = nextSyncView(
+      nextSyncView(syncViewFromSession("synced", "2026-08-01T00:00:00Z"), { type: "start" }),
+      { type: "failure" },
+    );
+    expect(view).toEqual({ status: "failed", lastSyncedAt: "2026-08-01T00:00:00Z" });
+    expect(syncTone("failed")).toBe("danger");
+  });
+
+  it("falls back to not_synced for an unknown stored status", () => {
+    expect(syncViewFromSession(null, null)).toEqual({ status: "not_synced", lastSyncedAt: null });
+    expect(syncViewFromSession("weird", undefined).status).toBe("not_synced");
   });
 });

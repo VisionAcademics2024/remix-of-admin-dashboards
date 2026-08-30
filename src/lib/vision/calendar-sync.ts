@@ -35,3 +35,46 @@ export async function syncAfterReschedule(
     };
   }
 }
+
+/* ------------------------------------------------- the dialog's sync display */
+
+export type SyncStatus = "not_synced" | "pending" | "synced" | "failed";
+
+/**
+ * What the lesson dialog shows. Held locally so a retry reflects its own result
+ * immediately, instead of the Session prop that was read before the retry ran -
+ * which is how a successful retry could still read "Failed".
+ */
+export type SyncView = { status: SyncStatus; lastSyncedAt: string | null };
+
+const STATUSES: SyncStatus[] = ["not_synced", "pending", "synced", "failed"];
+
+export function syncViewFromSession(
+  status: string | null | undefined,
+  lastSyncedAt: string | null | undefined,
+): SyncView {
+  return {
+    status: STATUSES.includes(status as SyncStatus) ? (status as SyncStatus) : "not_synced",
+    lastSyncedAt: lastSyncedAt ?? null,
+  };
+}
+
+export type SyncEvent = { type: "start" } | { type: "success"; at: string } | { type: "failure" };
+
+/** Pending while it runs; Synced with a fresh timestamp on success; Failed on error. */
+export function nextSyncView(state: SyncView, event: SyncEvent): SyncView {
+  switch (event.type) {
+    case "start":
+      return { ...state, status: "pending" };
+    case "success":
+      return { status: "synced", lastSyncedAt: event.at };
+    case "failure":
+      return { ...state, status: "failed" };
+  }
+}
+
+export function syncTone(status: SyncStatus): "success" | "danger" | "warning" {
+  if (status === "synced") return "success";
+  if (status === "failed") return "danger";
+  return "warning";
+}

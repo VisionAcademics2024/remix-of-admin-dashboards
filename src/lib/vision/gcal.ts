@@ -202,11 +202,20 @@ export async function updateMappedSessionEvent(
       calendar_id: calendarId,
     };
   } catch (error) {
-    await store.markFailed(session.id);
+    const detail = error instanceof Error ? error.message : "The calendar service did not respond.";
+    try {
+      await store.markFailed(session.id);
+    } catch (statusError) {
+      // The move is saved either way. Say so plainly, and say that even the
+      // failed state could not be written down, so nobody trusts the badge.
+      throw new Error(
+        `${session.code} moved on the timetable and that move is saved, but Google Calendar was not updated and the failed state could not be recorded. ${detail} ${
+          statusError instanceof Error ? statusError.message : "The status write failed."
+        }`,
+      );
+    }
     throw new Error(
-      `${session.code} moved on the timetable, but Google Calendar was not updated. ${
-        error instanceof Error ? error.message : "The calendar service did not respond."
-      }`,
+      `${session.code} moved on the timetable and that move is saved, but Google Calendar was not updated. ${detail}`,
     );
   }
 }
@@ -220,4 +229,19 @@ export function nextSyncStatusAfterReschedule(
   mapping: SessionMapping | null | undefined,
 ): "pending" | null {
   return isMappedSession(mapping) ? "pending" : null;
+}
+
+/**
+ * The reschedule payload, with `pending` folded in for a mapped lesson.
+ *
+ * One update, so the new times and the "Google is now stale" mark either both
+ * land or neither does. A separate follow-up write could fail after the lesson
+ * had already moved, which would report a scheduling failure that did not happen.
+ */
+export function withPendingSync<T extends Record<string, unknown>>(
+  patch: T,
+  mapping: SessionMapping | null | undefined,
+): T | (T & { calendar_sync_status: "pending" }) {
+  const next = nextSyncStatusAfterReschedule(mapping);
+  return next ? { ...patch, calendar_sync_status: next } : patch;
 }

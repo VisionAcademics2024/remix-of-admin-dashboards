@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { nextSyncStatusAfterReschedule } from "./gcal";
+import { withPendingSync } from "./gcal";
 import { db, requireStaff } from "./guard";
 
 import {
@@ -297,7 +297,9 @@ export const rescheduleSession = createServerFn({ method: "POST" })
 
     const { data: current, error: readError } = await client
       .from("sessions")
-      .select("id, starts_at, ends_at, original_starts_at, original_ends_at")
+      .select(
+        "id, starts_at, ends_at, original_starts_at, original_ends_at, google_calendar_id, google_event_id, calendar_sync_status",
+      )
       .eq("id", data.id)
       .maybeSingle();
     if (readError) throw readError;
@@ -314,7 +316,13 @@ export const rescheduleSession = createServerFn({ method: "POST" })
     if (rollError) throw rollError;
     assertRollUnmarked((marked ?? []).length);
 
-    const payload = reschedulePatch(current as RescheduleCurrent, data.starts_at, data.ends_at);
+    // The times, the remembered original slot and - for a lesson already on the
+    // Google test calendar - its `pending` mark, in one atomic update. An
+    // unlinked lesson's status is left exactly as it was.
+    const payload = withPendingSync(
+      reschedulePatch(current as RescheduleCurrent, data.starts_at, data.ends_at),
+      current as Row,
+    );
 
     const { data: saved, error } = await client
       .from("sessions")
@@ -332,19 +340,7 @@ export const rescheduleSession = createServerFn({ method: "POST" })
       );
     }
 
-    // A lesson that already lives on the Google test calendar is now out of date
-    // there, so it is marked pending. A lesson with no mapping stays
-    // `not_synced`: nothing is queued and nothing is sent.
-    const nextStatus = nextSyncStatusAfterReschedule(saved as unknown as Row);
-    if (nextStatus) {
-      const { error: pendingError } = await client
-        .from("sessions")
-        .update({ calendar_sync_status: "pending" })
-        .eq("id", data.id);
-      if (pendingError) throw pendingError;
-    }
-
-    return { ...saved, calendar_sync_status: nextStatus ?? saved.calendar_sync_status };
+    return saved;
   });
 
 /** Cancelling preserves the roll. Cancelled lessons pay nobody and consume nothing. */
