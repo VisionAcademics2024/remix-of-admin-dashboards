@@ -26,7 +26,7 @@ export const syncSessionToGoogle = createServerFn({ method: "POST" })
 
     // The generated Database type still describes the prototype tables, so the
     // joined shape is narrowed here rather than inferred.
-    const row = found as {
+    const row = found as unknown as {
       id: string;
       code: string;
       starts_at: string;
