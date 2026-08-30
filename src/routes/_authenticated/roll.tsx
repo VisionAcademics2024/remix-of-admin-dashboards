@@ -27,6 +27,7 @@ import {
   Code,
   EmptyState,
   PageHeader,
+  Section,
   StatusPill,
   Td,
   Th,
@@ -43,8 +44,10 @@ import {
   sydToday,
   weekStart,
 } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { getCatalogue } from "@/lib/vision/catalogue.functions";
-import type { Row } from "@/lib/vision/types";
+import { listTrialRoll, saveTrial } from "@/lib/vision/leads.functions";
+import { LABELS, type Row } from "@/lib/vision/types";
 import {
   bookMakeUp,
   holdMakeUp,
@@ -52,7 +55,6 @@ import {
   listRoll,
   markAttendance,
   markRollBulk,
-  markTrialAttendance,
   setLessonTutor,
   type RollFilter,
 } from "@/lib/vision/roll.functions";
@@ -114,16 +116,13 @@ function RollPage() {
 
   const queryClient = useQueryClient();
   const mark = useServerFn(markAttendance);
-  const markTrial = useServerFn(markTrialAttendance);
   const bulk = useServerFn(markRollBulk);
 
   const active = FILTERS[index]!;
   const term = search.trim().toLowerCase();
   const visible = term
     ? rows.filter((r: Row) =>
-        `${r.enrolments?.students?.full_name ?? r.display_name ?? ""} ${
-          r.enrolments?.students?.code ?? ""
-        } ${r.code}`
+        `${r.enrolments?.students?.full_name ?? ""} ${r.enrolments?.students?.code ?? ""} ${r.code}`
           .toLowerCase()
           .includes(term),
       )
@@ -136,25 +135,17 @@ function RollPage() {
     await queryClient.invalidateQueries({ queryKey: ["needs-attention-count"] });
   }
 
-  async function setStatus(row: Row, status: "present" | "absent" | "not_marked") {
+  async function setStatus(id: string, status: "present" | "absent" | "not_marked") {
     // Flip the row the instant it is tapped, before the server answers, so the
     // button colour confirms the press with no wait. If the save fails the row
     // is rolled back to what it was and the error shown.
     const key = ["roll", filter, today];
     const previous = queryClient.getQueryData<Row[]>(key);
     queryClient.setQueryData<Row[]>(key, (old) =>
-      (old ?? []).map((r) => (r.id === row.id ? { ...r, status, effective_status: status } : r)),
+      (old ?? []).map((r) => (r.id === id ? { ...r, status, effective_status: status } : r)),
     );
     try {
-      // A trial booking is not an attendance row - its "attendance" is the
-      // trial's own status, so it takes a different write path.
-      if (row.is_trial_booking) {
-        await markTrial({ data: { trial_id: row.trial_id, status } });
-        await queryClient.invalidateQueries({ queryKey: ["leads-board"] });
-        if (row.lead_id) await queryClient.invalidateQueries({ queryKey: ["lead", row.lead_id] });
-      } else {
-        await mark({ data: { id: row.id, status } });
-      }
+      await mark({ data: { id, status } });
       await refresh();
     } catch (error) {
       if (previous) queryClient.setQueryData(key, previous);
@@ -167,11 +158,7 @@ function RollPage() {
   // are grouped by the lesson they belong to so the sheet matches the room.
   const groups = groupByLesson(visible);
 
-  // Trial bookings are not attendance rows, so they never join a bulk mark - the
-  // bulk endpoint writes to the attendance table by id, which they have none of.
-  const unmarkedIds = visible
-    .filter((r: Row) => r.status === "not_marked" && !r.is_trial_booking)
-    .map((r: Row) => r.id);
+  const unmarkedIds = visible.filter((r: Row) => r.status === "not_marked").map((r: Row) => r.id);
 
   return (
     <div className="stagger space-y-5">
@@ -259,6 +246,8 @@ function RollPage() {
         </div>
       </div>
 
+      <TrialRollSection filter={filter} today={today} />
+
       <p className="text-xs text-muted-foreground">
         Un-marking a student refunds their hours automatically - the balance is a view, not a stored
         number. A PAYG entry with no package is normal and is never flagged.
@@ -273,6 +262,140 @@ function RollPage() {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Trial students overlaid on the roll. They have no student or attendance record
+ * until conversion, so they are read straight from the trials table and shown as
+ * a clearly-labelled block. Marking one updates the trial's own status, not a
+ * real attendance row.
+ */
+const TRIAL_ROLL_FILTERS: RollFilter[] = ["today", "tomorrow", "this_week", "trials", "all"];
+
+function TrialRollSection({ filter, today }: { filter: RollFilter; today: string }) {
+  const queryClient = useQueryClient();
+  const save = useServerFn(saveTrial);
+  const enabled = TRIAL_ROLL_FILTERS.includes(filter);
+
+  const queryKey = ["trial-roll", filter, today];
+  const { data: trials = [] } = useQuery({
+    queryKey,
+    queryFn: () => listTrialRoll({ data: { filter, today, week_start: weekStart(today) } }),
+    enabled,
+  });
+
+  if (!enabled || trials.length === 0) return null;
+
+  async function mark(trial: Row, status: "scheduled" | "attended" | "no_show") {
+    queryClient.setQueryData(queryKey, (old: Row[] | undefined) =>
+      (old ?? []).map((t) => (t.id === trial.id ? { ...t, status } : t)),
+    );
+    try {
+      await save({
+        data: {
+          id: trial.id,
+          lead_id: trial.leads?.id,
+          kind: trial.kind,
+          class_offering_id: trial.class_offering_id,
+          session_id: trial.session_id,
+          scheduled_for: trial.scheduled_for ?? "",
+          status,
+        },
+      });
+    } catch (error) {
+      toast.error((error as Error).message);
+      await queryClient.invalidateQueries({ queryKey });
+    }
+  }
+
+  return (
+    <Section
+      title="Trial students"
+      count={trials.length}
+      description="Prospects sitting in on a lesson. They become a real student only when their lead is converted."
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr>
+              <Th>Trial student</Th>
+              <Th>Class</Th>
+              <Th>When</Th>
+              <Th>Tutor</Th>
+              <Th className="text-right">Mark</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {(trials as Row[]).map((t) => (
+              <tr key={t.id}>
+                <Td>
+                  <div className="flex items-center gap-2 font-medium">
+                    {t.leads?.student_name ?? "Trial"}
+                    <StatusPill tone="info">Trial</StatusPill>
+                  </div>
+                  <Link
+                    to="/leads"
+                    className="text-xs text-primary underline-offset-2 hover:underline"
+                  >
+                    {t.leads?.code ?? t.code}
+                  </Link>
+                </Td>
+                <Td>{t.class_offerings?.programs?.name ?? t.class_offerings?.code ?? "-"}</Td>
+                <Td className="whitespace-nowrap">
+                  {t.sessions?.starts_at ? (
+                    <>
+                      {formatDay(t.sessions.starts_at)} · {formatTime(t.sessions.starts_at)}
+                    </>
+                  ) : (
+                    "-"
+                  )}
+                </Td>
+                <Td>
+                  <TutorDot
+                    colour={t.sessions?.tutors?.colour}
+                    name={t.sessions?.tutors?.full_name}
+                  />
+                </Td>
+                <Td>
+                  <div className="flex items-center justify-end gap-1.5">
+                    <button
+                      type="button"
+                      title="Attended"
+                      onClick={() => mark(t, "attended")}
+                      className={cn(
+                        "flex h-7 w-7 items-center justify-center rounded-lg border transition-colors",
+                        t.status === "attended"
+                          ? "border-success/40 bg-success/20 text-success"
+                          : "border-[var(--edge)] text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      <Check className="h-4 w-4" strokeWidth={2} />
+                    </button>
+                    <button
+                      type="button"
+                      title="No-show"
+                      onClick={() => mark(t, "no_show")}
+                      className={cn(
+                        "flex h-7 w-7 items-center justify-center rounded-lg border transition-colors",
+                        t.status === "no_show"
+                          ? "border-warning/40 bg-warning/20 text-warning"
+                          : "border-[var(--edge)] text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      <X className="h-4 w-4" strokeWidth={2} />
+                    </button>
+                    <StatusPill tone={toneForStatus("trial", t.status)}>
+                      {LABELS.trialStatus[t.status as keyof typeof LABELS.trialStatus]}
+                    </StatusPill>
+                  </div>
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Section>
   );
 }
 
@@ -302,8 +425,8 @@ function groupByLesson(rows: Row[]): LessonGrouping[] {
   }
   for (const group of groups.values()) {
     group.rows.sort((a, b) =>
-      (a.enrolments?.students?.full_name ?? a.display_name ?? "").localeCompare(
-        b.enrolments?.students?.full_name ?? b.display_name ?? "",
+      (a.enrolments?.students?.full_name ?? "").localeCompare(
+        b.enrolments?.students?.full_name ?? "",
       ),
     );
   }
@@ -349,19 +472,15 @@ function LessonGroup({
   /** Column names are stated once at the top, not above every class. */
   showColumns: boolean;
   tutors: Row[];
-  onSetStatus: (row: Row, status: "present" | "absent" | "not_marked") => Promise<void>;
+  onSetStatus: (id: string, status: "present" | "absent" | "not_marked") => Promise<void>;
   onMakeUp: (rows: Row[]) => void;
   onBulk: (ids: string[], status: "present" | "absent" | "not_marked") => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
   const { lesson, rows } = group;
   const marked = rows.filter((r: Row) => r.status !== "not_marked").length;
-  // Trial bookings carry no attendance id, so they stay out of the bulk actions
-  // (mark-all, make up the class) that write to the attendance table by id.
-  const unmarkedIds = rows
-    .filter((r: Row) => r.status === "not_marked" && !r.is_trial_booking)
-    .map((r: Row) => r.id);
-  const makeUpable = rows.filter((r: Row) => r.att_type !== "make_up" && !r.is_trial_booking);
+  const unmarkedIds = rows.filter((r: Row) => r.status === "not_marked").map((r: Row) => r.id);
+  const makeUpable = rows.filter((r: Row) => r.att_type !== "make_up");
   const complete = marked === rows.length;
 
   return (
@@ -432,29 +551,16 @@ function LessonGroup({
             {rows.map((row: Row) => (
               <tr key={row.id}>
                 <Td>
-                  {row.is_trial_booking ? (
-                    // A trial is a lead, not a student yet - no profile to link to.
-                    <>
-                      <div className="font-medium">{row.display_name ?? "Trial student"}</div>
-                      <div className="text-xs text-muted-foreground">
-                        Lead
-                        {row.year_level ? ` · ${row.year_level}` : ""}
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <Link
-                        to="/students/$id"
-                        params={{ id: row.student_id }}
-                        className="font-medium hover:underline"
-                      >
-                        {row.enrolments?.students?.full_name ?? "-"}
-                      </Link>
-                      <div>
-                        <Code>{row.enrolments?.students?.code}</Code>
-                      </div>
-                    </>
-                  )}
+                  <Link
+                    to="/students/$id"
+                    params={{ id: row.student_id }}
+                    className="font-medium hover:underline"
+                  >
+                    {row.enrolments?.students?.full_name ?? "-"}
+                  </Link>
+                  <div>
+                    <Code>{row.enrolments?.students?.code}</Code>
+                  </div>
                 </Td>
                 <Td>
                   <StatusPill
@@ -500,38 +606,35 @@ function LessonGroup({
                     <Button
                       size="sm"
                       variant={row.status === "present" ? "default" : "outline"}
-                      title={row.is_trial_booking ? "Attended" : "Present"}
-                      aria-label={row.is_trial_booking ? "Attended" : "Present"}
-                      onClick={() => onSetStatus(row, "present")}
+                      title="Present"
+                      aria-label="Present"
+                      onClick={() => onSetStatus(row.id, "present")}
                     >
                       <Check className="h-4 w-4" />
                     </Button>
                     <Button
                       size="sm"
                       variant={row.status === "absent" ? "destructive" : "outline"}
-                      title={row.is_trial_booking ? "No-show" : "Away"}
-                      aria-label={row.is_trial_booking ? "No-show" : "Away"}
-                      onClick={() => onSetStatus(row, "absent")}
+                      title="Away"
+                      aria-label="Away"
+                      onClick={() => onSetStatus(row.id, "absent")}
                     >
                       <X className="h-4 w-4" />
                     </Button>
-                    {/* A trial owes no make-up - it consumes nothing to begin with. */}
-                    {!row.is_trial_booking && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        title="Away, and owed a make-up"
-                        disabled={row.att_type === "make_up"}
-                        onClick={() => onMakeUp([row])}
-                      >
-                        Make up
-                      </Button>
-                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      title="Away, and owed a make-up"
+                      disabled={row.att_type === "make_up"}
+                      onClick={() => onMakeUp([row])}
+                    >
+                      Make up
+                    </Button>
                     {row.status !== "not_marked" && (
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => onSetStatus(row, "not_marked")}
+                        onClick={() => onSetStatus(row.id, "not_marked")}
                       >
                         Clear
                       </Button>
