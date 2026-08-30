@@ -1201,10 +1201,14 @@ export type Database = {
       sessions: {
         Row: {
           airtable_id: string | null
+          calendar_last_synced_at: string | null
+          calendar_sync_status: string
           class_offering_id: string
           code: string
           created_at: string
           ends_at: string
+          google_calendar_id: string | null
+          google_event_id: string | null
           id: string
           notes: string | null
           original_ends_at: string | null
@@ -1220,10 +1224,14 @@ export type Database = {
         }
         Insert: {
           airtable_id?: string | null
+          calendar_last_synced_at?: string | null
+          calendar_sync_status?: string
           class_offering_id: string
           code?: string
           created_at?: string
           ends_at: string
+          google_calendar_id?: string | null
+          google_event_id?: string | null
           id?: string
           notes?: string | null
           original_ends_at?: string | null
@@ -1239,10 +1247,14 @@ export type Database = {
         }
         Update: {
           airtable_id?: string | null
+          calendar_last_synced_at?: string | null
+          calendar_sync_status?: string
           class_offering_id?: string
           code?: string
           created_at?: string
           ends_at?: string
+          google_calendar_id?: string | null
+          google_event_id?: string | null
           id?: string
           notes?: string | null
           original_ends_at?: string | null
