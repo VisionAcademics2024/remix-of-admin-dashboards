@@ -2,7 +2,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { db, requireOwner } from "./guard";
-import { SYNC_CALENDAR_ID, syncSessionToCalendar, type SessionForSync, type SyncStore } from "./gcal";
+import {
+  SYNC_CALENDAR_ID,
+  syncSessionToCalendar,
+  type SessionForSync,
+  type SyncStore,
+} from "./gcal";
 
 /**
  * Stage 2 outbound proof: send one future, scheduled lesson to the Google test
@@ -35,7 +40,11 @@ export const syncSessionToGoogle = createServerFn({ method: "POST" })
       status: string;
       google_event_id: string | null;
       tutors: { full_name: string } | null;
-      class_offerings: { code: string; room: string | null; programs: { name: string } | null } | null;
+      class_offerings: {
+        code: string;
+        room: string | null;
+        programs: { name: string } | null;
+      } | null;
     };
 
     if (row.status !== "scheduled") {
