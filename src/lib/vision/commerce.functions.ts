@@ -509,17 +509,28 @@ export const addMidTermStudent = createServerFn({ method: "POST" })
       }
 
       // Put them on the roll for exactly the chosen lessons - nothing else.
-      const { error: attError } = await client.from("attendance").upsert(
-        sessionIds.map((sid) => ({
+      // Skip any lesson they're already on rather than relying on ON CONFLICT,
+      // which can't be used here (the attendance uniqueness varies by database).
+      const uniqueSessionIds = [...new Set(sessionIds)];
+      const { data: already } = await client
+        .from("attendance")
+        .select("session_id")
+        .eq("enrolment_id", enrolmentId)
+        .in("session_id", uniqueSessionIds);
+      const have = new Set((already ?? []).map((r: Row) => r.session_id));
+      const toInsert = uniqueSessionIds
+        .filter((sid) => !have.has(sid))
+        .map((sid) => ({
           session_id: sid,
           enrolment_id: enrolmentId,
           att_type: "regular",
           status: "not_marked",
-        })),
-        { onConflict: "session_id,enrolment_id", ignoreDuplicates: true },
-      );
-      if (attError) throw attError;
-      lessonCount += sessionIds.length;
+        }));
+      if (toInsert.length) {
+        const { error: attError } = await client.from("attendance").insert(toInsert);
+        if (attError) throw attError;
+      }
+      lessonCount += uniqueSessionIds.length;
     }
 
     // The hours they've paid for, priced later in Billing.
