@@ -45,7 +45,9 @@ export default defineTool({
         .order("created_at", { ascending: false }),
       supabase
         .from("v_attendance")
-        .select("id, session_date, status, effective_status, att_type, hours_consumed, make_up_state")
+        .select(
+          "id, session_date, status, effective_status, att_type, hours_consumed, make_up_state",
+        )
         .eq("student_id", student_id)
         .order("session_date", { ascending: false })
         .limit(attendance_limit),

@@ -117,7 +117,12 @@ function Consent() {
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Approve
           </Button>
-          <Button variant="outline" className="flex-1" disabled={busy} onClick={() => void decide(false)}>
+          <Button
+            variant="outline"
+            className="flex-1"
+            disabled={busy}
+            onClick={() => void decide(false)}
+          >
             Deny
           </Button>
         </div>

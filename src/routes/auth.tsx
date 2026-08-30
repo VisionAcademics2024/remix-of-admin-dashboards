@@ -11,8 +11,6 @@ import { toast } from "sonner";
 import visionLogo from "@/assets/vision-logo.png.asset.json";
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth";
 
-
-
 /** Only same-origin relative paths may be used as a post-sign-in destination. */
 function safeNext(next: unknown): string | undefined {
   if (typeof next !== "string" || !next.startsWith("/") || next.startsWith("//")) return undefined;
@@ -32,7 +30,6 @@ export const Route = createFileRoute("/auth")({
     if (data.user) throw redirect({ href: search.next ?? "/today" });
   },
 });
-
 
 function AuthPage() {
   const navigate = useNavigate();

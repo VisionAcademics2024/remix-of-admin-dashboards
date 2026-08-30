@@ -13,7 +13,7 @@ export default defineTool({
     guardian_name: z.string().trim().min(1).max(120).describe("The parent or guardian's name."),
     guardian_email: z.string().trim().email().optional().describe("Guardian email, if known."),
     guardian_mobile: z.string().trim().max(40).optional().describe("Guardian mobile, if known."),
-    year_level: z.string().trim().max(20).optional().describe("School year level, e.g. \"Year 9\"."),
+    year_level: z.string().trim().max(20).optional().describe('School year level, e.g. "Year 9".'),
     subject_interest: z.string().trim().max(120).optional().describe("Subject they asked about."),
     source: z
       .enum(["referral", "google", "social_media", "walk_in", "event", "website", "other"])

@@ -3,9 +3,7 @@ import { z } from "zod";
 
 import { supabaseForUser } from "../supabase";
 
-const DATE = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use a Sydney calendar date, YYYY-MM-DD.");
+const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a Sydney calendar date, YYYY-MM-DD.");
 
 export default defineTool({
   name: "list_sessions",
