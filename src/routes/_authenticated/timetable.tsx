@@ -68,6 +68,9 @@ import {
   updateSession,
 } from "@/lib/vision/schedule.functions";
 import { holdMakeUp, markAttendance, markRollBulk } from "@/lib/vision/roll.functions";
+import { syncSessionToGoogle } from "@/lib/vision/calendar.functions";
+import { syncAfterReschedule } from "@/lib/vision/calendar-sync";
+import { isMappedSession } from "@/lib/vision/gcal";
 import { setTrialStatus } from "@/lib/vision/leads.functions";
 import { saveEnrolment } from "@/lib/vision/commerce.functions";
 import { listStudents } from "@/lib/vision/people.functions";
@@ -169,6 +172,7 @@ function TimetablePage() {
 
   const queryClient = useQueryClient();
   const reschedule = useServerFn(rescheduleSession);
+  const sync = useServerFn(syncSessionToGoogle);
 
   const events = useMemo(() => sessions.map(toCalendarEvent), [sessions]);
 
@@ -189,11 +193,17 @@ function TimetablePage() {
       ),
     );
     try {
-      await reschedule({ data: { id: row.id, starts_at: startISO, ends_at: endISO } });
+      const saved = await reschedule({
+        data: { id: row.id, starts_at: startISO, ends_at: endISO },
+      });
+      // The move is saved. Google is a follow-on for the linked lessons only, and
+      // its failure never puts the block back.
+      const google = await syncAfterReschedule(saved, (id) => sync({ data: { session_id: id } }), row.id);
       await queryClient.invalidateQueries({ queryKey: ["timetable"] });
       await queryClient.invalidateQueries({ queryKey: ["today"] });
       await queryClient.invalidateQueries({ queryKey: ["roll"] });
-      toast.success("Lesson moved. The roll moved with it.");
+      if (google.ok) toast.success("Lesson moved. The roll moved with it.");
+      else toast.warning(`Lesson moved. ${google.message ?? ""} Retry the Google sync from the lesson.`);
     } catch (error) {
       queryClient.setQueryData(key, previous);
       toast.error((error as Error).message);
@@ -370,6 +380,7 @@ function SessionDialog({
   const queryClient = useQueryClient();
   const update = useServerFn(updateSession);
   const reschedule = useServerFn(rescheduleSession);
+  const sync = useServerFn(syncSessionToGoogle);
   const cancel = useServerFn(cancelSession);
   const remove = useServerFn(deleteSession);
 
@@ -404,8 +415,11 @@ function SessionDialog({
       const timeChanged =
         Date.parse(startsAt) !== Date.parse(session.starts_at) ||
         Date.parse(endsAt) !== Date.parse(session.ends_at);
+      let saved: unknown = null;
       if (timeChanged) {
-        await reschedule({ data: { id: session.id, starts_at: startsAt, ends_at: endsAt } });
+        saved = await reschedule({
+          data: { id: session.id, starts_at: startsAt, ends_at: endsAt },
+        });
       }
       await update({
         data: {
@@ -415,7 +429,20 @@ function SessionDialog({
           notes,
         },
       });
-      toast.success("Lesson updated. The roll is untouched.");
+      // Google is updated after the tutor and room have been saved, so the event
+      // carries the latest values.
+      const google = timeChanged
+        ? await syncAfterReschedule(
+            saved as Row,
+            (id) => sync({ data: { session_id: id } }),
+            session.id,
+          )
+        : { ok: true, attempted: false };
+      if (google.ok) toast.success("Lesson updated. The roll is untouched.");
+      else
+        toast.warning(
+          `Lesson updated. ${google.message ?? ""} Retry the Google sync from this lesson.`,
+        );
       await invalidate();
       onClose();
     } catch (error) {
@@ -919,6 +946,7 @@ function RescheduleClassForm({
 }) {
   const reschedule = useServerFn(rescheduleSession);
   const update = useServerFn(updateSession);
+  const sync = useServerFn(syncSessionToGoogle);
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(() => addDays(sydToday(), 7));
   const [startTime, setStartTime] = useState(() => toLocalInput(session.starts_at).slice(11, 16));
@@ -935,12 +963,23 @@ function RescheduleClassForm({
         toast.error("The end time has to be after the start time.");
         return;
       }
-      await reschedule({ data: { id: session.id, starts_at: startsAt, ends_at: endsAt } });
+      const saved = await reschedule({
+        data: { id: session.id, starts_at: startsAt, ends_at: endsAt },
+      });
       const nextTutor = tutorId === "none" ? null : tutorId;
       if (nextTutor !== (session.tutor_id ?? null)) {
         await update({ data: { id: session.id, tutor_id: nextTutor } });
       }
-      toast.success("Class rescheduled to that day. The roll moved with it.");
+      const google = await syncAfterReschedule(
+        saved as Row,
+        (id) => sync({ data: { session_id: id } }),
+        session.id,
+      );
+      if (google.ok) toast.success("Class rescheduled to that day. The roll moved with it.");
+      else
+        toast.warning(
+          `Class rescheduled. ${google.message ?? ""} Retry the Google sync from this lesson.`,
+        );
       setOpen(false);
       await onChanged();
     } catch (error) {
