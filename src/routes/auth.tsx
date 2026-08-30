@@ -23,6 +23,10 @@ export const Route = createFileRoute("/auth")({
     return next ? { next } : {};
   },
   beforeLoad: async ({ search }) => {
+    if (DEV_AUTH_BYPASS) {
+      await ensureDevSession();
+      throw redirect({ href: search.next ?? "/today" });
+    }
     const { data } = await supabase.auth.getUser();
     if (data.user) throw redirect({ href: search.next ?? "/today" });
   },
