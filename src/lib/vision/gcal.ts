@@ -143,3 +143,70 @@ export async function syncSessionToCalendar(
     );
   }
 }
+
+/* ------------------------------------------------------------------ Stage 3A */
+
+/** The mapping a Session carries once it lives on the sync test calendar. */
+export type SessionMapping = {
+  google_calendar_id?: string | null;
+  google_event_id?: string | null;
+  calendar_sync_status?: string | null;
+};
+
+/**
+ * A Session is "mapped" only when both identifiers are stored and the stored
+ * calendar is the one test calendar this stage is allowed to write to. Stage 3A
+ * never creates an event, so anything unmapped is simply left alone.
+ */
+export function isMappedSession(
+  mapping: SessionMapping | null | undefined,
+  calendarId: string = SYNC_CALENDAR_ID,
+): boolean {
+  if (!mapping) return false;
+  return Boolean(
+    mapping.google_calendar_id &&
+      mapping.google_event_id &&
+      mapping.google_calendar_id === calendarId,
+  );
+}
+
+/**
+ * Update the one already-linked Google event in place.
+ *
+ * Deliberately narrower than `syncSessionToCalendar`: no search, no create. If
+ * the stored event has gone from Google the lesson ends up `failed` and a human
+ * decides what to do - Stage 3A never silently makes a second event.
+ */
+export async function updateMappedSessionEvent(
+  session: SessionForSync,
+  api: Pick<CalendarApi, "updateEvent">,
+  store: SyncStore,
+  calendarId: string = SYNC_CALENDAR_ID,
+): Promise<SyncOutcome> {
+  if (!session.google_event_id) {
+    throw new Error(`${session.code} is not linked to a Google Calendar event.`);
+  }
+  await store.markPending(session.id);
+  try {
+    const result = await api.updateEvent(
+      calendarId,
+      session.google_event_id,
+      buildEventPayload(session),
+    );
+    await store.markSynced(session.id, calendarId, result.id);
+    return {
+      session_id: session.id,
+      session_code: session.code,
+      action: "update",
+      event_id: result.id,
+      calendar_id: calendarId,
+    };
+  } catch (error) {
+    await store.markFailed(session.id);
+    throw new Error(
+      `${session.code} moved on the timetable, but Google Calendar was not updated. ${
+        error instanceof Error ? error.message : "The calendar service did not respond."
+      }`,
+    );
+  }
+}
