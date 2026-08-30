@@ -68,6 +68,9 @@ import {
   updateSession,
 } from "@/lib/vision/schedule.functions";
 import { holdMakeUp, markAttendance, markRollBulk } from "@/lib/vision/roll.functions";
+import { syncSessionToGoogle } from "@/lib/vision/calendar.functions";
+import { syncAfterReschedule } from "@/lib/vision/calendar-sync";
+import { isMappedSession } from "@/lib/vision/gcal";
 import { setTrialStatus } from "@/lib/vision/leads.functions";
 import { saveEnrolment } from "@/lib/vision/commerce.functions";
 import { listStudents } from "@/lib/vision/people.functions";
@@ -169,6 +172,7 @@ function TimetablePage() {
 
   const queryClient = useQueryClient();
   const reschedule = useServerFn(rescheduleSession);
+  const sync = useServerFn(syncSessionToGoogle);
 
   const events = useMemo(() => sessions.map(toCalendarEvent), [sessions]);
 
@@ -189,11 +193,24 @@ function TimetablePage() {
       ),
     );
     try {
-      await reschedule({ data: { id: row.id, starts_at: startISO, ends_at: endISO } });
+      const saved = await reschedule({
+        data: { id: row.id, starts_at: startISO, ends_at: endISO },
+      });
+      // The move is saved. Google is a follow-on for the linked lessons only, and
+      // its failure never puts the block back.
+      const google = await syncAfterReschedule(
+        saved,
+        (id) => sync({ data: { session_id: id } }),
+        row.id,
+      );
       await queryClient.invalidateQueries({ queryKey: ["timetable"] });
       await queryClient.invalidateQueries({ queryKey: ["today"] });
       await queryClient.invalidateQueries({ queryKey: ["roll"] });
-      toast.success("Lesson moved. The roll moved with it.");
+      if (google.ok) toast.success("Lesson moved. The roll moved with it.");
+      else
+        toast.warning(
+          `Lesson moved. ${google.message ?? ""} Retry the Google sync from the lesson.`,
+        );
     } catch (error) {
       queryClient.setQueryData(key, previous);
       toast.error((error as Error).message);
@@ -370,6 +387,7 @@ function SessionDialog({
   const queryClient = useQueryClient();
   const update = useServerFn(updateSession);
   const reschedule = useServerFn(rescheduleSession);
+  const sync = useServerFn(syncSessionToGoogle);
   const cancel = useServerFn(cancelSession);
   const remove = useServerFn(deleteSession);
 
@@ -404,8 +422,11 @@ function SessionDialog({
       const timeChanged =
         Date.parse(startsAt) !== Date.parse(session.starts_at) ||
         Date.parse(endsAt) !== Date.parse(session.ends_at);
+      let saved: unknown = null;
       if (timeChanged) {
-        await reschedule({ data: { id: session.id, starts_at: startsAt, ends_at: endsAt } });
+        saved = await reschedule({
+          data: { id: session.id, starts_at: startsAt, ends_at: endsAt },
+        });
       }
       await update({
         data: {
@@ -415,7 +436,20 @@ function SessionDialog({
           notes,
         },
       });
-      toast.success("Lesson updated. The roll is untouched.");
+      // Google is updated after the tutor and room have been saved, so the event
+      // carries the latest values.
+      const google = timeChanged
+        ? await syncAfterReschedule(
+            saved as Row,
+            (id) => sync({ data: { session_id: id } }),
+            session.id,
+          )
+        : { ok: true, attempted: false };
+      if (google.ok) toast.success("Lesson updated. The roll is untouched.");
+      else
+        toast.warning(
+          `Lesson updated. ${google.message ?? ""} Retry the Google sync from this lesson.`,
+        );
       await invalidate();
       onClose();
     } catch (error) {
@@ -503,6 +537,8 @@ function SessionDialog({
                 onChange={(e) => setNotes(e.target.value)}
               />
             </div>
+
+            <GoogleSyncRow session={session} onSynced={invalidate} />
 
             <DialogFooter className="flex-col gap-2 pt-1 sm:flex-row sm:justify-between">
               <div className="flex gap-2">
@@ -904,6 +940,59 @@ function AddStudentRow({
 }
 
 /**
+ * The compact Google Calendar row.
+ *
+ * Shown only for a lesson already linked to the sync test calendar - Stage 3A
+ * never creates events, so an unlinked lesson gets no control at all. A failed
+ * retry keeps the dialog open and stays visibly failed.
+ */
+function GoogleSyncRow({ session, onSynced }: { session: Row; onSynced: () => Promise<void> }) {
+  const sync = useServerFn(syncSessionToGoogle);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(session.calendar_sync_status === "failed");
+
+  if (!isMappedSession(session as { google_calendar_id?: string | null })) return null;
+
+  const status = busy ? "pending" : failed ? "failed" : (session.calendar_sync_status ?? "pending");
+  const tone = status === "synced" ? "success" : status === "failed" ? "danger" : "warning";
+  const lastSynced = session.calendar_last_synced_at
+    ? formatDay(session.calendar_last_synced_at)
+    : null;
+
+  async function retry() {
+    setBusy(true);
+    try {
+      await sync({ data: { session_id: session.id } });
+      setFailed(false);
+      toast.success("Google Calendar updated.");
+      await onSynced();
+    } catch (error) {
+      setFailed(true);
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-md border border-[var(--edge)] bg-[var(--mat-thin)] px-3 py-2">
+      <div className="space-y-0.5">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium">Google Calendar</span>
+          <StatusPill tone={tone}>{status === "not_synced" ? "pending" : status}</StatusPill>
+        </div>
+        <p className="text-[0.7rem] text-muted-foreground">
+          {lastSynced ? `Last synced ${lastSynced}` : "Not synced yet"}
+        </p>
+      </div>
+      <Button variant="outline" size="sm" disabled={busy} onClick={retry}>
+        {busy ? "Syncing..." : failed ? "Retry sync" : "Sync now"}
+      </Button>
+    </div>
+  );
+}
+
+/**
  * Reschedule the whole class to another day and time, exactly as a drag would -
  * the same lesson, the same id, the same roll. It stays an ordinary lesson; a
  * make-up is a per-student decision taken on the roll, not a class-wide move.
@@ -919,6 +1008,7 @@ function RescheduleClassForm({
 }) {
   const reschedule = useServerFn(rescheduleSession);
   const update = useServerFn(updateSession);
+  const sync = useServerFn(syncSessionToGoogle);
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(() => addDays(sydToday(), 7));
   const [startTime, setStartTime] = useState(() => toLocalInput(session.starts_at).slice(11, 16));
@@ -935,12 +1025,23 @@ function RescheduleClassForm({
         toast.error("The end time has to be after the start time.");
         return;
       }
-      await reschedule({ data: { id: session.id, starts_at: startsAt, ends_at: endsAt } });
+      const saved = await reschedule({
+        data: { id: session.id, starts_at: startsAt, ends_at: endsAt },
+      });
       const nextTutor = tutorId === "none" ? null : tutorId;
       if (nextTutor !== (session.tutor_id ?? null)) {
         await update({ data: { id: session.id, tutor_id: nextTutor } });
       }
-      toast.success("Class rescheduled to that day. The roll moved with it.");
+      const google = await syncAfterReschedule(
+        saved as Row,
+        (id) => sync({ data: { session_id: id } }),
+        session.id,
+      );
+      if (google.ok) toast.success("Class rescheduled to that day. The roll moved with it.");
+      else
+        toast.warning(
+          `Class rescheduled. ${google.message ?? ""} Retry the Google sync from this lesson.`,
+        );
       setOpen(false);
       await onChanged();
     } catch (error) {
