@@ -14,10 +14,13 @@ import visionLogo from "@/assets/vision-logo.png.asset.json";
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
   beforeLoad: async () => {
+    // Temporary login bypass - see src/lib/dev-auth.ts
+    if (DEV_AUTH_BYPASS) throw redirect({ to: "/today" });
     const { data } = await supabase.auth.getUser();
     if (data.user) throw redirect({ to: "/today" });
   },
 });
+
 
 function AuthPage() {
   const navigate = useNavigate();
