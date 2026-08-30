@@ -96,11 +96,9 @@ export const syncSessionToGoogle = createServerFn({ method: "POST" })
           calendar_last_synced_at: new Date().toISOString(),
         });
       },
-      markFailed: async () => {
-        // A failure to record the failure must not mask the original error, so
-        // this one write is allowed to be best-effort.
-        await client.from("sessions").update({ calendar_sync_status: "failed" }).eq("id", row.id);
-      },
+      // Checked like the others: if the failed state cannot be written down,
+      // updateMappedSessionEvent says so alongside the original failure.
+      markFailed: async () => setStatus({ calendar_sync_status: "failed" }),
     };
 
     const { googleCalendarApi } = await import("./google-calendar.server");
