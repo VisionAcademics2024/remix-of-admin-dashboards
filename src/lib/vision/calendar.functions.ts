@@ -1,20 +1,26 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { db, requireOwner } from "./guard";
+import { db, requireStaff } from "./guard";
 import {
   SYNC_CALENDAR_ID,
-  syncSessionToCalendar,
+  isMappedSession,
+  updateMappedSessionEvent,
   type SessionForSync,
   type SyncStore,
 } from "./gcal";
 
 /**
- * Stage 2 outbound proof: send one future, scheduled lesson to the Google test
- * calendar. Owner-only, and the connector is never touched from the browser.
+ * Stage 3A: keep the three already-linked lessons on the Google test calendar
+ * in step with the dashboard timetable.
+ *
+ * Staff who can already move a lesson can update its linked event - the sync is
+ * a consequence of rescheduling, not a separate privilege. The operation only
+ * ever updates the stored event on the stored calendar: it never searches for
+ * one and never creates one, so unlinked lessons cannot reach Google at all.
  */
 export const syncSessionToGoogle = createServerFn({ method: "POST" })
-  .middleware([requireOwner])
+  .middleware([requireStaff])
   .inputValidator((data) => z.object({ session_id: z.string().uuid() }).parse(data))
   .handler(async ({ context, data: input }) => {
     const client = db(context.supabase);
@@ -22,7 +28,7 @@ export const syncSessionToGoogle = createServerFn({ method: "POST" })
     const { data: found, error: readError } = await client
       .from("sessions")
       .select(
-        "id, code, starts_at, ends_at, room, status, google_event_id, tutors(full_name), class_offerings(code, room, programs(name))",
+        "id, code, starts_at, ends_at, room, status, google_calendar_id, google_event_id, tutors(full_name), class_offerings(code, room, programs(name))",
       )
       .eq("id", input.session_id)
       .maybeSingle();
@@ -38,6 +44,7 @@ export const syncSessionToGoogle = createServerFn({ method: "POST" })
       ends_at: string;
       room: string | null;
       status: string;
+      google_calendar_id: string | null;
       google_event_id: string | null;
       tutors: { full_name: string } | null;
       class_offerings: {
@@ -47,6 +54,12 @@ export const syncSessionToGoogle = createServerFn({ method: "POST" })
       } | null;
     };
 
+    if (!row.google_calendar_id || !row.google_event_id) {
+      throw new Error("This lesson is not linked to a Google Calendar event.");
+    }
+    if (!isMappedSession(row)) {
+      throw new Error("This lesson is linked to a calendar this app may not write to.");
+    }
     if (row.status !== "scheduled") {
       throw new Error("Only scheduled lessons can be sent to Google Calendar.");
     }
@@ -63,30 +76,33 @@ export const syncSessionToGoogle = createServerFn({ method: "POST" })
       tutor_name: row.tutors?.full_name ?? null,
       program_name: row.class_offerings?.programs?.name ?? null,
       offering_code: row.class_offerings?.code ?? null,
-      google_event_id: row.google_event_id ?? null,
+      google_event_id: row.google_event_id,
+    };
+
+    // Every status write is checked: a silent failure here would leave the
+    // timetable and the calendar disagreeing with nothing to show for it.
+    const setStatus = async (patch: Record<string, unknown>) => {
+      const { error } = await client.from("sessions").update(patch).eq("id", row.id);
+      if (error) throw error;
     };
 
     const store: SyncStore = {
-      markPending: async (id) => {
-        await client.from("sessions").update({ calendar_sync_status: "pending" }).eq("id", id);
+      markPending: (id) => setStatus({ calendar_sync_status: "pending" }).then(() => void id),
+      markSynced: async (_id, calendarId, eventId) => {
+        await setStatus({
+          google_calendar_id: calendarId,
+          google_event_id: eventId,
+          calendar_sync_status: "synced",
+          calendar_last_synced_at: new Date().toISOString(),
+        });
       },
-      markSynced: async (id, calendarId, eventId) => {
-        const { error: updateError } = await client
-          .from("sessions")
-          .update({
-            google_calendar_id: calendarId,
-            google_event_id: eventId,
-            calendar_sync_status: "synced",
-            calendar_last_synced_at: new Date().toISOString(),
-          })
-          .eq("id", id);
-        if (updateError) throw updateError;
-      },
-      markFailed: async (id) => {
-        await client.from("sessions").update({ calendar_sync_status: "failed" }).eq("id", id);
+      markFailed: async () => {
+        // A failure to record the failure must not mask the original error, so
+        // this one write is allowed to be best-effort.
+        await client.from("sessions").update({ calendar_sync_status: "failed" }).eq("id", row.id);
       },
     };
 
     const { googleCalendarApi } = await import("./google-calendar.server");
-    return syncSessionToCalendar(session, googleCalendarApi, store, SYNC_CALENDAR_ID);
+    return updateMappedSessionEvent(session, googleCalendarApi, store, SYNC_CALENDAR_ID);
   });
