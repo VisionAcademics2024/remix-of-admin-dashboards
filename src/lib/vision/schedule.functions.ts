@@ -127,13 +127,59 @@ export const listRange = createServerFn({ method: "GET" })
       inRange.map((s: Row) => s.class_offering_id),
     );
 
+    // v_sessions predates the Google mapping columns, and the database is not
+    // being changed for this stage, so the four mapping fields are read once for
+    // the lessons already in hand and merged in here.
+    const mapping = await calendarMappingBySession(client, ids);
+
     return inRange.map((s: Row) => ({
       ...s,
       roll_marked: counts.get(s.id)?.marked ?? 0,
       roll_total: counts.get(s.id)?.total ?? 0,
       sole_student_name: soleStudent.get(s.class_offering_id) ?? null,
+      ...(mapping.get(s.id) ?? {
+        google_calendar_id: null,
+        google_event_id: null,
+        calendar_sync_status: "not_synced",
+        calendar_last_synced_at: null,
+      }),
     }));
   });
+
+export type CalendarMapping = {
+  google_calendar_id: string | null;
+  google_event_id: string | null;
+  calendar_sync_status: string;
+  calendar_last_synced_at: string | null;
+};
+
+/** The Google mapping for the lessons already returned by the timetable read. */
+async function calendarMappingBySession(
+  client: ReturnType<typeof db>,
+  sessionIds: string[],
+): Promise<Map<string, CalendarMapping>> {
+  const result = new Map<string, CalendarMapping>();
+  if (!sessionIds.length) return result;
+
+  const { data, error } = await client
+    .from("sessions")
+    .select(
+      "id, google_calendar_id, google_event_id, calendar_sync_status, calendar_last_synced_at",
+    )
+    .in("id", sessionIds);
+  if (error) throw error;
+
+  for (const row of data ?? []) {
+    result.set(row.id, {
+      google_calendar_id: row.google_calendar_id ?? null,
+      google_event_id: row.google_event_id ?? null,
+      calendar_sync_status: row.calendar_sync_status ?? "not_synced",
+      calendar_last_synced_at: row.calendar_last_synced_at ?? null,
+    });
+  }
+  return result;
+}
+
 
 /**
  * The one enrolled student for each offering that has exactly one - null for
