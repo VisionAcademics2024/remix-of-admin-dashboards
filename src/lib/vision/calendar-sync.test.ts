@@ -10,12 +10,7 @@ import {
   type SessionForSync,
   type SyncStore,
 } from "./gcal";
-import {
-  nextSyncView,
-  syncAfterReschedule,
-  syncTone,
-  syncViewFromSession,
-} from "./calendar-sync";
+import { nextSyncView, syncAfterReschedule, syncTone, syncViewFromSession } from "./calendar-sync";
 import { reschedulePatch } from "./schedule.rules";
 
 const mapped = {

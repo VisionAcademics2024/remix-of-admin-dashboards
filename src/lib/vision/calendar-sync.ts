@@ -59,10 +59,7 @@ export function syncViewFromSession(
   };
 }
 
-export type SyncEvent =
-  | { type: "start" }
-  | { type: "success"; at: string }
-  | { type: "failure" };
+export type SyncEvent = { type: "start" } | { type: "success"; at: string } | { type: "failure" };
 
 /** Pending while it runs; Synced with a fresh timestamp on success; Failed on error. */
 export function nextSyncView(state: SyncView, event: SyncEvent): SyncView {

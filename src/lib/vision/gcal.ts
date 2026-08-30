@@ -202,8 +202,7 @@ export async function updateMappedSessionEvent(
       calendar_id: calendarId,
     };
   } catch (error) {
-    const detail =
-      error instanceof Error ? error.message : "The calendar service did not respond.";
+    const detail = error instanceof Error ? error.message : "The calendar service did not respond.";
     try {
       await store.markFailed(session.id);
     } catch (statusError) {
