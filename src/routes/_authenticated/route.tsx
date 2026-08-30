@@ -5,7 +5,6 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 import { supabase } from "@/integrations/supabase/client";
-import { DEV_AUTH_BYPASS, ensureDevSession } from "@/lib/dev-auth";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { meQueryOptions } from "@/lib/vision/me";
@@ -18,13 +17,7 @@ export { meQueryOptions };
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async ({ context }) => {
-    let { data, error } = await supabase.auth.getUser();
-    if ((error || !data.user) && DEV_AUTH_BYPASS) {
-      // Temporary login bypass - see src/lib/dev-auth.ts
-      if (await ensureDevSession()) {
-        ({ data, error } = await supabase.auth.getUser());
-      }
-    }
+    const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) {
       throw redirect({ to: "/auth" });
     }

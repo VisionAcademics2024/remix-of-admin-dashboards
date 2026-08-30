@@ -5,7 +5,6 @@ import { Loader2, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import visionLogo from "@/assets/vision-logo.png.asset.json";
-import { DEV_AUTH_BYPASS, ensureDevSession } from "@/lib/dev-auth";
 
 /**
  * OAuth 2.1 consent screen. Lovable's connector flow (and any MCP client) sends
@@ -37,7 +36,6 @@ export const Route = createFileRoute("/.lovable/oauth/consent")({
   }),
   beforeLoad: async ({ search, location }) => {
     if (!search.authorization_id) throw new Error("Missing authorization_id");
-    if (DEV_AUTH_BYPASS) await ensureDevSession();
     const { data } = await supabase.auth.getSession();
     if (!data.session) {
       const next = location.pathname + location.searchStr;

@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import visionLogo from "@/assets/vision-logo.png.asset.json";
-import { DEV_AUTH_BYPASS } from "@/lib/dev-auth";
 
 /** Only same-origin relative paths may be used as a post-sign-in destination. */
 function safeNext(next: unknown): string | undefined {
@@ -24,8 +23,6 @@ export const Route = createFileRoute("/auth")({
     return next ? { next } : {};
   },
   beforeLoad: async ({ search }) => {
-    // Temporary login bypass - see src/lib/dev-auth.ts
-    if (DEV_AUTH_BYPASS && !search.next) throw redirect({ to: "/today" });
     const { data } = await supabase.auth.getUser();
     if (data.user) throw redirect({ href: search.next ?? "/today" });
   },
