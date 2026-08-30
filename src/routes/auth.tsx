@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import visionLogo from "@/assets/vision-logo.png.asset.json";
+import { DEV_AUTH_BYPASS } from "@/lib/dev-auth";
+
 
 
 export const Route = createFileRoute("/auth")({
