@@ -319,7 +319,9 @@ export const rescheduleSession = createServerFn({ method: "POST" })
       .from("sessions")
       .update(payload)
       .eq("id", data.id)
-      .select("id, starts_at, ends_at, session_type, status")
+      .select(
+        "id, starts_at, ends_at, session_type, status, google_calendar_id, google_event_id, calendar_sync_status",
+      )
       .single();
     if (error) {
       throw new Error(
@@ -329,8 +331,21 @@ export const rescheduleSession = createServerFn({ method: "POST" })
       );
     }
 
-    return saved;
+    // A lesson that already lives on the Google test calendar is now out of date
+    // there, so it is marked pending. A lesson with no mapping stays
+    // `not_synced`: nothing is queued and nothing is sent.
+    const mapped = isMappedSession(saved as unknown as Row);
+    if (mapped) {
+      const { error: pendingError } = await client
+        .from("sessions")
+        .update({ calendar_sync_status: "pending" })
+        .eq("id", data.id);
+      if (pendingError) throw pendingError;
+    }
+
+    return { ...saved, calendar_sync_status: mapped ? "pending" : saved.calendar_sync_status };
   });
+
 
 /** Cancelling preserves the roll. Cancelled lessons pay nobody and consume nothing. */
 export const cancelSession = createServerFn({ method: "POST" })
