@@ -9,15 +9,20 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import visionLogo from "@/assets/vision-logo.png.asset.json";
+import { DEV_AUTH_BYPASS } from "@/lib/dev-auth";
+
 
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
   beforeLoad: async () => {
+    // Temporary login bypass - see src/lib/dev-auth.ts
+    if (DEV_AUTH_BYPASS) throw redirect({ to: "/today" });
     const { data } = await supabase.auth.getUser();
     if (data.user) throw redirect({ to: "/today" });
   },
 });
+
 
 function AuthPage() {
   const navigate = useNavigate();
