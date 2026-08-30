@@ -13,6 +13,9 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AccessRouteImport } from './routes/access'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as McpRouteImport } from './routes/mcp'
+import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
+import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
 import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
 import { Route as AuthenticatedEnrolmentsRouteImport } from './routes/_authenticated/enrolments'
 import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
@@ -24,6 +27,7 @@ import { Route as AuthenticatedTimetableRouteImport } from './routes/_authentica
 import { Route as AuthenticatedTodayRouteImport } from './routes/_authenticated/today'
 import { Route as AuthenticatedTutorPayRouteImport } from './routes/_authenticated/tutor-pay'
 import { Route as AuthenticatedTutorsRouteImport } from './routes/_authenticated/tutors'
+import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
 import { Route as AuthenticatedClassesIndexRouteImport } from './routes/_authenticated/classes.index'
 import { Route as AuthenticatedClassesNewRouteImport } from './routes/_authenticated/classes.new'
 import { Route as AuthenticatedPrototypeDashboardRouteImport } from './routes/_authenticated/prototype.dashboard'
@@ -54,6 +58,23 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Char91DotmcpChar93ListToolsRoute =
+  Char91DotmcpChar93ListToolsRouteImport.update({
+    id: '/.mcp/list-tools',
+    path: '/.mcp/list-tools',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const Char91DotwellKnownChar93OauthProtectedResourceRoute =
+  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
+    id: '/.well-known/oauth-protected-resource',
+    path: '/.well-known/oauth-protected-resource',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AuthenticatedBillingRoute = AuthenticatedBillingRouteImport.update({
   id: '/billing',
   path: '/billing',
@@ -110,6 +131,12 @@ const AuthenticatedTutorsRoute = AuthenticatedTutorsRouteImport.update({
   path: '/tutors',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const Char91DotmcpChar93InvokeToolToolRoute =
+  Char91DotmcpChar93InvokeToolToolRouteImport.update({
+    id: '/.mcp/invoke-tool/$tool',
+    path: '/.mcp/invoke-tool/$tool',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AuthenticatedClassesIndexRoute =
   AuthenticatedClassesIndexRouteImport.update({
     id: '/classes/',
@@ -173,6 +200,9 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/access': typeof AccessRoute
   '/auth': typeof AuthRoute
+  '/mcp': typeof McpRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/billing': typeof AuthenticatedBillingRoute
   '/enrolments': typeof AuthenticatedEnrolmentsRoute
   '/leads': typeof AuthenticatedLeadsRoute
@@ -184,6 +214,7 @@ export interface FileRoutesByFullPath {
   '/today': typeof AuthenticatedTodayRoute
   '/tutor-pay': typeof AuthenticatedTutorPayRoute
   '/tutors': typeof AuthenticatedTutorsRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/classes/new': typeof AuthenticatedClassesNewRoute
   '/prototype/dashboard': typeof AuthenticatedPrototypeDashboardRoute
   '/prototype/packages': typeof AuthenticatedPrototypePackagesRoute
@@ -199,6 +230,9 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/access': typeof AccessRoute
   '/auth': typeof AuthRoute
+  '/mcp': typeof McpRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/billing': typeof AuthenticatedBillingRoute
   '/enrolments': typeof AuthenticatedEnrolmentsRoute
   '/leads': typeof AuthenticatedLeadsRoute
@@ -210,6 +244,7 @@ export interface FileRoutesByTo {
   '/today': typeof AuthenticatedTodayRoute
   '/tutor-pay': typeof AuthenticatedTutorPayRoute
   '/tutors': typeof AuthenticatedTutorsRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/classes/new': typeof AuthenticatedClassesNewRoute
   '/prototype/dashboard': typeof AuthenticatedPrototypeDashboardRoute
   '/prototype/packages': typeof AuthenticatedPrototypePackagesRoute
@@ -227,6 +262,9 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/access': typeof AccessRoute
   '/auth': typeof AuthRoute
+  '/mcp': typeof McpRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/_authenticated/billing': typeof AuthenticatedBillingRoute
   '/_authenticated/enrolments': typeof AuthenticatedEnrolmentsRoute
   '/_authenticated/leads': typeof AuthenticatedLeadsRoute
@@ -238,6 +276,7 @@ export interface FileRoutesById {
   '/_authenticated/today': typeof AuthenticatedTodayRoute
   '/_authenticated/tutor-pay': typeof AuthenticatedTutorPayRoute
   '/_authenticated/tutors': typeof AuthenticatedTutorsRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/_authenticated/classes/new': typeof AuthenticatedClassesNewRoute
   '/_authenticated/prototype/dashboard': typeof AuthenticatedPrototypeDashboardRoute
   '/_authenticated/prototype/packages': typeof AuthenticatedPrototypePackagesRoute
@@ -255,6 +294,9 @@ export interface FileRouteTypes {
     | '/'
     | '/access'
     | '/auth'
+    | '/mcp'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
     | '/billing'
     | '/enrolments'
     | '/leads'
@@ -266,6 +308,7 @@ export interface FileRouteTypes {
     | '/today'
     | '/tutor-pay'
     | '/tutors'
+    | '/.mcp/invoke-tool/$tool'
     | '/classes/new'
     | '/prototype/dashboard'
     | '/prototype/packages'
@@ -281,6 +324,9 @@ export interface FileRouteTypes {
     | '/'
     | '/access'
     | '/auth'
+    | '/mcp'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
     | '/billing'
     | '/enrolments'
     | '/leads'
@@ -292,6 +338,7 @@ export interface FileRouteTypes {
     | '/today'
     | '/tutor-pay'
     | '/tutors'
+    | '/.mcp/invoke-tool/$tool'
     | '/classes/new'
     | '/prototype/dashboard'
     | '/prototype/packages'
@@ -308,6 +355,9 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/access'
     | '/auth'
+    | '/mcp'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
     | '/_authenticated/billing'
     | '/_authenticated/enrolments'
     | '/_authenticated/leads'
@@ -319,6 +369,7 @@ export interface FileRouteTypes {
     | '/_authenticated/today'
     | '/_authenticated/tutor-pay'
     | '/_authenticated/tutors'
+    | '/.mcp/invoke-tool/$tool'
     | '/_authenticated/classes/new'
     | '/_authenticated/prototype/dashboard'
     | '/_authenticated/prototype/packages'
@@ -336,6 +387,10 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AccessRoute: typeof AccessRoute
   AuthRoute: typeof AuthRoute
+  McpRoute: typeof McpRoute
+  Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
+  Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -366,6 +421,27 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.mcp/list-tools': {
+      id: '/.mcp/list-tools'
+      path: '/.mcp/list-tools'
+      fullPath: '/.mcp/list-tools'
+      preLoaderRoute: typeof Char91DotmcpChar93ListToolsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/oauth-protected-resource': {
+      id: '/.well-known/oauth-protected-resource'
+      path: '/.well-known/oauth-protected-resource'
+      fullPath: '/.well-known/oauth-protected-resource'
+      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/billing': {
@@ -444,6 +520,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/tutors'
       preLoaderRoute: typeof AuthenticatedTutorsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/.mcp/invoke-tool/$tool': {
+      id: '/.mcp/invoke-tool/$tool'
+      path: '/.mcp/invoke-tool/$tool'
+      fullPath: '/.mcp/invoke-tool/$tool'
+      preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/classes/': {
       id: '/_authenticated/classes/'
@@ -588,6 +671,11 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AccessRoute: AccessRoute,
   AuthRoute: AuthRoute,
+  McpRoute: McpRoute,
+  Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
+  Char91DotwellKnownChar93OauthProtectedResourceRoute:
+    Char91DotwellKnownChar93OauthProtectedResourceRoute,
+  Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
