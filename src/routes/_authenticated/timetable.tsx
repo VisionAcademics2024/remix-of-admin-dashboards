@@ -69,7 +69,13 @@ import {
 } from "@/lib/vision/schedule.functions";
 import { holdMakeUp, markAttendance, markRollBulk } from "@/lib/vision/roll.functions";
 import { syncSessionToGoogle } from "@/lib/vision/calendar.functions";
-import { syncAfterReschedule } from "@/lib/vision/calendar-sync";
+import {
+  nextSyncView,
+  syncAfterReschedule,
+  syncTone,
+  syncViewFromSession,
+  type SyncView,
+} from "@/lib/vision/calendar-sync";
 import { isMappedSession } from "@/lib/vision/gcal";
 import { setTrialStatus } from "@/lib/vision/leads.functions";
 import { saveEnrolment } from "@/lib/vision/commerce.functions";
@@ -949,25 +955,34 @@ function AddStudentRow({
 function GoogleSyncRow({ session, onSynced }: { session: Row; onSynced: () => Promise<void> }) {
   const sync = useServerFn(syncSessionToGoogle);
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(session.calendar_sync_status === "failed");
+  const [view, setView] = useState<SyncView>(() =>
+    syncViewFromSession(session.calendar_sync_status, session.calendar_last_synced_at),
+  );
+
+  // A refreshed Session (a reschedule elsewhere, a timetable refetch) wins over
+  // the local copy, so the row never drifts from the record.
+  useEffect(() => {
+    setView(syncViewFromSession(session.calendar_sync_status, session.calendar_last_synced_at));
+  }, [session.id, session.calendar_sync_status, session.calendar_last_synced_at]);
 
   if (!isMappedSession(session as { google_calendar_id?: string | null })) return null;
 
-  const status = busy ? "pending" : failed ? "failed" : (session.calendar_sync_status ?? "pending");
-  const tone = status === "synced" ? "success" : status === "failed" ? "danger" : "warning";
-  const lastSynced = session.calendar_last_synced_at
-    ? formatDay(session.calendar_last_synced_at)
+  const lastSynced = view.lastSyncedAt
+    ? `${formatDayDate(view.lastSyncedAt)}, ${formatTime(view.lastSyncedAt)}`
     : null;
 
   async function retry() {
     setBusy(true);
+    setView((v) => nextSyncView(v, { type: "start" }));
     try {
       await sync({ data: { session_id: session.id } });
-      setFailed(false);
+      setView((v) => nextSyncView(v, { type: "success", at: new Date().toISOString() }));
       toast.success("Google Calendar updated.");
       await onSynced();
     } catch (error) {
-      setFailed(true);
+      // The dialog stays open and visibly failed - the timetable move is saved
+      // either way, and this is only the Google follow-on.
+      setView((v) => nextSyncView(v, { type: "failure" }));
       toast.error((error as Error).message);
     } finally {
       setBusy(false);
@@ -979,14 +994,16 @@ function GoogleSyncRow({ session, onSynced }: { session: Row; onSynced: () => Pr
       <div className="space-y-0.5">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium">Google Calendar</span>
-          <StatusPill tone={tone}>{status === "not_synced" ? "pending" : status}</StatusPill>
+          <StatusPill tone={syncTone(view.status)}>
+            {view.status === "not_synced" ? "pending" : view.status}
+          </StatusPill>
         </div>
         <p className="text-[0.7rem] text-muted-foreground">
-          {lastSynced ? `Last synced ${lastSynced}` : "Not synced yet"}
+          {lastSynced ? `Last synced ${lastSynced} (Sydney)` : "Not synced yet"}
         </p>
       </div>
       <Button variant="outline" size="sm" disabled={busy} onClick={retry}>
-        {busy ? "Syncing..." : failed ? "Retry sync" : "Sync now"}
+        {busy ? "Syncing..." : view.status === "failed" ? "Retry sync" : "Sync now"}
       </Button>
     </div>
   );
