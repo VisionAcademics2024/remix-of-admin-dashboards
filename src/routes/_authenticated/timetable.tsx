@@ -68,6 +68,7 @@ import {
   updateSession,
 } from "@/lib/vision/schedule.functions";
 import { holdMakeUp, markAttendance, markRollBulk } from "@/lib/vision/roll.functions";
+import { setTrialStatus } from "@/lib/vision/leads.functions";
 import { saveEnrolment } from "@/lib/vision/commerce.functions";
 import { listStudents } from "@/lib/vision/people.functions";
 import { getCatalogue } from "@/lib/vision/catalogue.functions";
@@ -614,12 +615,15 @@ function LessonRollPanel({
   const bulk = useServerFn(markRollBulk);
   const hold = useServerFn(holdMakeUp);
   const seed = useServerFn(seedRoll);
+  const setTrial = useServerFn(setTrialStatus);
+  const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ["session-roll", session.id],
     queryFn: () => getSessionRoll({ data: { session_id: session.id } }),
   });
   const roll: Row[] = data?.roll ?? [];
+  const trials: Row[] = data?.trials ?? [];
   const marked = roll.filter((r) => r.status !== "not_marked").length;
   const notMarkedIds = roll.filter((r) => r.status === "not_marked").map((r) => r.id);
 
@@ -632,6 +636,68 @@ function LessonRollPanel({
     }
   }
 
+  async function markTrial(id: string, status: "attended" | "no_show" | "scheduled") {
+    try {
+      await setTrial({ data: { id, status } });
+      await onChanged();
+      await queryClient.invalidateQueries({ queryKey: ["leads-board"] });
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  }
+
+  // Trial students booked onto this lesson, shown as their own small block with
+  // the same Present / Away controls - but marking one moves the trial's status,
+  // not an attendance row, so it never touches hours.
+  const trialBlock = trials.length > 0 && (
+    <div className="space-y-1">
+      <p className="text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+        Trial students ({trials.length})
+      </p>
+      {trials.map((t) => (
+        <div
+          key={t.id}
+          className="flex items-center justify-between gap-2 rounded-md border border-[var(--edge)] px-2.5 py-1.5"
+        >
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 truncate text-sm font-medium">
+              {t.leads?.student_name ?? "Trial"}
+              <StatusPill tone="info">Trial</StatusPill>
+            </div>
+            <div className="text-[0.7rem] text-muted-foreground">
+              <Code>{t.leads?.code ?? t.code}</Code> · lead
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              size="sm"
+              variant={t.status === "attended" ? "default" : "outline"}
+              title="Attended"
+              aria-label="Attended"
+              onClick={() => markTrial(t.id, "attended")}
+            >
+              <Check className="h-4 w-4" />
+            </Button>
+            <Button
+              size="sm"
+              variant={t.status === "no_show" ? "destructive" : "outline"}
+              title="No-show"
+              aria-label="No-show"
+              onClick={() => markTrial(t.id, "no_show")}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+            {(t.status === "attended" || t.status === "no_show") && (
+              <Button size="sm" variant="ghost" onClick={() => markTrial(t.id, "scheduled")}>
+                Clear
+              </Button>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   if (isLoading) {
     return <p className="py-6 text-center text-sm text-muted-foreground">Loading the roll…</p>;
   }
@@ -639,9 +705,11 @@ function LessonRollPanel({
   if (roll.length === 0) {
     return (
       <div className="space-y-3 py-2">
+        {trialBlock}
         <p className="text-sm text-muted-foreground">
-          This lesson has no roll yet. Seeding adds every enrolled student - it is safe to run more
-          than once.
+          {trials.length > 0
+            ? "No enrolled students on the roll yet. Seeding adds every enrolled student - it is safe to run more than once."
+            : "This lesson has no roll yet. Seeding adds every enrolled student - it is safe to run more than once."}
         </p>
         <Button
           size="sm"
@@ -746,6 +814,8 @@ function LessonRollPanel({
           </div>
         ))}
       </div>
+
+      {trialBlock}
 
       <AddStudentRow
         session={session}

@@ -1,5 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { queryOptions, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import {
+  queryOptions,
+  useQuery,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { CalendarDays, CheckCircle2, Clock, Receipt, TrendingDown } from "lucide-react";
 import { toast } from "sonner";
@@ -24,8 +29,10 @@ import {
   formatMoney,
   formatTime,
   sydToday,
+  weekStart,
 } from "@/lib/format";
 import { getToday } from "@/lib/vision/overview.functions";
+import { listTrialRoll, setTrialStatus } from "@/lib/vision/leads.functions";
 import { markAttendance } from "@/lib/vision/roll.functions";
 import type { Row } from "@/lib/vision/types";
 
@@ -42,12 +49,30 @@ function TodayPage() {
   const { data } = useSuspenseQuery(todayQueryOptions(today));
   const queryClient = useQueryClient();
   const mark = useServerFn(markAttendance);
+  const setTrial = useServerFn(setTrialStatus);
+
+  // Trial students booked onto a lesson today. They have no attendance row, so
+  // they come straight from the trials table and are confirmed on their own.
+  const { data: trials = [] } = useQuery({
+    queryKey: ["today-trials", today],
+    queryFn: () => listTrialRoll({ data: { filter: "today", today, week_start: weekStart(today) } }),
+  });
 
   async function setStatus(id: string, status: "present" | "absent") {
     try {
       await mark({ data: { id, status } });
       await queryClient.invalidateQueries({ queryKey: ["today"] });
       await queryClient.invalidateQueries({ queryKey: ["needs-attention-count"] });
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  }
+
+  async function setTrialAttendance(id: string, status: "attended" | "no_show" | "scheduled") {
+    try {
+      await setTrial({ data: { id, status } });
+      await queryClient.invalidateQueries({ queryKey: ["today-trials"] });
+      await queryClient.invalidateQueries({ queryKey: ["leads-board"] });
     } catch (error) {
       toast.error((error as Error).message);
     }
@@ -202,6 +227,77 @@ function TodayPage() {
           </p>
         )}
       </Section>
+
+      {(trials as Row[]).length > 0 && (
+        <Section
+          title="Trial students today"
+          count={(trials as Row[]).length}
+          description="Prospects sitting in on a lesson today. Confirm they turned up; a trial never spends hours."
+        >
+          <div className="overflow-x-auto">
+            <table className="table-zebra w-full text-sm">
+              <thead>
+                <tr>
+                  <Th>Trial student</Th>
+                  <Th>Lesson</Th>
+                  <Th>When</Th>
+                  <Th>Tutor</Th>
+                  <Th className="text-right">Mark</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {(trials as Row[]).map((t) => (
+                  <tr key={t.id}>
+                    <Td>
+                      <div className="flex items-center gap-2 font-medium">
+                        {t.leads?.student_name ?? "Trial"}
+                        <StatusPill tone="info">Trial</StatusPill>
+                      </div>
+                      <Link
+                        to="/leads"
+                        className="text-xs text-primary underline-offset-2 hover:underline"
+                      >
+                        {t.leads?.code ?? t.code}
+                      </Link>
+                    </Td>
+                    <Td>
+                      <div>{t.class_offerings?.programs?.name ?? t.class_offerings?.code ?? "-"}</div>
+                      <Code>{t.sessions?.code}</Code>
+                    </Td>
+                    <Td className="whitespace-nowrap">
+                      {t.sessions?.starts_at ? formatTime(t.sessions.starts_at) : "-"}
+                    </Td>
+                    <Td>
+                      <TutorDot
+                        colour={t.sessions?.tutors?.colour}
+                        name={t.sessions?.tutors?.full_name}
+                      />
+                    </Td>
+                    <Td className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          size="sm"
+                          variant={t.status === "attended" ? "default" : "outline"}
+                          onClick={() => setTrialAttendance(t.id, "attended")}
+                        >
+                          Present
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setTrialAttendance(t.id, "no_show")}
+                        >
+                          Absent
+                        </Button>
+                      </div>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      )}
 
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
         <Section title="Today's timetable" count={data.sessions.length} className="h-full">

@@ -311,6 +311,31 @@ export const listTrialRoll = createServerFn({ method: "GET" })
       });
   });
 
+/**
+ * Confirm a trial student from a roll - on the Attendance roll, a Timetable
+ * lesson, or the Today screen. A trial has no attendance row, so "present" is
+ * just the trial's own status moving to attended (a no-show, or back to
+ * scheduled when cleared). It never spends hours - a trial consumes nothing.
+ */
+export const setTrialStatus = createServerFn({ method: "POST" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    z
+      .object({
+        id: z.string().uuid(),
+        status: z.enum(["proposed", "scheduled", "attended", "no_show", "converted", "declined"]),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const { error } = await db(context.supabase)
+      .from("trials")
+      .update({ status: data.status })
+      .eq("id", data.id);
+    if (error) throw error;
+    return { success: true };
+  });
+
 /* ------------------------------------------------------------------ Save a trial */
 
 const trialInput = z.object({
