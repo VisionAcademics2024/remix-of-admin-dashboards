@@ -20,5 +20,13 @@ export default defineMcp({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated",
   }),
-  tools: [listStudentsTool, getStudentTool, listSessionsTool, listLeadsTool, createLeadTool],
+  // Per-tool generics are checked at each defineTool call site; the definition
+  // list is type-erased (exactOptionalPropertyTypes rejects the erased shape).
+  tools: [
+    listStudentsTool,
+    getStudentTool,
+    listSessionsTool,
+    listLeadsTool,
+    createLeadTool,
+  ] as unknown as McpDefinitionInput["tools"],
 });
