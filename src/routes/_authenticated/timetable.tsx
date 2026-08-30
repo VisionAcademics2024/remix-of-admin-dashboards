@@ -935,6 +935,65 @@ function AddStudentRow({
 }
 
 /**
+ * The compact Google Calendar row.
+ *
+ * Shown only for a lesson already linked to the sync test calendar - Stage 3A
+ * never creates events, so an unlinked lesson gets no control at all. A failed
+ * retry keeps the dialog open and stays visibly failed.
+ */
+function GoogleSyncRow({
+  session,
+  onSynced,
+}: {
+  session: Row;
+  onSynced: () => Promise<void>;
+}) {
+  const sync = useServerFn(syncSessionToGoogle);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(session.calendar_sync_status === "failed");
+
+  if (!isMappedSession(session as { google_calendar_id?: string | null })) return null;
+
+  const status = busy ? "pending" : failed ? "failed" : (session.calendar_sync_status ?? "pending");
+  const tone = status === "synced" ? "success" : status === "failed" ? "danger" : "warning";
+  const lastSynced = session.calendar_last_synced_at
+    ? formatDay(session.calendar_last_synced_at)
+    : null;
+
+  async function retry() {
+    setBusy(true);
+    try {
+      await sync({ data: { session_id: session.id } });
+      setFailed(false);
+      toast.success("Google Calendar updated.");
+      await onSynced();
+    } catch (error) {
+      setFailed(true);
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-md border border-[var(--edge)] bg-[var(--mat-thin)] px-3 py-2">
+      <div className="space-y-0.5">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium">Google Calendar</span>
+          <StatusPill tone={tone}>{status === "not_synced" ? "pending" : status}</StatusPill>
+        </div>
+        <p className="text-[0.7rem] text-muted-foreground">
+          {lastSynced ? `Last synced ${lastSynced}` : "Not synced yet"}
+        </p>
+      </div>
+      <Button variant="outline" size="sm" disabled={busy} onClick={retry}>
+        {busy ? "Syncing..." : failed ? "Retry sync" : "Sync now"}
+      </Button>
+    </div>
+  );
+}
+
+/**
  * Reschedule the whole class to another day and time, exactly as a drag would -
  * the same lesson, the same id, the same roll. It stays an ordinary lesson; a
  * make-up is a per-student decision taken on the roll, not a class-wide move.
