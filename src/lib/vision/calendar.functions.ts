@@ -14,15 +14,30 @@ export const syncSessionToGoogle = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const client = db(context.supabase);
 
-    const { data: row, error } = await client
+    const { data, error: readError } = await client
       .from("sessions")
       .select(
         "id, code, starts_at, ends_at, room, status, google_event_id, tutors(full_name), class_offerings(code, room, programs(name))",
       )
-      .eq("id", data.session_id)
+      .eq("id", input.session_id)
       .maybeSingle();
-    if (error) throw error;
-    if (!row) throw new Error("That lesson no longer exists.");
+    if (readError) throw readError;
+    if (!data) throw new Error("That lesson no longer exists.");
+
+    // The generated Database type still describes the prototype tables, so the
+    // joined shape is narrowed here rather than inferred.
+    const row = data as {
+      id: string;
+      code: string;
+      starts_at: string;
+      ends_at: string;
+      room: string | null;
+      status: string;
+      google_event_id: string | null;
+      tutors: { full_name: string } | null;
+      class_offerings: { code: string; room: string | null; programs: { name: string } | null } | null;
+    };
+
     if (row.status !== "scheduled") {
       throw new Error("Only scheduled lessons can be sent to Google Calendar.");
     }
