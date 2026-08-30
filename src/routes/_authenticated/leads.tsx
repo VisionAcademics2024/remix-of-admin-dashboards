@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import {
   CalendarClock,
+  CalendarDays,
   CheckCircle2,
   FlaskConical,
   GraduationCap,
@@ -36,6 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Calendar } from "@/components/ui/calendar";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -64,7 +66,7 @@ import {
   deleteLead,
   getLead,
   getLeadsBoard,
-  getOfferingSessions,
+  listTrialSessions,
   logContact,
   saveLead,
   saveTrial,
@@ -827,19 +829,18 @@ function TrialDialog({
     guardian_mobile: lead?.guardian_mobile ?? "",
     guardian_email: lead?.guardian_email ?? "",
   });
-  // For a class trial: add them to a lesson that already exists, or book a new time.
-  const [placement, setPlacement] = useState<"existing" | "new">(
-    trial && !trial.session_id ? "new" : "existing",
-  );
   const [busy, setBusy] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const isDiagnostic = form.kind === "diagnostic_test";
 
-  // The chosen class's upcoming lessons, so a trial can sit on a real session.
-  const { data: sessions = [] } = useQuery({
-    queryKey: ["offering-sessions", form.class_offering_id],
-    queryFn: () => getOfferingSessions({ data: { offering_id: form.class_offering_id } }),
-    enabled: !isDiagnostic && !!form.class_offering_id,
+  // Every upcoming lesson across all live classes, so the trial can be pinned to
+  // one exact session straight from the calendar - no picking a class first.
+  const { data: sessions = [], isLoading: sessionsLoading } = useQuery({
+    queryKey: ["trial-sessions"],
+    queryFn: () => listTrialSessions(),
+    enabled: !isDiagnostic,
   });
+  const chosen = (sessions as Row[]).find((s) => s.id === form.session_id);
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -847,9 +848,9 @@ function TrialDialog({
         <DialogHeader>
           <DialogTitle>{trial ? `Edit trial ${trial.code}` : "Book a trial"}</DialogTitle>
           <DialogDescription>
-            Add them to a lesson that already exists, book a new trial time on a class, or record a
-            bespoke diagnostic test. To start a brand-new trial class, create the class offering
-            first, then pick it here.
+            Sit them in on a single class session - pick the exact lesson from the calendar - or
+            record a bespoke diagnostic test. Once booked, the trial shows on that lesson's roll,
+            where you confirm they turned up.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
@@ -893,104 +894,29 @@ function TrialDialog({
           />
           {!isDiagnostic ? (
             <>
-              <SelectField
-                label="Class to sit in on"
-                value={form.class_offering_id || "none"}
-                options={{
-                  none: "Select a class…",
-                  ...Object.fromEntries(
-                    (board.offerings as Row[]).map((o) => [
-                      o.id,
-                      `${o.code} · ${o.programs?.name ?? ""}${
-                        o.operating_periods?.code ? ` · ${o.operating_periods.code}` : ""
-                      }`,
-                    ]),
-                  ),
-                }}
-                onChange={(v) =>
-                  setForm({
-                    ...form,
-                    class_offering_id: v === "none" ? "" : v,
-                    session_id: "",
-                    scheduled_for: "",
-                  })
-                }
-              />
-
-              {form.class_offering_id && (
-                <div className="space-y-1.5">
-                  <Label>When</Label>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPlacement("existing");
-                        setForm({ ...form, scheduled_for: "" });
-                      }}
-                      className={cn(
-                        "flex-1 rounded-lg border px-3 py-2 text-sm transition-colors",
-                        placement === "existing"
-                          ? "border-primary/50 bg-primary/15 text-foreground"
-                          : "border-[var(--edge)] text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      Add to an existing lesson
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPlacement("new");
-                        setForm({ ...form, session_id: "", scheduled_for: "" });
-                      }}
-                      className={cn(
-                        "flex-1 rounded-lg border px-3 py-2 text-sm transition-colors",
-                        placement === "new"
-                          ? "border-primary/50 bg-primary/15 text-foreground"
-                          : "border-[var(--edge)] text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      Book a new time
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {form.class_offering_id && placement === "existing" && (
-                <SelectField
-                  label="Lesson"
-                  value={form.session_id || "none"}
-                  options={{
-                    none: (sessions as Row[]).length
-                      ? "Select a lesson…"
-                      : "No upcoming lessons on this class",
-                    ...Object.fromEntries(
-                      (sessions as Row[]).map((s) => [
-                        s.id,
-                        `${formatDate(s.starts_at)} · ${formatTime(s.starts_at)}${
-                          s.tutors?.full_name ? ` · ${s.tutors.full_name}` : ""
-                        }`,
-                      ]),
-                    ),
-                  }}
-                  onChange={(v) => {
-                    const chosen = (sessions as Row[]).find((s) => s.id === v);
-                    setForm({
-                      ...form,
-                      session_id: v === "none" ? "" : v,
-                      scheduled_for: chosen?.starts_at ?? "",
-                    });
-                  }}
-                />
-              )}
-
-              {form.class_offering_id && placement === "new" && (
-                <TextField
-                  label="Scheduled for"
-                  type="date"
-                  value={form.scheduled_for}
-                  onChange={(v) => setForm({ ...form, scheduled_for: v, session_id: "" })}
-                />
-              )}
+              <div className="space-y-1.5">
+                <Label>Class & lesson to sit in on</Label>
+                <button
+                  type="button"
+                  onClick={() => setPickerOpen(true)}
+                  className="flex w-full items-center justify-between gap-2 rounded-lg border border-[var(--edge)] bg-[var(--mat-thin)] px-3 py-2 text-left text-sm transition-colors hover:border-[var(--edge-strong)]"
+                >
+                  <span className={form.session_id ? "text-foreground" : "text-muted-foreground"}>
+                    {chosen
+                      ? `${
+                          chosen.class_offerings?.programs?.name ??
+                          chosen.class_offerings?.code ??
+                          "Lesson"
+                        } · ${formatDate(chosen.starts_at)} · ${formatTime(chosen.starts_at)}`
+                      : form.session_id && trial?.scheduled_for
+                        ? `${
+                            trial.class_offerings?.programs?.name ?? "Lesson"
+                          } · ${formatDate(trial.scheduled_for)}`
+                        : "Select a lesson…"}
+                  </span>
+                  <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </button>
+              </div>
 
               <SelectField
                 label="Status"
@@ -998,6 +924,24 @@ function TrialDialog({
                 options={LABELS.trialStatus}
                 onChange={(v) => setForm({ ...form, status: v })}
               />
+
+              {pickerOpen && (
+                <SessionPickerDialog
+                  sessions={sessions as Row[]}
+                  loading={sessionsLoading}
+                  valueSessionId={form.session_id}
+                  onCancel={() => setPickerOpen(false)}
+                  onConfirm={(s) => {
+                    setForm({
+                      ...form,
+                      session_id: s.id,
+                      class_offering_id: s.class_offering_id,
+                      scheduled_for: s.starts_at,
+                    });
+                    setPickerOpen(false);
+                  }}
+                />
+              )}
             </>
           ) : (
             <div className="grid grid-cols-2 gap-3">
@@ -1064,7 +1008,7 @@ function TrialDialog({
             Cancel
           </Button>
           <Button
-            disabled={busy || (!isDiagnostic && !form.class_offering_id)}
+            disabled={busy || (!isDiagnostic && !form.session_id)}
             onClick={async () => {
               setBusy(true);
               try {
@@ -1246,6 +1190,148 @@ function ConvertDialog({ lead, board, onClose }: { lead: Row; board: Row; onClos
       </DialogContent>
     </Dialog>
   );
+}
+
+/* ----------------------------------------------------------- Pick a lesson (pop-up) */
+
+/**
+ * The calendar pop-up for a class trial: pick the exact lesson to sit in on.
+ *
+ * Days that have a lesson are highlighted and selectable; days with none are
+ * disabled. Tapping a day lists that day's lessons across every live class;
+ * choosing one and pressing OK pins the trial to that single session. Nothing
+ * is committed until OK, so it can be opened, browsed and cancelled without
+ * touching the booking behind it.
+ */
+function SessionPickerDialog({
+  sessions,
+  loading,
+  valueSessionId,
+  onCancel,
+  onConfirm,
+}: {
+  sessions: Row[];
+  loading: boolean;
+  valueSessionId: string;
+  onCancel: () => void;
+  onConfirm: (session: Row) => void;
+}) {
+  const initial = sessions.find((s) => s.id === valueSessionId);
+  const [pendingId, setPendingId] = useState(valueSessionId);
+  const [day, setDay] = useState<Date | undefined>(() =>
+    initial?.session_date ? ymdToDate(initial.session_date) : undefined,
+  );
+
+  const sessionDates = new Set(sessions.map((s) => s.session_date));
+  const enabledDays = [...sessionDates].map(ymdToDate);
+  const selectedYmd = day ? dateToYmd(day) : null;
+  const daySessions = selectedYmd ? sessions.filter((s) => s.session_date === selectedYmd) : [];
+  const pending = sessions.find((s) => s.id === pendingId);
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Pick a lesson</DialogTitle>
+          <DialogDescription>
+            Days with lessons are highlighted. Tap a day, choose the exact session, then press OK.
+          </DialogDescription>
+        </DialogHeader>
+
+        {loading ? (
+          <div className="py-10 text-center text-sm text-muted-foreground">Loading lessons…</div>
+        ) : enabledDays.length === 0 ? (
+          <div className="rounded-xl border border-[var(--edge)] bg-[var(--mat-thin)] px-3 py-3 text-sm text-muted-foreground">
+            No upcoming lessons on any active class. Generate the timetable for a class first, then
+            book the trial onto one of its sessions.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex justify-center rounded-xl border border-[var(--edge)] bg-[var(--mat-thin)]">
+              <Calendar
+                mode="single"
+                selected={day}
+                onSelect={setDay}
+                disabled={(d) => !sessionDates.has(dateToYmd(d))}
+                modifiers={{ hasSession: enabledDays }}
+                modifiersClassNames={{
+                  hasSession: "font-semibold underline underline-offset-4 decoration-primary/70",
+                }}
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">
+                {selectedYmd ? `Lessons on ${formatDate(selectedYmd)}` : "Lessons on the chosen day"}
+              </Label>
+              {!day ? (
+                <p className="mt-1.5 rounded-lg border border-dashed border-[var(--edge)] px-3 py-6 text-center text-sm text-muted-foreground">
+                  Pick a highlighted day to see its lessons.
+                </p>
+              ) : daySessions.length === 0 ? (
+                <p className="mt-1.5 rounded-lg border border-dashed border-[var(--edge)] px-3 py-6 text-center text-sm text-muted-foreground">
+                  No lessons on this day.
+                </p>
+              ) : (
+                <ul className="mt-1.5 max-h-[220px] space-y-1.5 overflow-y-auto pr-1">
+                  {daySessions.map((s) => {
+                    const active = pendingId === s.id;
+                    return (
+                      <li key={s.id}>
+                        <button
+                          type="button"
+                          onClick={() => setPendingId(s.id)}
+                          className={cn(
+                            "w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                            active
+                              ? "border-primary/50 bg-primary/15 text-foreground"
+                              : "border-[var(--edge)] text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          <div className="truncate font-medium text-foreground">
+                            {s.class_offerings?.programs?.name ??
+                              s.class_offerings?.code ??
+                              "Lesson"}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {formatTime(s.starts_at)}–{formatTime(s.ends_at)}
+                            {s.tutors?.full_name ? ` · ${s.tutors.full_name}` : ""}
+                            {s.class_offerings?.code ? ` · ${s.class_offerings.code}` : ""}
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button disabled={!pending} onClick={() => pending && onConfirm(pending)}>
+            OK
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** A "YYYY-MM-DD" day string to a local-midnight Date the calendar can match. */
+function ymdToDate(ymd: string): Date {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(y!, (m ?? 1) - 1, d ?? 1);
+}
+
+/** A calendar Date back to the "YYYY-MM-DD" the session list is keyed by. */
+function dateToYmd(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 /* ---------------------------------------------------------------------- Fields */

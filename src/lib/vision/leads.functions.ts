@@ -225,6 +225,35 @@ export const getOfferingSessions = createServerFn({ method: "GET" })
   });
 
 /**
+ * Every upcoming lesson across every live class, so a trial can be booked
+ * straight onto one exact session from a calendar - "sit them in on this
+ * lesson" - rather than picking a class first and then a date. Make-up lessons,
+ * dedicated to a specific absent student, are left out; a trial joins a real
+ * class session. Dates are computed in Sydney so the calendar groups a late
+ * lesson under the day it is actually taught.
+ */
+export const listTrialSessions = createServerFn({ method: "GET" })
+  .middleware([requireStaff])
+  .handler(async ({ context }) => {
+    const { data: rows, error } = await db(context.supabase)
+      .from("sessions")
+      .select(
+        "id, class_offering_id, code, starts_at, ends_at, status, session_type, " +
+          "tutors(full_name, colour), class_offerings(code, status, programs(name))",
+      )
+      .neq("status", "cancelled")
+      .neq("session_type", "dedicated_make_up")
+      .gte("starts_at", new Date().toISOString())
+      .order("starts_at")
+      .limit(400);
+    if (error) throw error;
+
+    return (rows ?? [])
+      .filter((r: Row) => ["planned", "active"].includes(r.class_offerings?.status))
+      .map((r: Row) => ({ ...r, session_date: sydDate(r.starts_at) }));
+  });
+
+/**
  * Trial students to overlay on the Attendance roll. A trial has no student or
  * attendance record until conversion, so these are read straight from the
  * trials table, joined to their session and lead, and filtered to the same date
