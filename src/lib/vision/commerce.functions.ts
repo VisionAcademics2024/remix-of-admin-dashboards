@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+import { sydDate, sydToday } from "@/lib/format";
 import { db, requireStaff, type AnyClient } from "./guard";
 import type { PricingBasis, Row } from "./types";
 
@@ -384,4 +385,154 @@ export const updatePackageStatus = createServerFn({ method: "POST" })
       .eq("id", data.id);
     if (error) throw error;
     return { success: true };
+  });
+
+/**
+ * Add a mid-term student onto the exact lessons they'll attend.
+ *
+ * A student who joins part-way through does not want a whole term generated for
+ * them - they want to be on a handful of specific dates, across one or more
+ * classes, and to show up on those rolls. This does all of that in one call:
+ *
+ * 1. An active, UNPRICED enrolment on each class (reused if one already exists),
+ *    so the student lands in Billing → "What we need to charge" for the admin to
+ *    firm the price.
+ * 2. A roll entry on each chosen lesson only - the ticked dates, nothing else -
+ *    so their name appears on those lessons' attendance.
+ * 3. For a date not on the timetable yet, the lesson is reused if one is already
+ *    at that slot (which is what avoids the "sessions_regular_slot" clash), and
+ *    only created when the slot is genuinely free.
+ * 4. For an Hours plan, one purchased package with the hours filled in and the
+ *    price left at 0, so Billing shows the name and hours with an empty price.
+ */
+export const addMidTermStudent = createServerFn({ method: "POST" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    z
+      .object({
+        student_id: z.string().uuid(),
+        method: z.enum(["hours", "payg"]),
+        hours: z.coerce.number().min(0).default(0),
+        classes: z
+          .array(
+            z.object({
+              class_offering_id: z.string().uuid(),
+              session_ids: z.array(z.string().uuid()).default([]),
+              new_sessions: z
+                .array(z.object({ starts_at: z.string().min(1), ends_at: z.string().min(1) }))
+                .default([]),
+            }),
+          )
+          .min(1, "Pick at least one class."),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+    let lessonCount = 0;
+
+    for (const entry of data.classes) {
+      // Resolve every chosen lesson to a real session id: the ticked existing
+      // ones, plus any off-timetable date (reused at its slot, else created).
+      const sessionIds = [...entry.session_ids];
+      for (const ns of entry.new_sessions) {
+        const { data: existing } = await client
+          .from("sessions")
+          .select("id")
+          .eq("class_offering_id", entry.class_offering_id)
+          .eq("starts_at", ns.starts_at)
+          .maybeSingle();
+        if (existing) {
+          sessionIds.push(existing.id);
+        } else {
+          const { data: created, error: createError } = await client
+            .from("sessions")
+            .insert({
+              class_offering_id: entry.class_offering_id,
+              starts_at: ns.starts_at,
+              ends_at: ns.ends_at,
+              session_type: "regular",
+            })
+            .select("id")
+            .single();
+          if (createError) throw createError;
+          sessionIds.push(created.id);
+        }
+      }
+      if (!sessionIds.length) continue;
+
+      // The enrolment starts on the earliest lesson they're joining.
+      const { data: chosen } = await client
+        .from("sessions")
+        .select("id, starts_at")
+        .in("id", sessionIds);
+      const startsOn =
+        (chosen ?? [])
+          .map((s: Row) => sydDate(s.starts_at))
+          .sort()
+          .at(0) ?? sydToday();
+
+      // Reuse a live enrolment on this class if there is one; otherwise open an
+      // active, unpriced one so Billing can firm the price.
+      const { data: existingEnrol } = await client
+        .from("enrolments")
+        .select("id")
+        .eq("student_id", data.student_id)
+        .eq("class_offering_id", entry.class_offering_id)
+        .neq("status", "closed")
+        .order("starts_on", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      let enrolmentId = existingEnrol?.id as string | undefined;
+      if (!enrolmentId) {
+        const { data: enrolment, error: enrolError } = await client
+          .from("enrolments")
+          .insert({
+            student_id: data.student_id,
+            class_offering_id: entry.class_offering_id,
+            status: "active",
+            method: data.method,
+            base_price: null,
+            starts_on: startsOn,
+          })
+          .select("id")
+          .single();
+        if (enrolError) {
+          throw new Error(
+            enrolError.message.includes("enrolments_unique")
+              ? "This student already has an enrolment on this class for that start date."
+              : enrolError.message,
+          );
+        }
+        enrolmentId = enrolment.id;
+      }
+
+      // Put them on the roll for exactly the chosen lessons - nothing else.
+      const { error: attError } = await client.from("attendance").upsert(
+        sessionIds.map((sid) => ({
+          session_id: sid,
+          enrolment_id: enrolmentId,
+          att_type: "regular",
+          status: "not_marked",
+        })),
+        { onConflict: "session_id,enrolment_id", ignoreDuplicates: true },
+      );
+      if (attError) throw attError;
+      lessonCount += sessionIds.length;
+    }
+
+    // The hours they've paid for, priced later in Billing.
+    if (data.method === "hours" && data.hours > 0) {
+      const { error: pkgError } = await client.from("hours_packages").insert({
+        student_id: data.student_id,
+        package_type: "purchased",
+        hours_purchased: data.hours,
+        price: 0,
+        status: "active",
+      });
+      if (pkgError) throw pkgError;
+    }
+
+    return { lessons: lessonCount };
   });

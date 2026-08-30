@@ -313,10 +313,16 @@ function ToChargeBody({ data, onRefresh }: { data: Row; onRefresh: () => Promise
                     </Link>
                   </Td>
                   <Td className="text-right tabular-nums">{formatHours(p.hours_purchased)}</Td>
-                  <Td className="text-right tabular-nums">{formatMoney(p.price)}</Td>
+                  <Td className="text-right tabular-nums">
+                    {Number(p.price) > 0 ? (
+                      formatMoney(p.price)
+                    ) : (
+                      <StatusPill tone="warning">Set price</StatusPill>
+                    )}
+                  </Td>
                   <Td className="text-right">
                     <Button size="sm" variant="outline" onClick={() => setPayload({ kind: "hours", row: p })}>
-                      Raise invoice
+                      {Number(p.price) > 0 ? "Raise invoice" : "Price & invoice"}
                     </Button>
                   </Td>
                 </tr>
