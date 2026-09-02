@@ -30,12 +30,14 @@ import {
   Code,
   EmptyState,
   PageHeader,
+  SortableTh,
   StatusPill,
   TableShell,
   Td,
   Th,
   WarningNote,
   toneForStatus,
+  useTableSort,
 } from "@/components/vision/ui";
 import { formatDate, formatHours, formatMoney, formatTime, formatWeekday, sydToday } from "@/lib/format";
 import {
@@ -75,6 +77,32 @@ function EnrolmentsPage() {
   const packagesWithoutEligibility = data.packages.filter(
     (p: Row) => p.status === "active" && (eligibilityByPackage.get(p.id)?.length ?? 0) === 0,
   );
+
+  // Both tables sort in the browser. The whole commercial picture is already in
+  // hand - re-ordering it should not cost a round trip.
+  const packageSort = useTableSort<Row>(data.packages, {
+    code: (p) => p.code,
+    student: (p) => p.students?.full_name,
+    type: (p) => p.package_type,
+    purchased: (p) => Number(p.hours_purchased ?? 0),
+    used: (p) => Number(p.hours_used ?? 0),
+    remaining: (p) => Number(p.hours_remaining ?? 0),
+    price: (p) => Number(p.price ?? 0),
+    eligible: (p) => (eligibilityByPackage.get(p.id) ?? []).length,
+    status: (p) => p.status,
+  });
+
+  const enrolmentSort = useTableSort<Row>(data.enrolments, {
+    code: (e) => e.code,
+    student: (e) => e.students?.full_name,
+    class: (e) => e.class_offerings?.programs?.name,
+    term: (e) => e.class_offerings?.operating_periods?.code,
+    method: (e) => e.method ?? "trial",
+    package: (e) => packagesById.get(e.default_package_id)?.code,
+    base: (e) => Number(e.base_price ?? 0),
+    agreed: (e) => Number(e.final_agreed_price ?? 0),
+    status: (e) => e.status,
+  });
 
   return (
     <div className="stagger space-y-5">
@@ -124,19 +152,69 @@ function EnrolmentsPage() {
             <TableShell>
               <thead>
                 <tr>
-                  <Th>Package</Th>
-                  <Th>Student</Th>
-                  <Th>Type</Th>
-                  <Th className="text-right">Purchased</Th>
-                  <Th className="text-right">Used</Th>
-                  <Th className="text-right">Remaining</Th>
-                  <Th className="text-right">Price</Th>
-                  <Th>Eligible on</Th>
-                  <Th>Status</Th>
+                  <SortableTh sortKey="code" sort={packageSort.sort} onToggle={packageSort.toggle}>
+                    Package
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="student"
+                    sort={packageSort.sort}
+                    onToggle={packageSort.toggle}
+                  >
+                    Student
+                  </SortableTh>
+                  <SortableTh sortKey="type" sort={packageSort.sort} onToggle={packageSort.toggle}>
+                    Type
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="purchased"
+                    sort={packageSort.sort}
+                    onToggle={packageSort.toggle}
+                    align="right"
+                  >
+                    Purchased
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="used"
+                    sort={packageSort.sort}
+                    onToggle={packageSort.toggle}
+                    align="right"
+                  >
+                    Used
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="remaining"
+                    sort={packageSort.sort}
+                    onToggle={packageSort.toggle}
+                    align="right"
+                  >
+                    Remaining
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="price"
+                    sort={packageSort.sort}
+                    onToggle={packageSort.toggle}
+                    align="right"
+                  >
+                    Price
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="eligible"
+                    sort={packageSort.sort}
+                    onToggle={packageSort.toggle}
+                  >
+                    Eligible on
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="status"
+                    sort={packageSort.sort}
+                    onToggle={packageSort.toggle}
+                  >
+                    Status
+                  </SortableTh>
                 </tr>
               </thead>
               <tbody>
-                {data.packages.map((p: Row) => {
+                {packageSort.rows.map((p: Row) => {
                   const eligible = eligibilityByPackage.get(p.id) ?? [];
                   return (
                     <tr key={p.id}>
@@ -210,20 +288,76 @@ function EnrolmentsPage() {
             <TableShell>
               <thead>
                 <tr>
-                  <Th>Enrolment</Th>
-                  <Th>Student</Th>
-                  <Th>Class</Th>
-                  <Th>Term</Th>
-                  <Th>Method</Th>
-                  <Th>Package</Th>
-                  <Th className="text-right">Base</Th>
+                  <SortableTh
+                    sortKey="code"
+                    sort={enrolmentSort.sort}
+                    onToggle={enrolmentSort.toggle}
+                  >
+                    Enrolment
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="student"
+                    sort={enrolmentSort.sort}
+                    onToggle={enrolmentSort.toggle}
+                  >
+                    Student
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="class"
+                    sort={enrolmentSort.sort}
+                    onToggle={enrolmentSort.toggle}
+                  >
+                    Class
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="term"
+                    sort={enrolmentSort.sort}
+                    onToggle={enrolmentSort.toggle}
+                  >
+                    Term
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="method"
+                    sort={enrolmentSort.sort}
+                    onToggle={enrolmentSort.toggle}
+                  >
+                    Method
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="package"
+                    sort={enrolmentSort.sort}
+                    onToggle={enrolmentSort.toggle}
+                  >
+                    Package
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="base"
+                    sort={enrolmentSort.sort}
+                    onToggle={enrolmentSort.toggle}
+                    align="right"
+                  >
+                    Base
+                  </SortableTh>
                   <Th>Adjustment</Th>
-                  <Th className="text-right">Agreed</Th>
-                  <Th>Status</Th>
+                  <SortableTh
+                    sortKey="agreed"
+                    sort={enrolmentSort.sort}
+                    onToggle={enrolmentSort.toggle}
+                    align="right"
+                  >
+                    Agreed
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="status"
+                    sort={enrolmentSort.sort}
+                    onToggle={enrolmentSort.toggle}
+                  >
+                    Status
+                  </SortableTh>
                 </tr>
               </thead>
               <tbody>
-                {data.enrolments.map((e: Row) => (
+                {enrolmentSort.rows.map((e: Row) => (
                   <tr key={e.id}>
                     <Td>
                       <Code>{e.code}</Code>
@@ -397,7 +531,7 @@ function EligibilityDialog({
               toast.success("Package status updated.");
             }}
           >
-            <SelectTrigger className="w-32">
+            <SelectTrigger className="w-full sm:w-32">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -751,7 +885,7 @@ function EnrolDialog({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Starts on</Label>
               <Input
@@ -809,7 +943,7 @@ function EnrolDialog({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Price (optional)</Label>
               <Select value={priceId || "none"} onValueChange={(v) => setPriceId(v === "none" ? "" : v)}>
@@ -916,7 +1050,7 @@ function PackageDialog({
             </Select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Type</Label>
               <Select
@@ -945,7 +1079,7 @@ function PackageDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Price</Label>
               <Input

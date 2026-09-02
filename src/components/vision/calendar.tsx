@@ -42,6 +42,18 @@ const SNAP = 15;
 /** Where the grid scrolls to on open - early enough to see the first lesson. */
 const DEFAULT_SCROLL_HOUR = 7;
 
+/**
+ * The narrowest a day column may be drawn, plus the widest the hour gutter gets.
+ *
+ * A week on a phone is seven columns in 375px - forty pixels each, which can
+ * carry neither a name nor a time. Rather than squeezing them, the grid keeps
+ * each column readable and scrolls sideways, header and body together, so the
+ * days stay under their own headings. On a desk the columns are wider than this
+ * anyway, so the floor never bites.
+ */
+const MIN_DAY_WIDTH = 108;
+const GUTTER_WIDTH = 64;
+
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 /** Today's column, softly filled and outlined so its lessons stand out. */
@@ -597,6 +609,7 @@ export function TimeGrid({
   }, [days, events]);
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
+  const gridMinWidth = GUTTER_WIDTH + days.length * MIN_DAY_WIDTH;
   const ghostShown = draft?.moved ? draft : null;
   const ghostDayIndex = ghostShown ? days.indexOf(ghostShown.date) : -1;
 
@@ -605,8 +618,14 @@ export function TimeGrid({
       {/* Header and grid share one scroll container, so a scrollbar narrows
           both by the same amount and the day columns never drift out from
           under their headings. The header stays pinned as the hours scroll. */}
-      <div ref={scroller} className="relative max-h-[62vh] overflow-y-auto overscroll-contain">
-        <div className="sticky top-0 z-20 flex border-b bg-[var(--mat-solid)]">
+      <div
+        ref={scroller}
+        className="relative max-h-[72dvh] overflow-auto overscroll-contain sm:max-h-[62vh]"
+      >
+        <div
+          className="sticky top-0 z-20 flex border-b bg-[var(--mat-solid)]"
+          style={{ minWidth: gridMinWidth }}
+        >
           <div className="w-14 shrink-0 border-r sm:w-16" />
           {days.map((day) => {
             const isToday = day === today;
@@ -640,7 +659,7 @@ export function TimeGrid({
           })}
         </div>
 
-        <div className="flex" style={{ height: 24 * hourHeight }}>
+        <div className="flex" style={{ height: 24 * hourHeight, minWidth: gridMinWidth }}>
           {/* Hour gutter. The midnight label is dropped, as Google's is. */}
           <div className="w-14 shrink-0 border-r sm:w-16">
             {hours.map((h) => (
@@ -790,8 +809,8 @@ export function MonthGrid({
   for (const list of byDay.values()) list.sort((a, b) => a.startMinutes - b.startMinutes);
 
   return (
-    <div className="glass--solid overflow-hidden rounded-xl border">
-      <div className="grid grid-cols-7 border-b bg-[var(--mat-thin)]">
+    <div className="glass--solid scroll-x rounded-xl border">
+      <div className="grid min-w-[44rem] grid-cols-7 border-b bg-[var(--mat-thin)]">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
           <div
             key={d}
@@ -802,7 +821,7 @@ export function MonthGrid({
         ))}
       </div>
 
-      <div className="grid grid-cols-7">
+      <div className="grid min-w-[44rem] grid-cols-7">
         {days.map((day) => {
           const list = byDay.get(day) ?? [];
           const isToday = day === today;

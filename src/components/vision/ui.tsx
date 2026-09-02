@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { AlertTriangle, Inbox } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Inbox } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Glass } from "@/components/vision/glass";
@@ -24,23 +24,29 @@ export function PageHeader({
   eyebrow?: string | undefined;
 }) {
   return (
-    <header className="mb-7 flex flex-wrap items-end justify-between gap-4">
+    <header className="mb-5 flex flex-wrap items-end justify-between gap-3 sm:mb-7 sm:gap-4">
       <div className="min-w-0">
         {eyebrow && (
           <p className="mb-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             {eyebrow}
           </p>
         )}
-        <h1 className="text-[2rem] font-semibold leading-[1.1] text-foreground sm:text-[2.5rem]">
+        <h1 className="text-[1.6rem] font-semibold leading-[1.15] text-foreground sm:text-[2.5rem] sm:leading-[1.1]">
           {title}
         </h1>
         {description && (
-          <p className="mt-2.5 max-w-3xl text-[0.95rem] leading-relaxed text-muted-foreground">
+          <p className="mt-2 max-w-3xl text-[0.875rem] leading-relaxed text-muted-foreground sm:mt-2.5 sm:text-[0.95rem]">
             {description}
           </p>
         )}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {/* On a phone the actions take the full width and split it evenly, so
+          they are thumb-sized instead of two chips squeezed at the right. */}
+      {actions && (
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto [&>*]:flex-1 sm:[&>*]:flex-none">
+          {actions}
+        </div>
+      )}
     </header>
   );
 }
@@ -66,13 +72,13 @@ export function Section({
     <Glass
       material="regular"
       className={cn(
-        "p-5 sm:p-6",
+        "p-4 sm:p-6",
         tone === "warning" && "border-warning/40",
         tone === "success" && "border-success/35",
         className,
       )}
     >
-      <div className="mb-4 flex flex-row items-start justify-between gap-3">
+      <div className="mb-4 flex flex-col items-start justify-between gap-3 sm:flex-row">
         <div className="min-w-0">
           <h2 className="flex items-center gap-2 text-[1.0625rem] font-semibold tracking-[-0.015em]">
             {title}
@@ -86,7 +92,11 @@ export function Section({
             <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{description}</p>
           )}
         </div>
-        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+        {actions && (
+          <div className="flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto">
+            {actions}
+          </div>
+        )}
       </div>
       {children}
     </Glass>
@@ -289,8 +299,10 @@ export function WarningNote({ children }: { children: ReactNode }) {
  */
 export function TableShell({ children }: { children: ReactNode }) {
   return (
-    <div className="glass glass--solid overflow-x-auto rounded-2xl">
-      <table className="table-zebra w-full text-sm">{children}</table>
+    <div className="glass glass--solid scroll-x rounded-2xl">
+      {/* min-w keeps the columns readable rather than letting them squeeze to
+          nothing; the shell scrolls sideways instead. */}
+      <table className="table-zebra w-full min-w-[36rem] text-sm">{children}</table>
     </div>
   );
 }
@@ -330,5 +342,117 @@ export function Td({
     >
       {children}
     </td>
+  );
+}
+
+/* ==========================================================================
+ * SORTING
+ *
+ * Tables long enough to need sorting appear in several places, so the rule
+ * lives here once: a header you click cycles ascending, descending, and back
+ * to the table's own order. Comparison is by a value the caller extracts, not
+ * by the rendered cell - a date column sorts by its timestamp, not by the text
+ * "3 Sept".
+ * ======================================================================= */
+
+export type SortDirection = "asc" | "desc";
+
+export type SortState = { key: string; direction: SortDirection } | null;
+
+/** What a column sorts by. `null`/`undefined` always sort last, either way. */
+export type SortValue = string | number | null | undefined;
+
+export function compareSortValues(a: SortValue, b: SortValue): number {
+  const aEmpty = a === null || a === undefined || a === "";
+  const bEmpty = b === null || b === undefined || b === "";
+  if (aEmpty && bEmpty) return 0;
+  if (aEmpty) return 1;
+  if (bEmpty) return -1;
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  return String(a).localeCompare(String(b), "en-AU", { numeric: true, sensitivity: "base" });
+}
+
+/**
+ * Sorted rows, and the header state that drives them.
+ *
+ * `accessors` maps a column key to the value that column sorts by. Rows come
+ * back untouched when nothing is selected, so a table keeps whatever order the
+ * query gave it until someone asks for another.
+ */
+export function useTableSort<T>(
+  rows: T[],
+  accessors: Record<string, (row: T) => SortValue>,
+  initial: SortState = null,
+) {
+  const [sort, setSort] = useState<SortState>(initial);
+
+  const sorted = useMemo(() => {
+    const accessor = sort ? accessors[sort.key] : undefined;
+    if (!sort || !accessor) return rows;
+    const factor = sort.direction === "asc" ? 1 : -1;
+    // Sorting a copy: the query cache owns the array that came in.
+    return [...rows].sort((a, b) => compareSortValues(accessor(a), accessor(b)) * factor);
+    // `accessors` is rebuilt every render by callers; the keys are what matter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, sort]);
+
+  /** Click a header: ascending, then descending, then back to no sort. */
+  const toggle = (key: string) =>
+    setSort((current) => {
+      if (current?.key !== key) return { key, direction: "asc" };
+      if (current.direction === "asc") return { key, direction: "desc" };
+      return null;
+    });
+
+  return { rows: sorted, sort, toggle, setSort };
+}
+
+/** A column header you can click to sort by. */
+export function SortableTh({
+  children,
+  sortKey,
+  sort,
+  onToggle,
+  className,
+  align = "left",
+}: {
+  children: ReactNode;
+  sortKey: string;
+  sort: SortState;
+  onToggle: (key: string) => void;
+  className?: string | undefined;
+  align?: "left" | "right" | undefined;
+}) {
+  const active = sort?.key === sortKey;
+  const Icon = !active ? ArrowUpDown : sort.direction === "asc" ? ArrowUp : ArrowDown;
+
+  return (
+    <Th className={cn("p-0", className)}>
+      <button
+        type="button"
+        onClick={() => onToggle(sortKey)}
+        aria-label={`Sort by ${typeof children === "string" ? children : sortKey}`}
+        // aria-sort belongs on the th, but the th is this component's own
+        // wrapper - so the live state is announced through the label instead.
+        title={
+          active
+            ? `Sorted ${sort.direction === "asc" ? "ascending" : "descending"} - click to ${
+                sort.direction === "asc" ? "reverse" : "clear"
+              }`
+            : "Click to sort"
+        }
+        className={cn(
+          "flex w-full cursor-pointer items-center gap-1.5 px-3.5 py-2.5 text-left text-[0.68rem] font-semibold uppercase tracking-[0.1em] transition-colors focus-spatial",
+          align === "right" && "justify-end",
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        <span className="truncate">{children}</span>
+        <Icon
+          className={cn("h-3 w-3 shrink-0", active ? "opacity-100" : "opacity-45")}
+          strokeWidth={2.2}
+        />
+      </button>
+    </Th>
   );
 }

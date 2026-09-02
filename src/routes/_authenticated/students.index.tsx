@@ -390,7 +390,7 @@ function NewStudentDialog({ onClose }: { onClose: () => void }) {
             onChange={(v) => setForm({ ...form, full_name: v })}
             autoFocus
           />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field
               label="Year level"
               value={form.year_level}
@@ -408,7 +408,7 @@ function NewStudentDialog({ onClose }: { onClose: () => void }) {
             value={form.current_school}
             onChange={(v) => setForm({ ...form, current_school: v })}
           />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field
               label="Date of birth"
               type="date"
@@ -568,7 +568,7 @@ function EditStudentDialog({ student, onClose }: { student: Row; onClose: () => 
             value={form.full_name}
             onChange={(v) => setForm({ ...form, full_name: v })}
           />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field
               label="Year level"
               value={form.year_level}
@@ -586,7 +586,7 @@ function EditStudentDialog({ student, onClose }: { student: Row; onClose: () => 
             value={form.current_school}
             onChange={(v) => setForm({ ...form, current_school: v })}
           />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field
               label="Date of birth"
               type="date"
@@ -682,7 +682,7 @@ function EditGuardianDialog({ guardian, onClose }: { guardian: Row; onClose: () 
             value={form.full_name}
             onChange={(v) => setForm({ ...form, full_name: v })}
           />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field
               label="Email"
               value={form.email}
@@ -885,7 +885,7 @@ function FamilyDialog({
                   value={fresh.full_name}
                   onChange={(e) => setFresh({ ...fresh, full_name: e.target.value })}
                 />
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <Input
                     placeholder="Mobile"
                     value={fresh.mobile}

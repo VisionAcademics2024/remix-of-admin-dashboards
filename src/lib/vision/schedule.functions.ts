@@ -215,6 +215,56 @@ function shiftDate(date: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Every lesson a student has sat, one row per student per lesson.
+ *
+ * This is the roll read the long way round: the Attendance screen shows one
+ * class at a time so it can be marked, and this shows the whole history so it
+ * can be looked back over - "what has this student actually had?", asked from
+ * the office rather than the classroom.
+ *
+ * It reads v_attendance, so hours consumed and make-up state are the computed
+ * ones and cannot drift from the roll. Bounded by date and by row count: the
+ * window is the caller's, the ceiling is not negotiable.
+ */
+export const listSessionHistory = createServerFn({ method: "GET" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    z
+      .object({
+        from: z.string().min(1),
+        /** Sydney date, inclusive. Lessons after it are excluded. */
+        to: z.string().min(1),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+
+    const { data: rows, error } = await client
+      .from("v_attendance")
+      .select(SESSION_HISTORY_SELECT)
+      .gte("session_date", data.from)
+      .lte("session_date", data.to)
+      .order("lesson_starts_at", { ascending: false })
+      .limit(HISTORY_LIMIT);
+    if (error) throw error;
+
+    return {
+      rows: (rows ?? []) as Row[],
+      // The page says so out loud when the window is bigger than the ceiling,
+      // rather than quietly showing a truncated history as if it were whole.
+      truncated: (rows ?? []).length >= HISTORY_LIMIT,
+      limit: HISTORY_LIMIT,
+    };
+  });
+
+/** As many rows as a table can usefully carry before it wants a narrower window. */
+const HISTORY_LIMIT = 2000;
+
+const SESSION_HISTORY_SELECT =
+  "*, sessions(id, code, starts_at, ends_at, status, session_type, room, tutors(id, full_name, colour), class_offerings(id, code, programs(name, code), operating_periods(name, code))), enrolments(id, code, method, students(id, code, full_name))";
+
 /** Today's lessons, in Sydney. */
 export const listToday = createServerFn({ method: "GET" })
   .middleware([requireStaff])

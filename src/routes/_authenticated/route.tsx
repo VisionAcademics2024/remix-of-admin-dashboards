@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect, useRouterState } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -12,6 +12,8 @@ import { meQueryOptions } from "@/lib/vision/me";
 import { formatDay, sydToday } from "@/lib/format";
 import { DataModeBadge } from "@/components/vision/data-mode-badge";
 import { EnvironmentButton } from "@/components/vision/environment";
+import { MobileNav } from "@/components/vision/mobile-nav";
+import { sectionTitleFor } from "@/components/vision/nav-items";
 
 export { meQueryOptions };
 
@@ -41,10 +43,15 @@ export const Route = createFileRoute("/_authenticated")({
  * visionOS floats a single pane in space with its navigation hung alongside,
  * so there is no full-height chrome column here - the ornament is absolutely
  * positioned and the content simply keeps clear of it.
+ *
+ * A phone has no width to give away and no pointer to widen the rail with, so
+ * below `lg` the rail is gone entirely: the pane runs edge to edge and the
+ * sections live behind the menu button at the top-right of the header.
  */
 function AuthenticatedLayout() {
   const { data: me } = useSuspenseQuery(meQueryOptions());
   const [navExpanded, setNavExpanded] = useState(false);
+  const currentPath = useRouterState({ select: (r) => r.location.pathname });
   if (!me.staff) return null;
 
   const initials = me.staff.full_name
@@ -60,9 +67,9 @@ function AuthenticatedLayout() {
       style={{ transitionTimingFunction: "var(--ease-spatial)" }}
       className={cn(
         // From lg up the page makes room for the rail rather than being covered
-        // by it. Below that there is no width to give away, so it overlays and
-        // the rail thickens instead - see .ornament[data-expanded] in styles.css.
-        "min-h-screen pl-[5.5rem] pr-3 transition-[padding] duration-[320ms] lg:pr-5",
+        // by it. Below that there is no rail at all, so the pane keeps only the
+        // small gutter every phone layout wants.
+        "min-h-screen px-3 transition-[padding] duration-[320ms] lg:pr-5",
         navExpanded ? "lg:pl-[17.25rem]" : "lg:pl-[6.25rem]",
       )}
     >
@@ -73,21 +80,29 @@ function AuthenticatedLayout() {
         onExpandedChange={setNavExpanded}
       />
 
-      <header className="glass glass--thick animate-spatial-in sticky top-3 z-30 mt-3 flex h-14 items-center gap-3 rounded-full px-4">
-        <span className="hidden items-baseline gap-2.5 sm:flex">
+      <header className="glass glass--thick animate-spatial-in sticky top-3 z-30 mt-3 flex h-14 items-center gap-2 rounded-full px-3 sm:gap-3 sm:px-4">
+        {/* On a phone the header says where you are, since the rail that used to
+            say so is behind the menu button. */}
+        <span className="min-w-0 truncate text-[0.9rem] font-semibold tracking-[-0.01em] lg:hidden">
+          {sectionTitleFor(currentPath)}
+        </span>
+
+        <span className="hidden items-baseline gap-2.5 lg:flex">
           <span className="text-[0.82rem] font-semibold tracking-[-0.01em]">
             {formatDay(sydToday())}
           </span>
           <span className="text-[0.72rem] text-muted-foreground">Sydney</span>
         </span>
 
-        <span className="ml-auto flex items-center gap-3">
-          <DataModeBadge />
-          <EnvironmentButton />
-        </span>
+        <span className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+          {/* Environment and data-mode chips are desk tools; a phone header has
+              no room for them and they are not needed on the move. */}
+          <span className="hidden items-center gap-3 sm:flex">
+            <DataModeBadge />
+            <EnvironmentButton />
+          </span>
 
-        <span className="flex items-center gap-2.5">
-          <span className="hidden text-right sm:block">
+          <span className="hidden text-right lg:block">
             <span className="block text-[0.78rem] font-semibold leading-tight">
               {me.staff.full_name}
             </span>
@@ -95,13 +110,15 @@ function AuthenticatedLayout() {
               {me.staff.role}
             </span>
           </span>
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--mat-thick)] text-[0.72rem] font-semibold shadow-[inset_0_1px_0_0_var(--edge-top)]">
+          <span className="hidden h-9 w-9 items-center justify-center rounded-full bg-[var(--mat-thick)] text-[0.72rem] font-semibold shadow-[inset_0_1px_0_0_var(--edge-top)] lg:flex">
             {initials}
           </span>
+
+          <MobileNav role={me.staff.role} name={me.staff.full_name} />
         </span>
       </header>
 
-      <main className="mx-auto w-full max-w-[104rem] pb-14 pt-7">
+      <main className="mx-auto w-full max-w-[104rem] pb-14 pt-5 sm:pt-7">
         <Outlet />
       </main>
     </div>

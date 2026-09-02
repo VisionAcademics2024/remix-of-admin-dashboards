@@ -38,7 +38,8 @@ import { cn } from "@/lib/utils";
 import { formatDate, formatMoney, sydToday } from "@/lib/format";
 import { listTutors, saveTutor } from "@/lib/vision/catalogue.functions";
 import { addPayRate } from "@/lib/vision/pay.functions";
-import { TUTOR_COLOURS, type Row } from "@/lib/vision/types";
+import { DEFAULT_TUTOR_COLOUR, type Row } from "@/lib/vision/types";
+import { TutorColourPicker } from "@/components/vision/colour-picker";
 
 const tutorsQueryOptions = () =>
   queryOptions({ queryKey: ["tutors"], queryFn: () => listTutors() });
@@ -175,7 +176,7 @@ function TutorDialog({ row, onClose }: { row?: Row; onClose: () => void }) {
     full_name: row?.full_name ?? "",
     email: row?.email ?? "",
     mobile: row?.mobile ?? "",
-    colour: row?.colour ?? TUTOR_COLOURS[0],
+    colour: row?.colour ?? DEFAULT_TUTOR_COLOUR,
     status: (row?.status ?? "active") as "active" | "inactive",
     notes: row?.notes ?? "",
   });
@@ -213,7 +214,7 @@ function TutorDialog({ row, onClose }: { row?: Row; onClose: () => void }) {
               onChange={(e) => setForm({ ...form, full_name: e.target.value })}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Email</Label>
               <Input
@@ -231,21 +232,10 @@ function TutorDialog({ row, onClose }: { row?: Row; onClose: () => void }) {
           </div>
           <div className="space-y-1.5">
             <Label>Timetable colour</Label>
-            <div className="flex flex-wrap gap-2">
-              {TUTOR_COLOURS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setForm({ ...form, colour: c })}
-                  className={cn(
-                    "h-8 w-8 rounded-md border-2",
-                    form.colour === c ? "border-foreground" : "border-transparent",
-                  )}
-                  style={{ backgroundColor: c }}
-                  aria-label={c}
-                />
-              ))}
-            </div>
+            <TutorColourPicker
+              value={form.colour}
+              onChange={(colour) => setForm({ ...form, colour })}
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Status</Label>
@@ -355,7 +345,7 @@ function RatesDialog({ tutor, onClose }: { tutor: Row; onClose: () => void }) {
 
         <div className="space-y-3 rounded-md border border-dashed border-[var(--edge)] p-3">
           <Label className="text-xs text-muted-foreground">Add a new rate</Label>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Hourly rate ($)</Label>
               <Input

@@ -199,7 +199,7 @@ function RollPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">{active.hint}</p>
         <Input
-          className="w-64"
+          className="w-full sm:w-64"
           placeholder="Search student or code…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -839,7 +839,7 @@ function MakeUpDialog({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <ModeCard
               active={mode === "hold"}
               onClick={() => setMode("hold")}
@@ -902,7 +902,7 @@ function MakeUpDialog({
 
               {existingId === "new" && (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label>Starts</Label>
                       <Input

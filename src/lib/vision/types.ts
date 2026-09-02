@@ -490,14 +490,40 @@ export const LABELS = {
   },
 } as const;
 
-/** Timetable swatches offered in Setup. */
-export const TUTOR_COLOURS = [
-  "#4f46e5",
-  "#0891b2",
-  "#059669",
-  "#d97706",
-  "#dc2626",
-  "#7c3aed",
-  "#db2777",
-  "#0284c7",
+/**
+ * Timetable swatches.
+ *
+ * Eighteen hues around the wheel, four steps of depth each. The rows are the
+ * same four steps for every hue, so picking "the light green" and "the light
+ * blue" for two tutors gives two colours of matching weight - which is what
+ * keeps a week of blocks looking like one calendar rather than a paint chart.
+ *
+ * The eight colours this list used to hold are all still here, in the third
+ * row, so every tutor already assigned a colour keeps exactly the one they had.
+ */
+export const TUTOR_COLOUR_FAMILIES: { name: string; shades: [string, string, string, string] }[] = [
+  { name: "Red", shades: ["#f87171", "#ef4444", "#dc2626", "#b91c1c"] },
+  { name: "Orange", shades: ["#fb923c", "#f97316", "#ea580c", "#c2410c"] },
+  { name: "Amber", shades: ["#fbbf24", "#f59e0b", "#d97706", "#b45309"] },
+  { name: "Yellow", shades: ["#facc15", "#eab308", "#ca8a04", "#a16207"] },
+  { name: "Lime", shades: ["#a3e635", "#84cc16", "#65a30d", "#4d7c0f"] },
+  { name: "Green", shades: ["#4ade80", "#22c55e", "#16a34a", "#15803d"] },
+  { name: "Emerald", shades: ["#34d399", "#10b981", "#059669", "#047857"] },
+  { name: "Teal", shades: ["#2dd4bf", "#14b8a6", "#0d9488", "#0f766e"] },
+  { name: "Cyan", shades: ["#22d3ee", "#06b6d4", "#0891b2", "#0e7490"] },
+  { name: "Sky", shades: ["#38bdf8", "#0ea5e9", "#0284c7", "#0369a1"] },
+  { name: "Blue", shades: ["#60a5fa", "#3b82f6", "#2563eb", "#1d4ed8"] },
+  { name: "Indigo", shades: ["#818cf8", "#6366f1", "#4f46e5", "#4338ca"] },
+  { name: "Violet", shades: ["#a78bfa", "#8b5cf6", "#7c3aed", "#6d28d9"] },
+  { name: "Purple", shades: ["#c084fc", "#a855f7", "#9333ea", "#7e22ce"] },
+  { name: "Fuchsia", shades: ["#e879f9", "#d946ef", "#c026d3", "#a21caf"] },
+  { name: "Pink", shades: ["#f472b6", "#ec4899", "#db2777", "#be185d"] },
+  { name: "Rose", shades: ["#fb7185", "#f43f5e", "#e11d48", "#be123c"] },
+  { name: "Slate", shades: ["#94a3b8", "#64748b", "#475569", "#334155"] },
 ];
+
+/** Every swatch, flat - for validation and for the "is this one of ours" check. */
+export const TUTOR_COLOURS: string[] = TUTOR_COLOUR_FAMILIES.flatMap((f) => f.shades);
+
+/** What a tutor gets before anyone picks for them. */
+export const DEFAULT_TUTOR_COLOUR = "#4f46e5";

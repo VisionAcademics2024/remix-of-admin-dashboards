@@ -270,7 +270,7 @@ function TimetablePage() {
       {/* Google's toolbar order: navigation first, then where you are, then how
           you are looking at it. */}
       <div className="flex flex-wrap items-center gap-2">
-        <h1 className="mr-1 text-2xl font-semibold tracking-tight">Timetable</h1>
+        <h1 className="mr-1 text-xl font-semibold tracking-tight sm:text-2xl">Timetable</h1>
 
         <Button
           variant="outline"
@@ -301,7 +301,7 @@ function TimetablePage() {
 
         <div className="min-w-0 text-base font-medium">{titleFor(view, anchor)}</div>
 
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+        <div className="ml-auto flex w-full flex-wrap items-center gap-2 sm:w-auto">
           {view !== "month" && (
             <div
               className="hidden items-center gap-2 rounded-full border px-3 py-1.5 sm:flex"
@@ -324,7 +324,7 @@ function TimetablePage() {
             value={tutorId ?? "all"}
             onValueChange={(v) => setTutorId(v === "all" ? null : v)}
           >
-            <SelectTrigger className="w-44">
+            <SelectTrigger className="w-full min-w-32 sm:w-44">
               <SelectValue placeholder="All tutors" />
             </SelectTrigger>
             <SelectContent>
@@ -337,14 +337,14 @@ function TimetablePage() {
             </SelectContent>
           </Select>
 
-          <div className="flex items-center rounded-full border p-0.5">
+          <div className="scroll-x flex max-w-full items-center rounded-full border p-0.5">
             {VIEWS.map((v) => (
               <button
                 key={v.key}
                 type="button"
                 onClick={() => setView(v.key)}
                 className={cn(
-                  "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                  "shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-colors",
                   view === v.key
                     ? "bg-[oklch(0.55_0.19_258)] text-white"
                     : "text-foreground/75 hover:text-foreground",
@@ -540,7 +540,7 @@ function SessionDialog({
           </TabsList>
 
           <TabsContent value="details" className="space-y-3 pt-3">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="start">Starts (Sydney)</Label>
                 <Input
@@ -1135,7 +1135,7 @@ function RescheduleClassForm({
         Moves this class to the day and time you set. The same lesson moves, so the roll goes with
         it - no second lesson is made, and it stays an ordinary lesson. A tutor is optional.
       </p>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <div className="space-y-1.5">
           <Label>Day</Label>
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />

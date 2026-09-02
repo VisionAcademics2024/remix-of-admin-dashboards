@@ -608,7 +608,7 @@ function LeadDialog({ row, board, onClose }: { row?: Row; board: Row; onClose: (
             onChange={(v) => setForm({ ...form, student_name: v })}
             placeholder="e.g. Aisha Khan"
           />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <TextField
               label="Year level"
               value={form.year_level}
@@ -632,7 +632,7 @@ function LeadDialog({ row, board, onClose }: { row?: Row; board: Row; onClose: (
             placeholder="Maths, selective prep…"
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <TextField
               label="Parent's name"
               value={form.guardian_name}
@@ -650,7 +650,7 @@ function LeadDialog({ row, board, onClose }: { row?: Row; board: Row; onClose: (
             onChange={(v) => setForm({ ...form, guardian_email: v })}
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <SelectField
               label="Status"
               value={form.status}
@@ -664,7 +664,7 @@ function LeadDialog({ row, board, onClose }: { row?: Row; board: Row; onClose: (
               onChange={(v) => setForm({ ...form, source: v })}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <SelectField
               label="Assigned to"
               value={form.assigned_to || "none"}
@@ -760,7 +760,7 @@ function ContactDialog({ leadId, onClose }: { leadId: string; onClose: () => voi
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <SelectField
               label="Channel"
               value={form.channel}
@@ -880,7 +880,7 @@ function TrialDialog({
               Trial student
             </p>
             <div className="grid gap-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <TextField
                   label="Name"
                   value={form.student_name}
@@ -892,7 +892,7 @@ function TrialDialog({
                   onChange={(v) => setForm({ ...form, year_level: v })}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <TextField
                   label="Parent mobile"
                   value={form.guardian_mobile}
@@ -965,7 +965,7 @@ function TrialDialog({
               )}
             </>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <TextField
                 label="Scheduled for"
                 type="date"
@@ -991,7 +991,7 @@ function TrialDialog({
                 }}
                 onChange={(v) => setForm({ ...form, conducted_by: v === "none" ? "" : v })}
               />
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <SelectField
                   label="Recommendation"
                   value={form.recommendation || "none"}
