@@ -123,7 +123,17 @@ export const ENVIRONMENTS: EnvironmentDef[] = [
   },
 ];
 
-const DEFAULT_ID = "sonoma";
+/**
+ * Big Sur: twilight over black sand, the calmest of the set to read against.
+ *
+ * The default is a dark scene on purpose. Apple's glass is a low-opacity white
+ * film over a dark scrim - the white comes from the specular edge, not the
+ * fill - so translucency, vibrancy and the rim light only read as glass when
+ * there is depth behind them. Over a bright scene the same material flattens
+ * into pale grey plastic. Anyone who prefers a light scene still has all eight
+ * in the picker.
+ */
+const DEFAULT_ID = "big-sur";
 
 
 const STORAGE_KEY = "vision-environment";

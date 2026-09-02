@@ -80,7 +80,11 @@ function AuthenticatedLayout() {
         onExpandedChange={setNavExpanded}
       />
 
-      <header className="glass glass--thick animate-spatial-in sticky top-3 z-30 mt-3 flex h-14 items-center gap-2 rounded-full px-3 sm:gap-3 sm:px-4">
+      {/* Content passes under the floating header. This is the soft edge it
+          dissolves into, instead of being sliced by the pill's border. */}
+      <div className="scroll-edge" aria-hidden />
+
+      <header className="glass glass--thick animate-materialize sticky top-3 z-30 mt-3 flex h-14 items-center gap-2 rounded-full px-3 sm:gap-3 sm:px-4">
         {/* On a phone the header says where you are, since the rail that used to
             say so is behind the menu button. */}
         <span className="min-w-0 truncate text-[0.9rem] font-semibold tracking-[-0.01em] lg:hidden">

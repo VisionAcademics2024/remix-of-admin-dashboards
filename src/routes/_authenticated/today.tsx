@@ -6,6 +6,7 @@ import {
   useSuspenseQuery,
 } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { useEffect, useState } from "react";
 import { CalendarDays, CheckCircle2, Clock, Receipt, TrendingDown } from "lucide-react";
 import { toast } from "sonner";
 
@@ -13,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import {
   Code,
   EmptyState,
+  Meter,
   PageHeader,
   Section,
   StatCard,
@@ -22,12 +24,16 @@ import {
   TutorDot,
   toneForStatus,
 } from "@/components/vision/ui";
+import { colourFor } from "@/components/vision/calendar";
+import { cn } from "@/lib/utils";
 import {
   formatDay,
   formatDayDate,
   formatHours,
   formatMoney,
   formatTime,
+  sydneyMinutesNow,
+  sydneyMinutesOfDay,
   sydToday,
   weekStart,
 } from "@/lib/format";
@@ -68,6 +74,39 @@ function TodayPage() {
     }
   }
 
+  // What is happening right now.
+  //
+  // The Sydney clock, once a minute. A dashboard called "Today" that does not
+  // know what time it is can only ever list things; knowing the minute is what
+  // lets it say which lesson is on, what is next, and how much of the day has
+  // already gone.
+  const [minutesNow, setMinutesNow] = useState(sydneyMinutesNow);
+  useEffect(() => {
+    const id = setInterval(() => setMinutesNow(sydneyMinutesNow()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const running = (s: Row) => ({
+    start: sydneyMinutesOfDay(s.starts_at),
+    end: sydneyMinutesOfDay(s.ends_at),
+  });
+
+  const sessions = data.sessions as Row[];
+  const nowSession = sessions.find((s) => {
+    const { start, end } = running(s);
+    return s.status !== "cancelled" && start <= minutesNow && end > minutesNow;
+  });
+  const nextSession = sessions.find(
+    (s) => s.status !== "cancelled" && running(s).start > minutesNow,
+  );
+  const finishedCount = sessions.filter((s) => running(s).end <= minutesNow).length;
+
+  // An unmarked roll from a previous day is a different problem from one from
+  // this morning - the first is a backlog, the second is just the day in
+  // progress - so the section says which it is looking at.
+  const todayCount = (data.toMark as Row[]).filter((r) => r.session_date === today).length;
+  const backlogCount = data.toMark.length - todayCount;
+
   async function setTrialAttendance(id: string, status: "attended" | "no_show" | "scheduled") {
     try {
       await setTrial({ data: { id, status } });
@@ -102,7 +141,7 @@ function TodayPage() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
           label="Still to mark"
           value={data.toMark.length}
@@ -111,19 +150,37 @@ function TodayPage() {
           }
           tone={data.toMark.length === 0 ? "success" : "warning"}
           icon={Clock}
+          to="/roll"
         />
-        <StatCard label="Lessons today" value={data.sessions.length} icon={CalendarDays} />
+        <StatCard
+          label="Lessons today"
+          value={data.sessions.length}
+          hint={
+            data.sessions.length === 0
+              ? "Nothing scheduled"
+              : nowSession
+                ? `${nowSession.class_offerings?.programs?.name ?? "A lesson"} on now`
+                : nextSession
+                  ? `Next at ${formatTime(nextSession.starts_at)}`
+                  : "All finished for today"
+          }
+          icon={CalendarDays}
+          to="/timetable"
+        />
         <StatCard
           label="Low or overdrawn"
           value={data.lowPackages.length}
+          hint={data.lowPackages.length === 0 ? "Every package has room" : "Hour packages"}
           tone={data.lowPackages.length ? "warning" : "default"}
           icon={TrendingDown}
+          to="/enrolments"
         />
         <StatCard
           label="Ready to invoice"
           value={formatMoney(data.toInvoiceValue)}
           hint={`${data.toInvoiceCount} charges · ${formatMoney(data.unpaidValue)} unpaid`}
           icon={Receipt}
+          to="/billing"
         />
       </div>
 
@@ -138,6 +195,14 @@ function TodayPage() {
         }
         tone={data.toMark.length === 0 ? "success" : "warning"}
       >
+        {data.toMark.length > 0 && backlogCount > 0 && (
+          <p className="mb-3 text-[0.8rem] text-muted-foreground">
+            <span className="font-medium text-foreground">{todayCount}</span> from today ·{" "}
+            <span className="font-medium text-warning">{backlogCount}</span> carried over from
+            earlier lessons.
+          </p>
+        )}
+
         {data.toMark.length === 0 ? (
           <EmptyState
             icon={CheckCircle2}
@@ -148,7 +213,7 @@ function TodayPage() {
           // The Section is the card; the table sits flush inside it rather than
           // in a second rounded box, so the row lines run the full width and
           // nothing reads as cut off under Mark.
-          <div className="overflow-x-auto">
+          <div className="scroll-x">
             <table className="table-zebra w-full text-sm">
               <thead>
                 <tr>
@@ -234,7 +299,7 @@ function TodayPage() {
           count={(trials as Row[]).length}
           description="Prospects sitting in on a lesson today. Confirm they turned up; a trial never spends hours."
         >
-          <div className="overflow-x-auto">
+          <div className="scroll-x">
             <table className="table-zebra w-full text-sm">
               <thead>
                 <tr>
@@ -301,6 +366,17 @@ function TodayPage() {
 
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
         <Section title="Today's timetable" count={data.sessions.length} className="h-full">
+          {data.sessions.length > 0 && (
+            <div className="mb-4">
+              <Meter
+                label="Lessons finished"
+                value={finishedCount}
+                total={data.sessions.length}
+                tone={finishedCount === data.sessions.length ? "success" : "default"}
+              />
+            </div>
+          )}
+
           {data.sessions.length === 0 ? (
             <EmptyState
               icon={CalendarDays}
@@ -313,30 +389,72 @@ function TodayPage() {
               }
             />
           ) : (
-            <ul className="space-y-2">
-              {data.sessions.map((s: Row) => (
-                <li
-                  key={s.id}
-                  className="flex items-center gap-3 rounded-2xl border border-white/35 bg-background/20 px-3.5 py-3 shadow-sm"
-                >
-                  <div className="w-28 shrink-0 text-sm tabular-nums">
-                    {formatTime(s.starts_at)}
-                    <div className="text-xs text-muted-foreground">
-                      {formatHours(s.duration_hours)}
+            <ul className="space-y-1.5">
+              {sessions.map((s: Row) => {
+                const { start, end } = running(s);
+                const isNow = s.status !== "cancelled" && start <= minutesNow && end > minutesNow;
+                const isDone = end <= minutesNow;
+                const colour = colourFor(s.tutor_id, s.tutors?.colour);
+
+                return (
+                  <li
+                    key={s.id}
+                    className={cn(
+                      // The app's own material rather than a hand-mixed one, so
+                      // the row belongs to the same substance as everything
+                      // else on the page.
+                      "relative flex items-center gap-3 overflow-hidden rounded-2xl border border-[var(--edge)] bg-[var(--mat-thin)] py-2.5 pl-5 pr-3 shadow-[inset_0_1px_0_0_var(--edge-top)]",
+                      "transition-[background-color,opacity] duration-[var(--dur-fast)] [transition-timing-function:var(--ease-hover)]",
+                      // A finished lesson steps back rather than disappearing:
+                      // it is still part of the day, just no longer the part
+                      // you are looking for.
+                      isDone && !isNow && "opacity-60",
+                      isNow && "bg-[var(--mat-regular)]",
+                    )}
+                  >
+                    {/* The spine carries the tutor's colour - the same colour
+                        the lesson has on the timetable, so a row here and a
+                        block there are recognisably the same thing. */}
+                    <span
+                      aria-hidden
+                      className="absolute inset-y-0 left-0 w-1.5"
+                      style={{ backgroundColor: colour }}
+                    />
+
+                    <div className="w-[5.5rem] shrink-0 text-sm tabular-nums">
+                      {formatTime(s.starts_at)}
+                      <div className="text-[0.72rem] tracking-[0.004em] text-muted-foreground">
+                        {formatHours(s.duration_hours)}
+                      </div>
                     </div>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">
-                      {s.class_offerings?.programs?.name ?? "Lesson"}
+
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium">
+                        {s.class_offerings?.programs?.name ?? "Lesson"}
+                      </div>
+                      <div className="truncate text-[0.72rem] tracking-[0.004em] text-muted-foreground">
+                        <TutorDot colour={s.tutors?.colour} name={s.tutors?.full_name} />
+                        {s.class_offerings?.room && ` · ${s.class_offerings.room}`}
+                      </div>
                     </div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      <TutorDot colour={s.tutors?.colour} name={s.tutors?.full_name} />
-                      {s.class_offerings?.room && ` · ${s.class_offerings.room}`}
-                    </div>
-                  </div>
-                  <StatusPill tone={toneForStatus("session", s.status)}>{s.status}</StatusPill>
-                </li>
-              ))}
+
+                    {/* "On now" is the one thing on this list worth an accent,
+                        so it takes the place of the status pill rather than
+                        sitting next to it. */}
+                    {isNow ? (
+                      <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-success/30 bg-success/16 px-2.5 py-0.5 text-[0.7rem] font-medium text-success">
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="absolute inline-flex h-full w-full rounded-full bg-success opacity-70 motion-safe:animate-ping" />
+                          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success" />
+                        </span>
+                        On now
+                      </span>
+                    ) : (
+                      <StatusPill tone={toneForStatus("session", s.status)}>{s.status}</StatusPill>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Section>
@@ -355,7 +473,7 @@ function TodayPage() {
               hint="Balances are recalculated from attendance, so this updates itself as rolls are marked."
             />
           ) : (
-            <div className="overflow-x-auto">
+            <div className="scroll-x">
               <table className="table-zebra w-full text-sm">
                 <thead>
                   <tr>
@@ -402,15 +520,36 @@ function TodayPage() {
           </Button>
         }
       >
-        <div className="grid gap-4 sm:grid-cols-3">
-          <StatCard label="PAYG lessons to charge" value={data.unchargedPaygCount} />
-          <StatCard
-            label="Charges to invoice"
-            value={data.toInvoiceCount}
-            hint={formatMoney(data.toInvoiceValue)}
-          />
-          <StatCard label="Invoiced, unpaid" value={formatMoney(data.unpaidValue)} />
-        </div>
+        {/* Figures, not cards.
+            A translucent card inside a translucent card is the one thing
+            Apple's material rules say never to do - the second surface has
+            nothing left to be translucent against, and both go muddy. Inside a
+            Section the numbers are just numbers, separated by a rule. */}
+        <dl className="grid divide-y divide-[var(--edge)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          {[
+            { label: "PAYG lessons to charge", value: data.unchargedPaygCount, hint: undefined },
+            {
+              label: "Charges to invoice",
+              value: data.toInvoiceCount,
+              hint: formatMoney(data.toInvoiceValue),
+            },
+            { label: "Invoiced, unpaid", value: formatMoney(data.unpaidValue), hint: undefined },
+          ].map((figure) => (
+            <div key={figure.label} className="py-3.5 sm:px-5 sm:first:pl-0 sm:last:pr-0">
+              <dt className="text-[0.78rem] font-medium tracking-[0.004em] text-muted-foreground">
+                {figure.label}
+              </dt>
+              <dd className="mt-1 text-[1.75rem] font-semibold leading-[1] tabular-nums tracking-[-0.03em]">
+                {figure.value}
+              </dd>
+              {figure.hint && (
+                <dd className="mt-1 text-[0.75rem] tracking-[0.004em] text-muted-foreground">
+                  {figure.hint}
+                </dd>
+              )}
+            </div>
+          ))}
+        </dl>
       </Section>
     </div>
   );

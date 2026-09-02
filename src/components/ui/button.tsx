@@ -8,7 +8,7 @@ const buttonVariants = cva(
   [
     "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-[0.82rem] font-medium",
     "cursor-pointer select-none focus-spatial press",
-    "transition-[transform,box-shadow,background-color,color,border-color] duration-[var(--dur-base)] [transition-timing-function:var(--ease-spatial)]",
+    "transition-[transform,box-shadow,background-color,color,border-color] duration-[var(--dur-fast)] [transition-timing-function:var(--ease-hover)]",
     "disabled:pointer-events-none disabled:opacity-40",
     "[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:stroke-[1.8]",
   ].join(" "),
@@ -51,12 +51,18 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, onPointerDown, ...props }, ref) => {
     const Comp = asChild ? Slot : "button";
 
-    // A press should feel like a press. Beyond the held-down scale from the
-    // `.press` class, every tap fires a quick squash-and-settle pop so the
-    // click plainly registers - even on a fast tap, and even when the action
-    // behind it takes a moment to come back. Driven by the Web Animations API
-    // rather than a CSS class so a re-render (an optimistic update, say) mid-pop
-    // can't cut it short, and skipped when the viewer prefers reduced motion.
+    // A press should feel like a press.
+    //
+    // `.press:active` covers a held button, but a fast tap can be over before
+    // :active has visibly resolved - so pointer-down also fires a short dip
+    // through the Web Animations API, which survives a re-render mid-press (an
+    // optimistic update, say) where a CSS class would be cut short. WAAPI also
+    // means it runs on the compositor rather than the main thread.
+    //
+    // The values are deliberately small: 0.97 is the depth that reads as a
+    // press without the label visibly shrinking, and there is no overshoot
+    // past 1. A button bouncing bigger than itself is momentum the gesture
+    // never had - overshoot belongs to things you throw, not things you click.
     const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
       const el = event.currentTarget;
       if (
@@ -66,11 +72,10 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         el.animate(
           [
             { transform: "scale(1)" },
-            { transform: "scale(0.9)", offset: 0.35 },
-            { transform: "scale(1.04)", offset: 0.7 },
+            { transform: "scale(0.97)", offset: 0.4 },
             { transform: "scale(1)" },
           ],
-          { duration: 260, easing: "cubic-bezier(0.32, 0.72, 0, 1)" },
+          { duration: 140, easing: "cubic-bezier(0.23, 1, 0.32, 1)" },
         );
       }
       onPointerDown?.(event);
