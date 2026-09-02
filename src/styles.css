@@ -113,14 +113,33 @@
   --radius: 1.125rem;
 
   /* -- Motion ------------------------------------------------------------
-   * One curve for almost everything. It is the visionOS/iOS sheet curve:
-   * quick to leave, long and soft to settle, so surfaces feel weighted.  */
+   * Four curves, each for one job. One curve for everything was the mistake
+   * this replaces: the iOS sheet curve is right for a drawer and wrong for a
+   * hover, because it holds back at the start - the exact moment a pointer is
+   * watching.
+   *
+   * The rule (Emil Kowalski's, and Apple's): entering or leaving gets a strong
+   * ease-out so it moves the instant it is asked to; something travelling
+   * across the screen gets ease-in-out; a hover or a colour gets plain ease;
+   * a sheet dragged by a thumb keeps the iOS curve, because that one is
+   * modelling weight rather than responsiveness.
+   *
+   * There is deliberately no ease-in here. An ease-in on UI starts slowly and
+   * reads as lag no matter how short the duration.                          */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-hover: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-spatial: cubic-bezier(0.32, 0.72, 0, 1);
-  --ease-exit: cubic-bezier(0.4, 0, 0.9, 0.4);
-  --dur-fast: 180ms;
-  --dur-base: 320ms;
-  --dur-slow: 520ms;
-  --dur-ambient: 24s;
+
+  /* Durations are named for what they carry, not how long they are, so the
+   * scale can be tuned in one place. Everything a pointer touches stays under
+   * 300ms; only sheets and dialogs - seen occasionally, and carrying real
+   * weight - are allowed past it.                                           */
+  --dur-press: 110ms;   /* the answer to a press: as close to instant as reads */
+  --dur-fast: 150ms;    /* hover, colour, small state changes                 */
+  --dur-base: 220ms;    /* dropdowns, popovers, tooltips                      */
+  --dur-slow: 300ms;    /* dialogs, sheets, the page arriving                 */
+  --dur-ambient: 24s;   /* the environment's drift; not a UI duration         */
 }
 
 /* ===========================================================================
@@ -146,6 +165,10 @@
   --edge-top: oklch(1 0 0 / 26%);
   --edge: oklch(1 0 0 / 13%);
   --edge-strong: oklch(1 0 0 / 22%);
+  /* The rim gradient. Bright where the light lands, a dim counter-edge on the
+   * far side so the pane has two sides rather than one painted highlight. */
+  --rim-bright: oklch(1 0 0 / 34%);
+  --rim-dim: oklch(1 0 0 / 7%);
   --shadow-key: oklch(0.02 0.01 268 / 55%);
   --shadow-ambient: oklch(0.02 0.01 268 / 32%);
   --specular: oklch(1 0 0 / 16%);
@@ -160,7 +183,7 @@
   --secondary: oklch(1 0 0 / 10%);
   --secondary-foreground: oklch(0.97 0.004 260);
   --muted: oklch(1 0 0 / 7%);
-  --muted-foreground: oklch(0.99 0.003 260 / 58%);
+  --muted-foreground: oklch(0.99 0.003 260 / 68%);
   --accent: oklch(1 0 0 / 14%);
   --accent-foreground: oklch(0.98 0.004 260);
 
@@ -214,6 +237,10 @@
   --shadow-key: oklch(0.25 0.05 268 / 18%);
   --shadow-ambient: oklch(0.25 0.05 268 / 10%);
   --specular: oklch(1 0 0 / 55%);
+  /* On a light scene the rim is a bright white edge against a soft grey one -
+   * the same read, inverted, so glass looks like glass in both themes. */
+  --rim-bright: oklch(1 0 0 / 85%);
+  --rim-dim: oklch(0.45 0.04 268 / 10%);
 
   --card: var(--mat-regular);
   --card-foreground: oklch(0.21 0.03 268);
@@ -225,7 +252,7 @@
   --secondary: oklch(1 0 0 / 55%);
   --secondary-foreground: oklch(0.28 0.05 268);
   --muted: oklch(1 0 0 / 42%);
-  --muted-foreground: oklch(0.32 0.04 268 / 72%);
+  --muted-foreground: oklch(0.3 0.04 268 / 82%);
   --accent: oklch(1 0 0 / 72%);
   --accent-foreground: oklch(0.24 0.05 268);
 
@@ -279,6 +306,11 @@
     color: var(--color-foreground);
     /* The environment is painted by <Environment />, fixed behind everything. */
     letter-spacing: -0.011em;
+    /* SF Pro ships as a variable font here (100-900). Optical sizing is the
+     * whole reason to use it: the letterforms are redrawn as the size changes
+     * rather than being scaled up, which is what keeps large type from looking
+     * thin and small type from filling in. */
+    font-optical-sizing: auto;
     /* A long code or email in a narrow column wraps rather than forcing the
      * page wider than the screen. */
     overflow-wrap: break-word;
@@ -287,10 +319,23 @@
     -webkit-tap-highlight-color: transparent;
   }
 
-  /* Apple sets tighter tracking as type gets larger, never looser. */
-  h1 { letter-spacing: -0.028em; }
-  h2 { letter-spacing: -0.022em; }
-  h3 { letter-spacing: -0.018em; }
+  /* Apple sets tighter tracking as type gets larger, never looser - and the
+   * corollary matters just as much: small text wants tracking back. A single
+   * letter-spacing value is wrong at one end of the scale or the other.
+   *
+   * Headings tighten as they grow; the leading tightens with them, because a
+   * line gap that reads as comfortable at 15px reads as a gap at 40px. */
+  h1 { letter-spacing: -0.028em; line-height: 1.08; }
+  h2 { letter-spacing: -0.022em; line-height: 1.16; }
+  h3 { letter-spacing: -0.018em; line-height: 1.22; }
+
+  /* And the small end. Captions, chips, code and column headings are read at
+   * a glance rather than word by word, so they get a little air between the
+   * letters instead of the body's negative tracking. */
+  small,
+  .text-caption {
+    letter-spacing: 0.004em;
+  }
 
   /* Numbers in tables must line up and never re-flow as they tick over. */
   .tabular-nums,
@@ -337,10 +382,15 @@
 
   .environment__image {
     position: absolute;
-    inset: -6%;
+    /* The overscan is done with a transform, not with negative insets.
+     * A layout box wider than the viewport is counted by mobile browsers when
+     * they size the layout viewport - even inside an overflow:hidden parent -
+     * which quietly zooms the whole page out. A transform never enters layout,
+     * so the scene still overscans and nothing else notices. */
+    inset: 0;
     background-position: center;
     background-size: cover;
-    transform: scale(1.06);
+    transform: scale(1.12);
     opacity: 0;
     transition: opacity var(--dur-slow) var(--ease-spatial);
   }
@@ -391,6 +441,50 @@
     backdrop-filter: blur(44px) saturate(190%);
   }
 
+  /* The rim.
+   *
+   * A pane of glass is not a flat tint - it has an edge, and the edge is where
+   * the light lands. The single inset top line every surface already carries
+   * reads as a highlight painted on; this is a gradient around the whole
+   * border, bright where light would fall and fading away from it, which is
+   * what makes the surface read as having thickness rather than being a
+   * coloured rectangle.
+   *
+   * Drawn with a mask so it is one composited layer and costs nothing to
+   * animate: paint the gradient, then keep only the 1px border of it. */
+  .glass::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    background: linear-gradient(
+      160deg,
+      var(--rim-bright) 0%,
+      transparent 38%,
+      transparent 62%,
+      var(--rim-dim) 100%
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+
+  /* A surface that scrolls carries its own absolutely-positioned children away
+   * with the content, so its rim would slide off the edge. Those keep the
+   * plain 1px border instead. */
+  .glass.scroll-x::after,
+  .glass.overflow-y-auto::after,
+  .glass.overflow-auto::after {
+    display: none;
+  }
+
   /* For dense data. Tables over thin glass are unreadable, so the surface
    * carrying rows is nearly opaque while the chrome around it stays sheer.
    * This is the one place the illusion is traded for legibility. */
@@ -410,7 +504,7 @@
     border-radius: inherit;
     pointer-events: none;
     opacity: 0;
-    transition: opacity var(--dur-base) var(--ease-spatial);
+    transition: opacity var(--dur-base) var(--ease-hover);
     background: radial-gradient(
       22rem circle at var(--mx, 25%) var(--my, 0%),
       var(--specular),
@@ -433,10 +527,10 @@
 
   .lift {
     transition:
-      transform var(--dur-base) var(--ease-spatial),
-      box-shadow var(--dur-base) var(--ease-spatial),
-      background-color var(--dur-base) var(--ease-spatial),
-      border-color var(--dur-base) var(--ease-spatial);
+      transform var(--dur-fast) var(--ease-hover),
+      box-shadow var(--dur-fast) var(--ease-hover),
+      background-color var(--dur-fast) var(--ease-hover),
+      border-color var(--dur-fast) var(--ease-hover);
     will-change: transform;
   }
 
@@ -452,18 +546,24 @@
     }
   }
 
+  /* The press is the one moment the interface proves it heard you, so it is
+   * the fastest thing on the page. */
   .lift:active {
     transform: translate3d(0, 0, 0) scale(0.988);
-    transition-duration: var(--dur-fast);
+    transition-duration: var(--dur-press);
   }
 
-  /* Interactive controls press without lifting - they sit in the surface. */
+  /* Interactive controls press without lifting - they sit in the surface.
+   *
+   * Feedback belongs on pointer-down, not on release, and it has to be nearly
+   * instant: this is the moment the user is watching hardest. 0.97 is enough
+   * to read as a press without the label visibly shrinking. */
   .press {
     transition:
-      transform var(--dur-fast) var(--ease-spatial),
-      background-color var(--dur-base) var(--ease-spatial);
+      transform var(--dur-press) var(--ease-out),
+      background-color var(--dur-fast) var(--ease-hover);
   }
-  .press:active { transform: scale(0.96); }
+  .press:active { transform: scale(0.97); }
 
   /* =======================================================================
    * ORNAMENT - the floating navigation rail
@@ -498,14 +598,14 @@
     position: relative;
     border-radius: 999px;
     transition:
-      background-color var(--dur-base) var(--ease-spatial),
-      color var(--dur-base) var(--ease-spatial),
-      transform var(--dur-fast) var(--ease-spatial);
+      background-color var(--dur-fast) var(--ease-hover),
+      color var(--dur-fast) var(--ease-hover),
+      transform var(--dur-press) var(--ease-out);
   }
   @media (hover: hover) {
     .ornament-item:hover { background-color: var(--mat-thick); }
   }
-  .ornament-item:active { transform: scale(0.94); }
+  .ornament-item:active { transform: scale(0.96); }
 
   .ornament-item[data-active="true"] {
     background-color: var(--mat-thick);
@@ -533,7 +633,7 @@
    * ==================================================================== */
 
   .table-zebra tbody tr {
-    transition: background-color var(--dur-fast) var(--ease-spatial);
+    transition: background-color var(--dur-press) var(--ease-hover);
   }
   .table-zebra tbody tr:nth-child(odd) {
     background-color: color-mix(in oklab, var(--color-foreground) 3%, transparent);
@@ -542,6 +642,33 @@
     .table-zebra tbody tr:hover {
       background-color: color-mix(in oklab, var(--color-foreground) 7%, transparent);
     }
+  }
+
+  /* The scroll edge.
+   *
+   * The header floats over the page rather than sitting in a strip of its own,
+   * so content passes underneath it and, without help, the top line of a table
+   * is simply cut in half by the pill's edge. Apple's answer is not a divider
+   * but a soft edge: a short gradient fixed at the top of the viewport, tuned
+   * to the environment's own scrim, so content dissolves into the chrome
+   * instead of colliding with it. Fixed rather than sticky - it never moves,
+   * so it costs one composited layer and nothing per frame. */
+  .scroll-edge {
+    position: fixed;
+    inset: 0 0 auto 0;
+    height: 5.5rem;
+    z-index: 20;
+    pointer-events: none;
+    background: linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--color-background) 62%, transparent) 0%,
+      color-mix(in oklab, var(--color-background) 28%, transparent) 45%,
+      transparent 100%
+    );
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 42%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 0%, #000 42%, transparent 100%);
   }
 
   /* A row that would otherwise force the page wider than the screen - a tab
@@ -617,20 +744,48 @@
  * ======================================================================== */
 
 @keyframes environment-drift {
-  from { transform: scale(1.06) translate3d(-0.6%, -0.4%, 0); }
-  to   { transform: scale(1.1) translate3d(0.6%, 0.4%, 0); }
+  from { transform: scale(1.12) translate3d(-0.6%, -0.4%, 0); }
+  to   { transform: scale(1.16) translate3d(0.6%, 0.4%, 0); }
 }
 
+/* The page arriving.
+ *
+ * This used to run 520ms per card with delays out to 270ms - nearly eight
+ * tenths of a second before the last card settled, on every single navigation.
+ * A screen you see dozens of times a day is the one place motion has to get
+ * out of the way, so it is now a short, shallow settle: 8px instead of 14, no
+ * blur (six blurred cards is real work for the compositor on every nav), and
+ * done in a third of the time.
+ *
+ * The scale is kept, barely. Nothing in the world appears at full size from
+ * nothing, and 0.99 is enough to read as arriving without looking like a zoom. */
 @keyframes spatial-in {
   from {
     opacity: 0;
-    transform: translate3d(0, 14px, 0) scale(0.985);
-    filter: blur(6px);
+    transform: translate3d(0, 8px, 0) scale(0.99);
   }
   to {
     opacity: 1;
     transform: none;
-    filter: none;
+  }
+}
+
+/* Glass surfaces that genuinely arrive - a dialog, the phone menu - do get the
+ * blur, because a material forming is exactly what it is meant to read as.
+ * Apple calls this materialising rather than fading: the blur and the scale
+ * move together, so the surface condenses into place instead of ramping an
+ * opacity value. It is affordable here because it happens to one surface at a
+ * time, on purpose, not to a whole page. */
+@keyframes materialize-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0) scale(0.97);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
   }
 }
 
@@ -655,6 +810,29 @@
   to   { transform: none; }
 }
 
+/* The exit is faster than the entrance.
+ *
+ * Slow where the user is deciding, fast where the system is responding: a
+ * dialog arriving is worth watching, a dialog you have dismissed is in the
+ * way. It also blurs out rather than fading, so it leaves the way it came. */
+@keyframes materialize-out {
+  from {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0) scale(0.98);
+    filter: blur(6px);
+  }
+}
+
+@keyframes scrim-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
 @keyframes sheen {
   from { transform: translateX(-120%); }
   to   { transform: translateX(220%); }
@@ -662,24 +840,48 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .animate-spatial-in {
-    animation: spatial-in var(--dur-slow) var(--ease-spatial) both;
+    animation: spatial-in var(--dur-slow) var(--ease-out) both;
+  }
+  .animate-materialize {
+    animation: materialize-in var(--dur-slow) var(--ease-out) both;
+  }
+
+  /* A surface driven by Radix's open/closed state - a dialog, a sheet - takes
+   * both halves: materialise in, and blur back out faster than it arrived. */
+  .materialize-surface[data-state="open"] {
+    animation: materialize-in var(--dur-slow) var(--ease-out) both;
+  }
+  .materialize-surface[data-state="closed"] {
+    animation: materialize-out var(--dur-base) var(--ease-out) both;
+  }
+  .scrim[data-state="open"] {
+    animation: scrim-in var(--dur-base) var(--ease-out) both;
+  }
+  .scrim[data-state="closed"] {
+    animation: scrim-in var(--dur-fast) var(--ease-out) reverse both;
   }
   .animate-ornament-in {
-    animation: ornament-in var(--dur-base) var(--ease-spatial) both;
+    animation: ornament-in var(--dur-base) var(--ease-out) both;
   }
 
-  /* A stagger, so a screen assembles rather than snapping into place. */
-  .stagger > * { animation: spatial-in var(--dur-slow) var(--ease-spatial) both; }
+  /* A stagger, so a screen assembles rather than snapping into place.
+   *
+   * 32ms between cards, and it stops climbing after the fifth: a stagger is
+   * decorative, and past about 160ms of accumulated delay it stops reading as
+   * a cascade and starts reading as the page being slow to load. The last card
+   * is settled inside half a second. */
+  .stagger > * { animation: spatial-in var(--dur-slow) var(--ease-out) both; }
   .stagger > *:nth-child(1) { animation-delay: 0ms; }
-  .stagger > *:nth-child(2) { animation-delay: 45ms; }
-  .stagger > *:nth-child(3) { animation-delay: 90ms; }
-  .stagger > *:nth-child(4) { animation-delay: 135ms; }
-  .stagger > *:nth-child(5) { animation-delay: 180ms; }
-  .stagger > *:nth-child(6) { animation-delay: 225ms; }
-  .stagger > *:nth-child(n + 7) { animation-delay: 270ms; }
+  .stagger > *:nth-child(2) { animation-delay: 32ms; }
+  .stagger > *:nth-child(3) { animation-delay: 64ms; }
+  .stagger > *:nth-child(4) { animation-delay: 96ms; }
+  .stagger > *:nth-child(5) { animation-delay: 128ms; }
+  .stagger > *:nth-child(n + 6) { animation-delay: 160ms; }
 
-  .panel-in-right { animation: panel-in-right var(--dur-fast) var(--ease-spatial) both; }
-  .panel-in-left  { animation: panel-in-left  var(--dur-fast) var(--ease-spatial) both; }
+  /* Moving between filters is travel across the screen, not an entrance, so it
+   * takes the in-out curve: accelerate away, decelerate in. */
+  .panel-in-right { animation: panel-in-right var(--dur-base) var(--ease-in-out) both; }
+  .panel-in-left  { animation: panel-in-left  var(--dur-base) var(--ease-in-out) both; }
 
   /* Loading uses a light sweep, not a grey pulse. */
   .shimmer { position: relative; overflow: hidden; }
@@ -692,15 +894,46 @@
   }
 }
 
+/* Reduced motion is not "no motion".
+ *
+ * Zeroing every duration - which is what this block used to do - takes away
+ * the colour and opacity transitions that tell you the interface heard you,
+ * and leaves an app that snaps between states. What actually causes trouble is
+ * movement: translation, scale, parallax, drift. So those go, and the rest
+ * stays, a little quicker.
+ *
+ * @keyframes entrances are simply not applied at all - the block that turns
+ * them on is gated on `prefers-reduced-motion: no-preference` - so content
+ * appears in place rather than travelling to it. */
 @media (prefers-reduced-motion: reduce) {
+  /* No transforms anywhere: no lift, no press, no slide, no zoom. */
+  .lift,
+  .lift:hover,
+  .lift:active,
+  .press:active,
+  .ornament-item:active {
+    transform: none !important;
+  }
+
+  /* The environment stops drifting; a slow full-viewport loop is one of the
+   * worst offenders for motion sensitivity. */
+  .environment__image {
+    animation: none !important;
+  }
+
+  .shimmer::after {
+    animation: none !important;
+  }
+
+  /* Everything else keeps its transition, shortened - opacity, colour and
+   * background still carry meaning and none of them move anything. */
   *,
   *::before,
   *::after {
-    animation-duration: 0.001ms !important;
+    transition-duration: 120ms !important;
+    animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
   }
-  .lift:hover { transform: none !important; }
 }
 
 /* Backdrop blur is expensive. Where it is unsupported, fall back to a solid

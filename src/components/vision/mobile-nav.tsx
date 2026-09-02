@@ -94,7 +94,7 @@ export function MobileNav({ role, name }: { role: StaffRole; name: string }) {
 
           <nav
             aria-label="Sections"
-            className="ornament ornament--panel animate-spatial-in fixed inset-x-3 top-[4.75rem] z-50 max-h-[calc(100dvh-6rem)] overflow-y-auto overscroll-contain rounded-[1.75rem] p-3 lg:hidden"
+            className="ornament ornament--panel animate-materialize fixed inset-x-3 top-[4.75rem] z-50 max-h-[calc(100dvh-6rem)] overflow-y-auto overscroll-contain rounded-[1.75rem] p-3 lg:hidden"
           >
             <div className="mb-2 flex items-center gap-2.5 px-1.5 pb-2">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-white via-[#FBF7F0] to-[#EDE6DA] shadow-[inset_0_1px_0_0_var(--edge-top)]">

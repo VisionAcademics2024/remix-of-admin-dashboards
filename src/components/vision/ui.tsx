@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { Link } from "@tanstack/react-router";
 import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Inbox } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -73,8 +74,11 @@ export function Section({
       material="regular"
       className={cn(
         "p-4 sm:p-6",
-        tone === "warning" && "border-warning/40",
-        tone === "success" && "border-success/35",
+        // A tone is a hint, not an alarm. A full-strength amber outline around
+        // a whole card reads as an error state; a soft edge with a trace of
+        // warmth in the surface says "worth a look" without shouting.
+        tone === "warning" && "border-warning/25 bg-warning/[0.045]",
+        tone === "success" && "border-success/22 bg-success/[0.035]",
         className,
       )}
     >
@@ -129,18 +133,29 @@ export function EmptyState({
   );
 }
 
+/**
+ * A number worth looking at.
+ *
+ * The card lifts toward the pointer only when it actually goes somewhere. A
+ * surface that rises to meet you and then does nothing when you click it is a
+ * promise the interface does not keep, and those are the details that quietly
+ * cost trust.
+ */
 export function StatCard({
   label,
   value,
   hint,
   tone = "default",
   icon: Icon,
+  to,
 }: {
   label: string;
   value: ReactNode;
   hint?: string | undefined;
   tone?: "default" | "warning" | "success" | "danger" | undefined;
   icon?: typeof Inbox | undefined;
+  /** Where this number lives in full. Given one, the whole card is the link. */
+  to?: string | undefined;
 }) {
   const toneClass = {
     default: "text-foreground",
@@ -149,28 +164,120 @@ export function StatCard({
     danger: "text-destructive",
   }[tone];
 
-  return (
-    <Glass material="regular" interactive className="p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[0.8rem] font-medium text-muted-foreground">{label}</p>
-          <p
-            className={cn(
-              "mt-1.5 text-[2rem] font-semibold leading-none tabular-nums tracking-[-0.03em]",
-              toneClass,
-            )}
-          >
-            {value}
+  const body = (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        {/* Small type gets tracking back - it is read at a glance, not word by
+            word, and the body's negative tracking closes it up. */}
+        <p className="text-[0.78rem] font-medium tracking-[0.004em] text-muted-foreground">
+          {label}
+        </p>
+        <p
+          className={cn(
+            // Large numerals tighten as they grow, the way Apple's optical
+            // sizing does. tabular-nums so a ticking value never re-flows.
+            // A step down on a phone so two cards fit across without a money
+            // value wrapping mid-figure.
+            // Sized so a formatted money value fits a half-width card on a
+            // phone without breaking across two lines mid-figure.
+            "mt-1.5 whitespace-nowrap text-[1.3rem] font-semibold leading-[1] tabular-nums tracking-[-0.03em] sm:text-[2.125rem] sm:tracking-[-0.035em]",
+            toneClass,
+          )}
+        >
+          {value}
+        </p>
+        {hint && (
+          <p className="mt-2 line-clamp-2 text-[0.75rem] leading-snug tracking-[0.004em] text-muted-foreground">
+            {hint}
           </p>
-          {hint && <p className="mt-2 truncate text-xs text-muted-foreground">{hint}</p>}
-        </div>
-        {Icon && (
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--mat-thick)]">
-            <Icon className="h-4 w-4 text-muted-foreground" strokeWidth={1.6} />
-          </span>
         )}
       </div>
-    </Glass>
+      {Icon && (
+        <span
+          className={cn(
+            "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--mat-thick)]",
+            tone !== "default" && toneClass,
+          )}
+        >
+          <Icon
+            className={cn("h-4 w-4", tone === "default" && "text-muted-foreground")}
+            strokeWidth={1.7}
+          />
+        </span>
+      )}
+    </div>
+  );
+
+  if (!to) {
+    return (
+      <Glass material="regular" className="p-5">
+        {body}
+      </Glass>
+    );
+  }
+
+  return (
+    <Link to={to} className="focus-spatial block rounded-[var(--radius-2xl)]">
+      <Glass material="regular" interactive className="p-5">
+        {body}
+      </Glass>
+    </Link>
+  );
+}
+
+/**
+ * A bar that says how far through something you are.
+ *
+ * Status is one of the four kinds of feedback an interface owes you, and a
+ * count alone ("12 to mark") does not say whether that is nearly done or barely
+ * started. The fill is a transform rather than a width, so it animates on the
+ * compositor instead of forcing layout on every change.
+ */
+export function Meter({
+  value,
+  total,
+  tone = "default",
+  label,
+}: {
+  value: number;
+  total: number;
+  tone?: "default" | "warning" | "success" | undefined;
+  label?: string | undefined;
+}) {
+  const fraction = total > 0 ? Math.min(Math.max(value / total, 0), 1) : 0;
+  const fill = {
+    default: "bg-primary",
+    warning: "bg-warning",
+    success: "bg-success",
+  }[tone];
+
+  return (
+    <div className="space-y-1.5">
+      {label && (
+        <div className="flex items-baseline justify-between gap-3 text-[0.75rem] tracking-[0.004em] text-muted-foreground">
+          <span>{label}</span>
+          <span className="tabular-nums">
+            {value} / {total}
+          </span>
+        </div>
+      )}
+      <div
+        role="progressbar"
+        aria-valuenow={value}
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-label={label ?? "Progress"}
+        className="h-1.5 overflow-hidden rounded-full bg-[var(--mat-thick)] shadow-[inset_0_1px_0_0_var(--edge-top)]"
+      >
+        <div
+          className={cn("h-full w-full origin-left rounded-full", fill)}
+          style={{
+            transform: `scaleX(${fraction})`,
+            transition: "transform var(--dur-slow) var(--ease-out)",
+          }}
+        />
+      </div>
+    </div>
   );
 }
 
