@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { queryOptions, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
-import { Receipt, Sparkles, Wallet } from "lucide-react";
+import { useMemo, useState } from "react";
+import { AlertTriangle, Plus, Receipt, Sparkles, Wallet } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import {
   Code,
   EmptyState,
@@ -34,25 +36,34 @@ import {
   TableShell,
   Td,
   Th,
+  WarningNote,
 } from "@/components/vision/ui";
 import { Segmented } from "@/components/vision/segmented";
 import { formatDate, formatDay, formatHours, formatMoney, sydToday } from "@/lib/format";
+import { groupUnbilled, type UnbilledFinding } from "@/lib/vision/billing-audit";
+import { listStudents } from "@/lib/vision/people.functions";
 import {
   adjustCharge,
   cancelCharge,
   createHoursCharge,
+  createManualCharge,
   createPaygCharge,
   firmEnrolmentPlan,
+  getBillingAudit,
   getBillingBoard,
   markInvoiced,
   markPaid,
   restoreCharge,
   setChargeMethod,
 } from "@/lib/vision/billing.functions";
-import { LABELS, Row } from "@/lib/vision/types";
+import { chargeSourceLabel, LABELS, Row } from "@/lib/vision/types";
 
 const billingQueryOptions = () =>
   queryOptions({ queryKey: ["billing"], queryFn: () => getBillingBoard() });
+
+/** The audit is a heavier read, so it loads alongside rather than blocking. */
+const auditQueryOptions = () =>
+  queryOptions({ queryKey: ["billing-audit"], queryFn: () => getBillingAudit() });
 
 export const Route = createFileRoute("/_authenticated/billing")({
   loader: ({ context }) => context.queryClient.ensureQueryData(billingQueryOptions()),
@@ -66,10 +77,13 @@ type ChargePayload =
 
 function BillingPage() {
   const { data } = useSuspenseQuery(billingQueryOptions());
+  const { data: audit } = useQuery(auditQueryOptions());
+  const [newBill, setNewBill] = useState(false);
   const queryClient = useQueryClient();
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: ["billing"] });
+    await queryClient.invalidateQueries({ queryKey: ["billing-audit"] });
     await queryClient.invalidateQueries({ queryKey: ["today"] });
     await queryClient.invalidateQueries({ queryKey: ["needs-attention-count"] });
   }
@@ -83,7 +97,24 @@ function BillingPage() {
       <PageHeader
         title="Billing"
         description="Money as a pipeline — from a lesson taught to a payment received. Every figure is adjustable until it's committed, and cash and card invoice as two separate runs."
+        actions={
+          <Button onClick={() => setNewBill(true)}>
+            <Plus /> New bill
+          </Button>
+        }
       />
+
+      {(data.truncated?.uncharged || data.truncated?.charges) && (
+        <WarningNote>
+          This account has more billing history than one screen can hold, so the lists below are
+          capped. Nothing has been lost — the oldest unbilled lessons are shown first, and the
+          record of what has already been charged is read in full, so nothing can be billed twice.
+        </WarningNote>
+      )}
+
+      {/* The audit sits above the pipeline on purpose. Everything below is work
+          the app already knows about; this is the work it did not. */}
+      <UnbilledSection audit={audit} onNewBill={() => setNewBill(true)} />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard label="To set up" value={data.newEnrolments.length} tone="warning" icon={Sparkles} />
@@ -148,7 +179,358 @@ function BillingPage() {
       >
         <CancelledTable rows={data.cancelled} onRefresh={refresh} />
       </Section>
+
+      {newBill && <NewBillDialog onClose={() => setNewBill(false)} onRefresh={refresh} />}
     </div>
+  );
+}
+
+/* ------------------------------------------------------ 0. Not reaching billing */
+
+/**
+ * The students the pipeline below cannot see.
+ *
+ * Every queue on this page starts from a row - a lesson taught, a package
+ * bought, an enrolment with a blank price. A student on hours whose package was
+ * never created has none of those, so they are taught, marked present, and
+ * never billed, and no screen says so. This is that list.
+ *
+ * It never raises anything by itself. Money is not a thing to guess at: the
+ * screen names what is wrong and where to go and fix it, and a person decides.
+ */
+function UnbilledSection({
+  audit,
+  onNewBill,
+}: {
+  audit: { findings: UnbilledFinding[] } | undefined;
+  onNewBill: () => void;
+}) {
+  const groups = useMemo(() => groupUnbilled(audit?.findings ?? []), [audit]);
+
+  if (!audit) {
+    return (
+      <Section title="Not reaching billing" description="Checking every enrolment and package…">
+        <div className="h-16 rounded-2xl bg-[var(--mat-thin)]" />
+      </Section>
+    );
+  }
+
+  if (groups.length === 0) {
+    return (
+      <Section
+        title="Not reaching billing"
+        count={0}
+        description="Every student being taught can be billed."
+        tone="success"
+      >
+        <EmptyState
+          title="Nothing is falling through"
+          hint="Each active enrolment is either pay-as-you-go, or on hours with a package behind it that its lessons draw from."
+        />
+      </Section>
+    );
+  }
+
+  const totalHours = groups.reduce((sum, g) => sum + g.hours, 0);
+
+  return (
+    <Section
+      title="Not reaching billing"
+      count={audit.findings.length}
+      description="Students being taught who none of the queues below can see. Each one is time already given away."
+      tone="warning"
+      actions={
+        <Button size="sm" variant="outline" onClick={onNewBill}>
+          <Plus /> Bill one manually
+        </Button>
+      }
+    >
+      {totalHours > 0 && (
+        <p className="mb-4 text-[0.85rem] text-muted-foreground">
+          <span className="font-semibold text-warning">{formatHours(totalHours)}</span> taught with
+          nothing to invoice against.
+        </p>
+      )}
+
+      <div className="space-y-5">
+        {groups.map((group) => (
+          <div key={group.reason}>
+            <div className="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <h3 className="flex items-center gap-2 text-[0.95rem] font-semibold">
+                <AlertTriangle
+                  className={cn(
+                    "h-4 w-4 shrink-0",
+                    group.severity === "high" ? "text-destructive" : "text-warning",
+                  )}
+                  strokeWidth={2}
+                />
+                {group.title}
+              </h3>
+              <span className="rounded-full bg-[var(--mat-thick)] px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
+                {group.items.length}
+              </span>
+            </div>
+            <p className="mb-3 max-w-3xl text-[0.82rem] leading-relaxed text-muted-foreground">
+              {group.explain}
+            </p>
+
+            <TableShell>
+              <thead>
+                <tr>
+                  <Th>Student</Th>
+                  <Th>Class</Th>
+                  <Th>Enrolment</Th>
+                  <Th className="text-right">Hours taught</Th>
+                  <Th className="text-right">Lessons</Th>
+                  <Th className="text-right">Fix</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {group.items.map((item) => (
+                  <tr key={`${item.reason}-${item.id}`}>
+                    <Td>
+                      {item.studentId ? (
+                        <Link
+                          to="/students/$id"
+                          params={{ id: item.studentId }}
+                          className="font-medium hover:underline"
+                        >
+                          {item.studentName}
+                        </Link>
+                      ) : (
+                        <span className="font-medium">{item.studentName}</span>
+                      )}
+                    </Td>
+                    <Td className="max-w-56">
+                      <span className="block truncate">{item.className ?? "-"}</span>
+                    </Td>
+                    <Td>
+                      <Code>{item.code}</Code>
+                    </Td>
+                    <Td className="text-right tabular-nums">
+                      {item.hours > 0 ? formatHours(item.hours) : "-"}
+                    </Td>
+                    <Td className="text-right tabular-nums">{item.lessons || "-"}</Td>
+                    <Td className="text-right">
+                      {/* Where the fix lives, not a button that guesses at it.
+                          Hours and prices are agreed with a family, never
+                          inferred from a roll. */}
+                      <Button asChild size="sm" variant="outline">
+                        <Link to="/enrolments">
+                          {item.reason === "hours_no_package" ? "Add a package" : "Open enrolments"}
+                        </Link>
+                      </Button>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </TableShell>
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-4 text-xs text-muted-foreground">
+        Nothing here is charged automatically. Fix the enrolment or package and the student rejoins
+        the queues below, or raise a one-off bill with <strong>New bill</strong>.
+      </p>
+    </Section>
+  );
+}
+
+/* ------------------------------------------------------ 0b. A bill of your own */
+
+/**
+ * A bill with nothing behind it.
+ *
+ * Every other charge on this page is raised from something the system already
+ * holds - a lesson that was taught, a package that was bought. This one starts
+ * from a student and an amount, for everything that has no row to hang off: a
+ * resource fee, a catch-up arranged off the timetable, a deposit taken before
+ * the class exists, a figure agreed on the phone.
+ *
+ * The database refuses to let it carry a package or an attendance, so it can
+ * never become a second charge against something already billed.
+ */
+function NewBillDialog({
+  onClose,
+  onRefresh,
+}: {
+  onClose: () => void;
+  onRefresh: () => Promise<void>;
+}) {
+  const create = useServerFn(createManualCharge);
+  const { data: students = [] } = useQuery({
+    queryKey: ["students"],
+    queryFn: () => listStudents(),
+  });
+
+  const [studentId, setStudentId] = useState("");
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
+  const [adjustment, setAdjustment] = useState("0");
+  const [route, setRoute] = useState<"parent" | "internal">("parent");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const student = (students as Row[]).find((s) => s.id === studentId);
+  const payer = student?.guardians?.find?.((g: Row) => g.id === student?.default_payer_id);
+  const hasPayer = Boolean(student?.default_payer_id);
+  const total = Number(amount || 0) + Number(adjustment || 0);
+
+  // The one thing standing between this form and a raised bill, said plainly.
+  // Checked in the order a person fills the form in, so the message moves down
+  // the dialog rather than jumping about.
+  const problem = !studentId
+    ? "Choose a student."
+    : !description.trim()
+      ? "Say what the bill is for."
+      : !amount || Number(amount) < 0
+        ? "Enter an amount."
+        : total < 0
+          ? "The discount is larger than the bill itself."
+          : route === "parent" && !hasPayer
+            ? `${student?.full_name ?? "This student"} has no default payer. Set one on the student, or bill this internally.`
+            : null;
+
+  async function save() {
+    setSaving(true);
+    try {
+      await create({
+        data: {
+          student_id: studentId,
+          standard_amount: Number(amount),
+          adjustment: Number(adjustment || 0),
+          route,
+          description: description.trim(),
+          notes,
+        },
+      });
+      await onRefresh();
+      toast.success("Bill raised. It is in the to-invoice queue.");
+      onClose();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New bill</DialogTitle>
+          <DialogDescription>
+            A one-off charge for anything that is not a lesson or an hours package. It lands in the
+            to-invoice queue with everything else.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="bill-student">Student</Label>
+            <Select value={studentId} onValueChange={setStudentId}>
+              <SelectTrigger id="bill-student">
+                <SelectValue placeholder="Choose a student" />
+              </SelectTrigger>
+              <SelectContent>
+                {(students as Row[]).map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.full_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {student && (
+              <p className="text-xs text-muted-foreground">
+                {hasPayer
+                  ? `Billed to ${payer?.full_name ?? "the default payer"}.`
+                  : "No default payer set for this student."}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="bill-description">What is it for</Label>
+            <Input
+              id="bill-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Catch-up lesson, resource fee, deposit…"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="bill-amount">Amount</Label>
+              <Input
+                id="bill-amount"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="bill-adjustment">Adjustment</Label>
+              <Input
+                id="bill-adjustment"
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                value={adjustment}
+                onChange={(e) => setAdjustment(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">Negative for a discount.</p>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="bill-route">Route</Label>
+            <Select value={route} onValueChange={(v: "parent" | "internal") => setRoute(v)}>
+              <SelectTrigger id="bill-route">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="parent">Parent — billed to the default payer</SelectItem>
+                <SelectItem value="internal">Internal (cash/bank)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="bill-notes">Notes</Label>
+            <Textarea
+              id="bill-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Anything the invoice should carry."
+            />
+          </div>
+
+          <div className="flex items-baseline justify-between rounded-2xl border border-[var(--edge)] bg-[var(--mat-thin)] px-4 py-3">
+            <span className="text-[0.8rem] text-muted-foreground">Total</span>
+            <span className="text-[1.4rem] font-semibold tabular-nums tracking-[-0.02em]">
+              {formatMoney(total)}
+            </span>
+          </div>
+
+          {problem && <p className="text-[0.8rem] text-warning">{problem}</p>}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={save} disabled={Boolean(problem) || saving}>
+            {saving ? "Raising…" : "Raise the bill"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -451,9 +833,7 @@ function ToInvoiceBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Prom
                 </Td>
                 <Td>
                   <Code>{c.code}</Code>
-                  <div className="text-xs text-muted-foreground">
-                    {c.source === "hours" ? "Hours package" : "PAYG lesson"}
-                  </div>
+                  <div className="text-xs text-muted-foreground">{chargeSourceLabel(c.source)}</div>
                 </Td>
                 <Td>
                   <Link to="/students/$id" params={{ id: c.student_id }} className="hover:underline">
@@ -652,7 +1032,7 @@ function CancelledTable({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Pro
                 {c.students?.full_name}
               </Link>
             </Td>
-            <Td>{c.source === "hours" ? "Hours package" : "PAYG lesson"}</Td>
+            <Td>{chargeSourceLabel(c.source)}</Td>
             <Td className="text-right tabular-nums text-muted-foreground line-through">
               {formatMoney(c.final_amount)}
             </Td>

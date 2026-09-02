@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { db, requireStaff } from "./guard";
+import { findUnbilled } from "./billing-audit";
 import type { Row } from "./types";
 
 /**
@@ -15,8 +16,14 @@ export const getBillingBoard = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const client = db(context.supabase);
 
-    const [uncharged, charges, packagesToCharge, newEnrolments] = await Promise.all([
+    const [uncharged, charges, billedKeys, packagesToCharge, newEnrolments] = await Promise.all([
       // PAYG lessons attended but not charged.
+      //
+      // Ordered OLDEST first, deliberately. This list is capped, and the cap
+      // used to sit under a newest-first order - so once the backlog passed the
+      // cap it was the oldest, most overdue lessons that fell off the end and
+      // stopped being billable. The ones that have waited longest are the ones
+      // that must survive the cut.
       client
         .from("v_attendance")
         .select(
@@ -24,13 +31,21 @@ export const getBillingBoard = createServerFn({ method: "GET" })
         )
         .eq("billing_method", "payg")
         .eq("status", "present")
-        .order("lesson_starts_at", { ascending: false })
-        .limit(300),
+        .order("lesson_starts_at", { ascending: true })
+        .limit(UNCHARGED_LIMIT),
       client
         .from("v_charges")
         .select("*, students(id, code, full_name), guardians(id, full_name)")
         .order("created_at", { ascending: false })
-        .limit(500),
+        .limit(CHARGE_LIMIT),
+      // What has already been billed, as ids only.
+      //
+      // This is separate from the list above on purpose. "Already charged" used
+      // to be derived from that capped list, which meant that past the cap the
+      // app forgot a lesson had been billed and offered it up to be billed
+      // again. Ids are small enough to read without a cap, so the guard against
+      // double-billing is never the thing that gets truncated.
+      client.from("charges").select("attendance_id, package_id").neq("status", "cancelled"),
       // Hours packages with no charge raised against them yet.
       client
         .from("v_hours_packages")
@@ -54,11 +69,12 @@ export const getBillingBoard = createServerFn({ method: "GET" })
     ]);
 
     const chargeRows = charges.data ?? [];
+    const billed = billedKeys.data ?? [];
     const chargedAttendance = new Set(
-      chargeRows.filter((c: Row) => c.attendance_id).map((c: Row) => c.attendance_id),
+      billed.filter((c: Row) => c.attendance_id).map((c: Row) => c.attendance_id),
     );
     const chargedPackages = new Set(
-      chargeRows.filter((c: Row) => c.package_id).map((c: Row) => c.package_id),
+      billed.filter((c: Row) => c.package_id).map((c: Row) => c.package_id),
     );
 
     // Purchased packages still to charge - including the zero-priced ones a
@@ -81,7 +97,148 @@ export const getBillingBoard = createServerFn({ method: "GET" })
       unpaid: chargeRows.filter((c: Row) => c.status === "invoiced"),
       received: chargeRows.filter((c: Row) => c.status === "paid"),
       cancelled: chargeRows.filter((c: Row) => c.status === "cancelled"),
+      // Said out loud rather than left to be discovered: a capped list that
+      // does not admit it is capped is how work goes missing.
+      truncated: {
+        uncharged: (uncharged.data ?? []).length >= UNCHARGED_LIMIT,
+        charges: chargeRows.length >= CHARGE_LIMIT,
+      },
     };
+  });
+
+/**
+ * Caps.
+ *
+ * Both queues are bounded so one enormous account cannot make the page
+ * unusable, but the board now reports when it has hit a cap instead of quietly
+ * showing part of the picture.
+ */
+const UNCHARGED_LIMIT = 500;
+const CHARGE_LIMIT = 1000;
+
+/**
+ * The audit: students who ought to be reachable from Billing and are not.
+ *
+ * Every queue on the billing board starts from a row - an attendance, a
+ * package, an enrolment with a blank price. This reads the same tables without
+ * those assumptions and hands the whole picture to findUnbilled, which holds
+ * the rules. Kept as its own call rather than folded into the board: it is a
+ * heavier read, it is not needed to do the day's invoicing, and it should not
+ * slow down the screen that is.
+ */
+export const getBillingAudit = createServerFn({ method: "GET" })
+  .middleware([requireStaff])
+  .handler(async ({ context }) => {
+    const client = db(context.supabase);
+
+    const [enrolments, packages, attendance, charged] = await Promise.all([
+      // Trials are excluded at the source: a trial never owes anything.
+      client
+        .from("enrolments")
+        .select(
+          "id, code, status, method, base_price, student_id, starts_on, " +
+            "students(id, code, full_name, default_payer_id), " +
+            "class_offerings(code, programs(name))",
+        )
+        .neq("status", "trial"),
+      client.from("hours_packages").select("id, code, student_id, status, package_type, price"),
+      // Only roll entries that actually consumed time. hours_consumed is
+      // computed by the view, so a cancelled lesson or an absence is already
+      // zero and never reaches here.
+      client
+        .from("v_attendance")
+        .select("id, enrolment_id, package_id, hours_consumed, session_date")
+        .eq("status", "present")
+        .neq("att_type", "trial")
+        .gt("hours_consumed", 0),
+      client.from("charges").select("attendance_id").neq("status", "cancelled"),
+    ]);
+
+    for (const result of [enrolments, packages, attendance, charged]) {
+      if (result.error) throw result.error;
+    }
+
+    const findings = findUnbilled({
+      enrolments: enrolments.data ?? [],
+      packages: packages.data ?? [],
+      attendance: attendance.data ?? [],
+      chargedAttendanceIds: new Set(
+        (charged.data ?? []).filter((c: Row) => c.attendance_id).map((c: Row) => c.attendance_id),
+      ),
+    });
+
+    return {
+      findings,
+      scanned: {
+        enrolments: (enrolments.data ?? []).length,
+        packages: (packages.data ?? []).length,
+        attendance: (attendance.data ?? []).length,
+      },
+    };
+  });
+
+/**
+ * A bill that is not a lesson and not a package.
+ *
+ * Deliberately the only way to put an arbitrary amount on a family's account,
+ * and deliberately unable to reference a package or an attendance row - the
+ * database constraint enforces that, so a manual bill can never be a second
+ * charge against something already billed.
+ */
+export const createManualCharge = createServerFn({ method: "POST" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    z
+      .object({
+        student_id: z.string().uuid(),
+        standard_amount: z.coerce.number().min(0),
+        adjustment: z.coerce.number().default(0),
+        route: z.enum(["parent", "internal"]).default("parent"),
+        /** What the bill is for. Required - an unexplained amount is unbillable. */
+        description: z.string().min(1, "Say what this bill is for."),
+        notes: z.string().optional().or(z.literal("")),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+
+    const { data: student, error: studentError } = await client
+      .from("students")
+      .select("id, full_name, default_payer_id")
+      .eq("id", data.student_id)
+      .maybeSingle();
+    if (studentError) throw studentError;
+    if (!student) throw new Error("That student no longer exists.");
+
+    const payerId = (student as Row).default_payer_id ?? null;
+    if (data.route === "parent" && !payerId) {
+      throw new Error(
+        `${student.full_name} has no default payer, so a parent-routed bill cannot be raised. Set one on the student, or bill this internally.`,
+      );
+    }
+
+    // The description leads the note so it reads as the line item it is.
+    const note = data.notes ? `${data.description} — ${data.notes}` : data.description;
+
+    const { error } = await client.from("charges").insert({
+      student_id: data.student_id,
+      payer_id: data.route === "parent" ? payerId : null,
+      source: "manual",
+      standard_amount: data.standard_amount,
+      adjustment: data.adjustment,
+      route: data.route,
+      status: "to_invoice",
+      notes: note,
+    });
+    if (error) {
+      throw new Error(
+        error.message.includes("charge_one_source")
+          ? "This database has not had the manual-charge migration applied yet."
+          : error.message,
+      );
+    }
+    return { success: true };
   });
 
 /**
