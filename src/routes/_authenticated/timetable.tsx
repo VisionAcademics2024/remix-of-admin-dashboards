@@ -46,7 +46,13 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Code, EmptyState, StatusPill } from "@/components/vision/ui";
-import { MonthGrid, TimeGrid, toCalendarEvent } from "@/components/vision/calendar";
+import {
+  MonthGrid,
+  ROLL_DONE,
+  ROLL_OVERDUE,
+  TimeGrid,
+  toCalendarEvent,
+} from "@/components/vision/calendar";
 import { cn } from "@/lib/utils";
 import {
   addDays,
@@ -85,7 +91,18 @@ import { listStudents } from "@/lib/vision/people.functions";
 import { getCatalogue } from "@/lib/vision/catalogue.functions";
 import type { Row } from "@/lib/vision/types";
 
-type View = "day" | "week" | "month";
+/**
+ * Day, three days, week, month.
+ *
+ * Three days is the working middle: a week is a lot of columns on a laptop, and
+ * a day is too narrow to see what is coming - so "today and the next two" is
+ * the view you actually plan from. Google calls its own version "4 days"; the
+ * shape is the same, only the span differs.
+ */
+type View = "day" | "3day" | "week" | "month";
+
+/** How many days each grid view draws, starting at the anchor. */
+const GRID_DAYS: Partial<Record<View, number>> = { day: 1, "3day": 3 };
 
 const rangeQueryOptions = (from: string, to: string, tutorId: string | null) =>
   queryOptions({
@@ -96,6 +113,7 @@ const rangeQueryOptions = (from: string, to: string, tutorId: string | null) =>
 /** The span a view covers, and the days it draws. */
 function spanFor(view: View, anchor: string) {
   if (view === "day") return { from: anchor, to: anchor };
+  if (view === "3day") return { from: anchor, to: addDays(anchor, 2) };
   if (view === "week") {
     const from = weekStart(anchor);
     return { from, to: addDays(from, 6) };
@@ -111,23 +129,29 @@ function titleFor(view: View, anchor: string) {
   const fmt = (iso: string, opts: Intl.DateTimeFormatOptions) =>
     d(iso).toLocaleDateString("en-AU", { ...opts, timeZone: "UTC" });
 
+  /** "31 Aug – 6 Sept 2026", collapsing the month when both ends share one. */
+  const span = (from: string, to: string) =>
+    from.slice(0, 7) === to.slice(0, 7)
+      ? `${Number(from.slice(8))} – ${fmt(to, { day: "numeric", month: "long", year: "numeric" })}`
+      : `${fmt(from, { day: "numeric", month: "short" })} – ${fmt(to, { day: "numeric", month: "short", year: "numeric" })}`;
+
   if (view === "day") {
     return fmt(anchor, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   }
   if (view === "month") {
     return fmt(anchor, { month: "long", year: "numeric" });
   }
+  if (view === "3day") {
+    return span(anchor, addDays(anchor, 2));
+  }
 
   const from = weekStart(anchor);
-  const to = addDays(from, 6);
-  const sameMonth = from.slice(0, 7) === to.slice(0, 7);
-  return sameMonth
-    ? `${Number(from.slice(8))} – ${fmt(to, { day: "numeric", month: "long", year: "numeric" })}`
-    : `${fmt(from, { day: "numeric", month: "short" })} – ${fmt(to, { day: "numeric", month: "short", year: "numeric" })}`;
+  return span(from, addDays(from, 6));
 }
 
 function step(view: View, anchor: string, direction: 1 | -1) {
   if (view === "day") return addDays(anchor, direction);
+  if (view === "3day") return addDays(anchor, 3 * direction);
   if (view === "week") return addDays(anchor, 7 * direction);
   const d = new Date(`${anchor.slice(0, 7)}-01T00:00:00Z`);
   d.setUTCMonth(d.getUTCMonth() + direction);
@@ -144,6 +168,7 @@ export const Route = createFileRoute("/_authenticated/timetable")({
 
 const VIEWS: Array<{ key: View; label: string }> = [
   { key: "day", label: "Day" },
+  { key: "3day", label: "3 days" },
   { key: "week", label: "Week" },
   { key: "month", label: "Month" },
 ];
@@ -226,7 +251,8 @@ function TimetablePage() {
   }
 
   const gridDays = useMemo(() => {
-    if (view === "day") return [anchor];
+    const count = GRID_DAYS[view];
+    if (count) return Array.from({ length: count }, (_, i) => addDays(anchor, i));
     if (view === "week") {
       const start = weekStart(anchor);
       return Array.from({ length: 7 }, (_, i) => addDays(start, i));
@@ -321,7 +347,7 @@ function TimetablePage() {
                   "rounded-full px-3 py-1 text-xs font-medium transition-colors",
                   view === v.key
                     ? "bg-[oklch(0.55_0.19_258)] text-white"
-                    : "text-muted-foreground hover:text-foreground",
+                    : "text-foreground/75 hover:text-foreground",
                 )}
               >
                 {v.label}
@@ -337,17 +363,42 @@ function TimetablePage() {
         </div>
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Coloured by tutor · all times Sydney · drag a lesson to move it, drag its edge to stretch
-        it, click it to open
-        {sessions.length > 0 &&
-          ` · ${sessions.length} ${sessions.length === 1 ? "lesson" : "lessons"}`}
-      </p>
+      {/* The line under the title carries the only instructions this page gives,
+          so it is set at body size and near-full contrast - muted grey at
+          `text-xs` all but disappeared against the backdrop. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[0.8rem] leading-relaxed text-foreground/80">
+        <span>
+          Coloured by tutor · all times Sydney · drag a lesson to move it, drag its edge to stretch
+          it, click it to open
+          {sessions.length > 0 &&
+            ` · ${sessions.length} ${sessions.length === 1 ? "lesson" : "lessons"}`}
+        </span>
+        <span className="flex items-center gap-1.5 whitespace-nowrap">
+          <span
+            className="h-2 w-2 rounded-full ring-1 ring-black/25"
+            style={{ backgroundColor: ROLL_DONE }}
+          />
+          roll marked
+        </span>
+        <span className="flex items-center gap-1.5 whitespace-nowrap">
+          <span
+            className="h-2.5 w-2.5 rounded-[3px] border-2"
+            style={{ borderColor: ROLL_OVERDUE }}
+          />
+          roll still to mark
+        </span>
+      </div>
 
       {sessions.length === 0 && view !== "month" ? (
         <EmptyState
           icon={CalendarDays}
-          title={view === "day" ? "Nothing on this day" : "No lessons this week"}
+          title={
+            view === "day"
+              ? "Nothing on this day"
+              : view === "3day"
+                ? "Nothing in these three days"
+                : "No lessons this week"
+          }
           hint="Build a class and generate its lessons, or step to another date."
           action={
             <Button asChild size="sm">

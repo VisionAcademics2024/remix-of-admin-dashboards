@@ -72,6 +72,10 @@ export type CalendarEvent = {
   /** A make-up lesson - moved off its usual slot, or booked as one. */
   makeUp?: boolean | undefined;
   badge?: string | undefined;
+  /** Students on this lesson's roll who already have a mark. */
+  rollMarked: number;
+  /** Students on this lesson's roll at all. Zero means there is nothing to mark. */
+  rollTotal: number;
   row: Row;
 };
 
@@ -95,6 +99,8 @@ export function toCalendarEvent(s: Row): CalendarEvent {
     cancelled: s.status === "cancelled" || s.status === "rescheduled",
     makeUp: s.session_type === "dedicated_make_up",
     badge: s.roll_total > 0 ? `${s.roll_marked}/${s.roll_total}` : undefined,
+    rollMarked: s.roll_marked ?? 0,
+    rollTotal: s.roll_total ?? 0,
     row: s,
   };
 }
@@ -152,6 +158,72 @@ export function colourFor(id: string | null | undefined, explicit?: string | nul
   return PALETTE[hash % PALETTE.length]!;
 }
 
+/** The marks drawn on a lesson to say whether its roll has been taken. */
+export const ROLL_DONE = "oklch(0.72 0.18 149)";
+export const ROLL_OVERDUE = "oklch(0.63 0.23 25)";
+
+/**
+ * How a lesson's roll stands, for the marker on its block.
+ *
+ * - `marked`  - everyone on the roll has a mark. A green dot in the corner.
+ * - `overdue` - the lesson has finished and someone is still unmarked. A red
+ *   outline, because this is the one state that wants chasing.
+ * - `pending` - unmarked, but the lesson has not run yet. Nothing to say.
+ * - `none`    - nothing to mark: no roll seeded, or the lesson is cancelled.
+ *
+ * "Finished" is measured against the Sydney clock the grid already keeps, so a
+ * lesson turns red the moment it ends rather than waiting for midnight.
+ */
+export type RollState = "none" | "marked" | "overdue" | "pending";
+
+export function rollState(
+  event: Pick<CalendarEvent, "cancelled" | "date" | "endMinutes" | "rollMarked" | "rollTotal">,
+  today: string,
+  minutesNow: number,
+): RollState {
+  if (event.cancelled || event.rollTotal <= 0) return "none";
+  if (event.rollMarked >= event.rollTotal) return "marked";
+  const finished = event.date < today || (event.date === today && event.endMinutes <= minutesNow);
+  return finished ? "overdue" : "pending";
+}
+
+/** The roll, spelled out for the block's hover title. */
+function rollHint(event: CalendarEvent, roll: RollState): string {
+  if (roll === "none") return "";
+  if (roll === "marked") return " · roll marked";
+  const of = `${event.rollMarked}/${event.rollTotal} marked`;
+  return roll === "overdue" ? ` · roll not marked (${of})` : ` · ${of}`;
+}
+
+/**
+ * The Sydney clock, ticking once a minute.
+ *
+ * The now-line and the roll markers both have to agree on what has already
+ * happened, so one tick drives both.
+ */
+function useSydneyNow() {
+  const [now, setNow] = useState(() => ({ today: sydToday(), minutes: sydneyMinutesNow() }));
+  useEffect(() => {
+    const id = setInterval(
+      () => setNow({ today: sydToday(), minutes: sydneyMinutesNow() }),
+      60_000,
+    );
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+/** The corner dot that says the roll is complete. */
+function RollDot({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn("shrink-0 rounded-full ring-1 ring-black/25", className)}
+      style={{ backgroundColor: ROLL_DONE }}
+    />
+  );
+}
+
 /**
  * Side-by-side placement for lessons that clash.
  *
@@ -204,6 +276,7 @@ function EventBlock({
   col,
   cols,
   hourHeight,
+  roll,
   onSelect,
   editable,
   dimmed,
@@ -213,6 +286,8 @@ function EventBlock({
   col: number;
   cols: number;
   hourHeight: number;
+  /** Whether this lesson's roll is done, still to do, or overdue. */
+  roll: RollState;
   onSelect: (row: Row) => void;
   /** Whether this grid lets you drag lessons around. Month view never does. */
   editable: boolean;
@@ -247,7 +322,7 @@ function EventBlock({
       }}
       title={`${formatClock(event.startMinutes)} – ${formatClock(event.endMinutes)} · ${event.title}${
         event.subtitle ? ` · ${event.subtitle}` : ""
-      }`}
+      }${rollHint(event, roll)}`}
       style={{
         top,
         height,
@@ -261,6 +336,11 @@ function EventBlock({
         color: event.cancelled ? colour : readableOn(colour),
         opacity: dimmed ? 0.4 : 1,
         touchAction: editable ? "none" : undefined,
+        // An outline rather than a border, so the red sits on top of the block's
+        // own edge without moving anything, and hover's shadow still lands.
+        ...(roll === "overdue"
+          ? { outline: `2px solid ${ROLL_OVERDUE}`, outlineOffset: "-2px" }
+          : null),
       }}
       className={cn(
         "absolute select-none overflow-hidden rounded border px-1.5 py-[3px] text-left",
@@ -269,6 +349,8 @@ function EventBlock({
         "focus-visible:z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
         editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
         event.cancelled && "border-dashed",
+        // The dot sits in the top-right corner, so the text stops short of it.
+        roll === "marked" && "pr-3",
         compact ? "flex items-baseline gap-1.5 leading-none" : "leading-tight",
       )}
     >
@@ -315,6 +397,8 @@ function EventBlock({
         </>
       )}
 
+      {roll === "marked" && <RollDot className="absolute right-[3px] top-[3px] h-[7px] w-[7px]" />}
+
       {resizable && (
         <>
           {/* Grip the top edge to change when it starts, the bottom to change
@@ -344,18 +428,14 @@ function NowLine({
   dayCount,
   todayIndex,
   hourHeight,
+  minutes,
 }: {
   dayCount: number;
   todayIndex: number;
   hourHeight: number;
+  /** Minutes past Sydney midnight, from the grid's one clock. */
+  minutes: number;
 }) {
-  const [minutes, setMinutes] = useState(sydneyMinutesNow);
-
-  useEffect(() => {
-    const id = setInterval(() => setMinutes(sydneyMinutesNow()), 60_000);
-    return () => clearInterval(id);
-  }, []);
-
   return (
     <div
       className="pointer-events-none absolute inset-x-0 z-10"
@@ -402,7 +482,8 @@ export function TimeGrid({
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const area = useRef<HTMLDivElement>(null);
-  const today = sydToday();
+  const now = useSydneyNow();
+  const today = now.today;
   const todayIndex = days.indexOf(today);
   const editable = Boolean(onMove);
 
@@ -619,6 +700,7 @@ export function TimeGrid({
                       col={e.col}
                       cols={e.cols}
                       hourHeight={hourHeight}
+                      roll={rollState(e, today, now.minutes)}
                       onSelect={onSelect}
                       editable={editable}
                       dimmed={ghostShown?.originId === e.id}
@@ -660,7 +742,12 @@ export function TimeGrid({
             )}
 
             {todayIndex >= 0 && (
-              <NowLine dayCount={days.length} todayIndex={todayIndex} hourHeight={hourHeight} />
+              <NowLine
+                dayCount={days.length}
+                todayIndex={todayIndex}
+                hourHeight={hourHeight}
+                minutes={now.minutes}
+              />
             )}
           </div>
         </div>
@@ -684,7 +771,8 @@ export function MonthGrid({
   onSelect: (row: Row) => void;
   onOpenDay: (day: string) => void;
 }) {
-  const today = sydToday();
+  const now = useSydneyNow();
+  const today = now.today;
   const month = monthStart.slice(0, 7);
 
   // Six full weeks, Monday-first, so the grid never changes height mid-year.
@@ -743,25 +831,38 @@ export function MonthGrid({
               </button>
 
               <div className="space-y-0.5">
-                {shown.map((e) => (
-                  <button
-                    key={e.id}
-                    type="button"
-                    onClick={() => onSelect(e.row)}
-                    className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[0.65rem] hover:bg-accent"
-                  >
-                    <span
-                      className="h-2 w-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: e.colour || PALETTE[0] }}
-                    />
-                    <span className="shrink-0 tabular-nums opacity-70">
-                      {formatClock(e.startMinutes)}
-                    </span>
-                    <span className={cn("truncate", e.cancelled && "line-through opacity-60")}>
-                      {e.title}
-                    </span>
-                  </button>
-                ))}
+                {shown.map((e) => {
+                  // The same two signals as the time grid, in the shape a month
+                  // row can carry: a green dot at the end, a red outline round
+                  // the whole row.
+                  const roll = rollState(e, today, now.minutes);
+                  return (
+                    <button
+                      key={e.id}
+                      type="button"
+                      onClick={() => onSelect(e.row)}
+                      title={`${formatClock(e.startMinutes)} · ${e.title}${rollHint(e, roll)}`}
+                      style={
+                        roll === "overdue"
+                          ? { outline: `1.5px solid ${ROLL_OVERDUE}`, outlineOffset: "-1px" }
+                          : undefined
+                      }
+                      className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[0.65rem] hover:bg-accent"
+                    >
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: e.colour || PALETTE[0] }}
+                      />
+                      <span className="shrink-0 tabular-nums opacity-70">
+                        {formatClock(e.startMinutes)}
+                      </span>
+                      <span className={cn("truncate", e.cancelled && "line-through opacity-60")}>
+                        {e.title}
+                      </span>
+                      {roll === "marked" && <RollDot className="ml-auto h-[7px] w-[7px]" />}
+                    </button>
+                  );
+                })}
                 {hidden > 0 && (
                   <button
                     type="button"
