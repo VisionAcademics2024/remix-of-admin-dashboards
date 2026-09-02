@@ -7,16 +7,25 @@ A plain guide to what each section does, what the buttons mean, and what tables 
 | Section | What it's for | Main buttons |
 | --- | --- | --- |
 | **Today** | The morning glance: who still needs marking, what's on, low hours, what's ready to invoice. | **Present / Absent** on a lesson; **Open the roll**; **Open billing**. |
-| **Timetable** | Google-Calendar view of every lesson. Drag to move, drag an edge to resize. | **Day / Week / Month**; density **slider**; click a lesson → panel (below). |
+| **Timetable** | Google-Calendar view of every lesson. Drag to move, drag an edge to resize. | **Day / 3 days / Week / Month**; density **slider**; click a lesson → panel (below). A green dot on a lesson means its roll is fully marked; a red outline means the lesson has finished and someone is still unmarked. |
 | **Attendance** (Roll) | Mark who turned up, one class at a time. | **✓** present · **✕** away · **Make up** owed a make-up · **All present** · **Make up the class**. |
 | **Class Builder** | Make a class. One step; it generates the lessons onto the timetable. | **Create class & generate lessons**; **+ New program**; **Add student**. |
 | **Students & Families** | Students and their parents/guardians. | Add student, attach a guardian, set the default payer. |
 | **Classes** | Every class, capacity vs enrolled. 1-person classes show the student's name. | **Generate** · **Seed roll** · status. |
-| **Enrolments & Hours** | Who's enrolled where, and their hour packages. | Add enrolment; buy/adjust hours. |
+| **Sessions** | The history: every lesson every student has sat. | Filter by **student**, **class**, roll and period; click a column heading to **sort** by it. |
+| **Enrolments & Hours** | Who's enrolled where, and their hour packages. | Add enrolment; buy/adjust hours; click a column heading to **sort** either table. |
 | **Billing** | PAYG lessons and packages to invoice; unpaid. | Raise/mark invoices. |
 | **Tutor Pay** | Fortnightly pay per tutor from lessons taught. | View/adjust payouts. |
 | **Needs Attention** | Anything that looks wrong and needs a human. | Jump to the item. |
 | **Setup / Staff** | Programs, terms, prices, tutors; staff access. | Create/edit catalogue; approve staff. |
+
+## On a phone
+
+The sections live behind the **menu button in the top-right corner** - tap it and
+they appear as a list; tap one to go there. (On a desktop they stay in the rail
+down the left-hand side, which widens when the pointer rests on it.) Wide
+tables and the timetable grid scroll sideways on their own rather than dragging
+the whole page with them.
 
 ## The lesson panel (click any lesson on the Timetable)
 

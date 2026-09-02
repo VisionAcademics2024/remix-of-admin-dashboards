@@ -147,7 +147,7 @@ function StudentDetailPage() {
         </Section>
 
         <Section title="Details">
-          <dl className="grid grid-cols-2 gap-3 text-sm">
+          <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
             <Detail label="Code" value={student.code} />
             <Detail label="Year level" value={student.year_level} />
             <Detail label="School" value={student.current_school} icon={School} />

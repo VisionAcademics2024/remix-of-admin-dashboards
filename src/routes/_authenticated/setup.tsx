@@ -44,7 +44,8 @@ import {
   saveTutor,
   supersedePrice,
 } from "@/lib/vision/catalogue.functions";
-import { LABELS, TUTOR_COLOURS, Row } from "@/lib/vision/types";
+import { DEFAULT_TUTOR_COLOUR, LABELS, Row } from "@/lib/vision/types";
+import { TutorColourPicker } from "@/components/vision/colour-picker";
 
 const catalogueQueryOptions = () =>
   queryOptions({ queryKey: ["catalogue"], queryFn: () => getCatalogue() });
@@ -392,7 +393,7 @@ function PeriodDialog({ row, onClose }: { row?: Row; onClose: () => void }) {
             onChange={(v) => setForm({ ...form, code: v })}
             placeholder="2026-T4"
           />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <TextField
               label="Starts"
               type="date"
@@ -491,7 +492,7 @@ function ProgramDialog({
             onChange={(v) => setForm({ ...form, code: v })}
             placeholder="Y5-PRIV"
           />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <TextField
               label="Year level"
               value={form.year_level}
@@ -503,7 +504,7 @@ function ProgramDialog({
               onChange={(v) => setForm({ ...form, subject: v })}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <TextField
               label="Standard length (hours)"
               type="number"
@@ -633,7 +634,7 @@ function PriceDialog({
             options={LABELS.pricingBasis}
             onChange={(v) => setForm({ ...form, basis: v })}
           />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <TextField
               label="Quantity"
               type="number"
@@ -704,7 +705,7 @@ function TutorDialog({ row, onClose }: { row?: Row; onClose: () => void }) {
     full_name: row?.full_name ?? "",
     email: row?.email ?? "",
     mobile: row?.mobile ?? "",
-    colour: row?.colour ?? TUTOR_COLOURS[0],
+    colour: row?.colour ?? DEFAULT_TUTOR_COLOUR,
     status: row?.status ?? "active",
     notes: row?.notes ?? "",
   });
@@ -737,21 +738,10 @@ function TutorDialog({ row, onClose }: { row?: Row; onClose: () => void }) {
           />
           <div className="space-y-1.5">
             <Label>Timetable colour</Label>
-            <div className="flex flex-wrap gap-2">
-              {TUTOR_COLOURS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setForm({ ...form, colour: c })}
-                  className={cn(
-                    "h-8 w-8 rounded-md border-2",
-                    form.colour === c ? "border-foreground" : "border-transparent",
-                  )}
-                  style={{ backgroundColor: c }}
-                  aria-label={c}
-                />
-              ))}
-            </div>
+            <TutorColourPicker
+              value={form.colour}
+              onChange={(colour) => setForm({ ...form, colour })}
+            />
           </div>
           <SelectField
             label="Status"

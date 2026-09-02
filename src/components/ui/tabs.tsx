@@ -12,7 +12,9 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-10 items-center justify-center rounded-full border border-[var(--edge)] bg-[var(--mat-regular)] p-1 text-muted-foreground shadow-[inset_0_1px_0_0_var(--edge-top)] backdrop-blur-2xl",
+      // max-w-full + scroll-x so a strip of five tabs scrolls inside itself on
+      // a phone rather than pushing the page sideways.
+      "scroll-x inline-flex h-10 max-w-full items-center justify-start rounded-full border border-[var(--edge)] bg-[var(--mat-regular)] p-1 text-muted-foreground shadow-[inset_0_1px_0_0_var(--edge-top)] backdrop-blur-2xl sm:justify-center",
       className,
     )}
     {...props}
@@ -27,7 +29,7 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-full px-3.5 py-1 text-sm font-medium ring-offset-background cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed data-[state=active]:bg-[var(--mat-thick)] data-[state=active]:text-foreground data-[state=active]:shadow-[inset_0_1px_0_0_var(--edge-top),0_6px_16px_-10px_var(--shadow-key)]",
+      "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full px-3.5 py-1 text-sm font-medium ring-offset-background cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed data-[state=active]:bg-[var(--mat-thick)] data-[state=active]:text-foreground data-[state=active]:shadow-[inset_0_1px_0_0_var(--edge-top),0_6px_16px_-10px_var(--shadow-key)]",
       className,
     )}
     {...props}

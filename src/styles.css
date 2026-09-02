@@ -267,6 +267,10 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    /* A phone must never scroll sideways to reach the edge of a page. Wide
+     * content earns its own scroller (see .scroll-x and TableShell) rather
+     * than dragging the whole document with it. */
+    overflow-x: hidden;
   }
 
   body {
@@ -275,6 +279,12 @@
     color: var(--color-foreground);
     /* The environment is painted by <Environment />, fixed behind everything. */
     letter-spacing: -0.011em;
+    /* A long code or email in a narrow column wraps rather than forcing the
+     * page wider than the screen. */
+    overflow-wrap: break-word;
+    /* Tapping does not need the grey flash - every control here has its own
+     * press state, and the two together read as a stutter. */
+    -webkit-tap-highlight-color: transparent;
   }
 
   /* Apple sets tighter tracking as type gets larger, never looser. */
@@ -407,7 +417,14 @@
       transparent 62%
     );
   }
-  .glass--specular:hover::before { opacity: 1; }
+  /* Hover states are gated on a pointer that can actually hover. On a touch
+   * screen `:hover` sticks after a tap - the panel you last touched stays lit
+   * until you touch another one - so a phone gets none of them. Tailwind's own
+   * `hover:` utilities already carry this guard in v4; these are the handful
+   * written by hand. */
+  @media (hover: hover) {
+    .glass--specular:hover::before { opacity: 1; }
+  }
 
   /* =======================================================================
    * DEPTH
@@ -423,14 +440,16 @@
     will-change: transform;
   }
 
-  .lift:hover {
-    transform: translate3d(0, -2px, 0) scale(1.012);
-    background-color: var(--mat-thick);
-    border-color: var(--edge-strong);
-    box-shadow:
-      inset 0 1px 0 0 var(--edge-top),
-      0 4px 12px -6px var(--shadow-ambient),
-      0 32px 72px -28px var(--shadow-key);
+  @media (hover: hover) {
+    .lift:hover {
+      transform: translate3d(0, -2px, 0) scale(1.012);
+      background-color: var(--mat-thick);
+      border-color: var(--edge-strong);
+      box-shadow:
+        inset 0 1px 0 0 var(--edge-top),
+        0 4px 12px -6px var(--shadow-ambient),
+        0 32px 72px -28px var(--shadow-key);
+    }
   }
 
   .lift:active {
@@ -467,6 +486,14 @@
     background-color: var(--mat-solid);
   }
 
+  /* The phone menu is not a rail beside the page - it covers it. Translucency
+   * that reads beautifully over a photograph reads as two pages on top of each
+   * other over a table, and backdrop-filter cannot be relied on to save it, so
+   * this one is opaque. */
+  .ornament.ornament--panel {
+    background-color: color-mix(in oklab, var(--color-background) 94%, var(--color-foreground));
+  }
+
   .ornament-item {
     position: relative;
     border-radius: 999px;
@@ -475,7 +502,9 @@
       color var(--dur-base) var(--ease-spatial),
       transform var(--dur-fast) var(--ease-spatial);
   }
-  .ornament-item:hover { background-color: var(--mat-thick); }
+  @media (hover: hover) {
+    .ornament-item:hover { background-color: var(--mat-thick); }
+  }
   .ornament-item:active { transform: scale(0.94); }
 
   .ornament-item[data-active="true"] {
@@ -509,9 +538,23 @@
   .table-zebra tbody tr:nth-child(odd) {
     background-color: color-mix(in oklab, var(--color-foreground) 3%, transparent);
   }
-  .table-zebra tbody tr:hover {
-    background-color: color-mix(in oklab, var(--color-foreground) 7%, transparent);
+  @media (hover: hover) {
+    .table-zebra tbody tr:hover {
+      background-color: color-mix(in oklab, var(--color-foreground) 7%, transparent);
+    }
   }
+
+  /* A row that would otherwise force the page wider than the screen - a tab
+   * strip, a filter bar, a table - scrolls inside itself instead. The bar is
+   * hidden because these are dragged, not aimed at. */
+  .scroll-x {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .scroll-x::-webkit-scrollbar { display: none; }
 
   .code-chip {
     font-family: var(--font-code);
@@ -657,7 +700,7 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
-  .lift:hover { transform: none; }
+  .lift:hover { transform: none !important; }
 }
 
 /* Backdrop blur is expensive. Where it is unsupported, fall back to a solid

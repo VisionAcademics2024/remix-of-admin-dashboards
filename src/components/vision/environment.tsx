@@ -236,7 +236,7 @@ export function EnvironmentPicker({ className }: { className?: string }) {
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {ENVIRONMENTS.map((env) => {
           const active = env.id === environment.id;
           return (

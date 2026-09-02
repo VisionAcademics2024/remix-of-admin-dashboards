@@ -21,6 +21,7 @@ import { Route as AuthenticatedEnrolmentsRouteImport } from './routes/_authentic
 import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
 import { Route as AuthenticatedNeedsAttentionRouteImport } from './routes/_authenticated/needs-attention'
 import { Route as AuthenticatedRollRouteImport } from './routes/_authenticated/roll'
+import { Route as AuthenticatedSessionsRouteImport } from './routes/_authenticated/sessions'
 import { Route as AuthenticatedSetupRouteImport } from './routes/_authenticated/setup'
 import { Route as AuthenticatedStaffRouteImport } from './routes/_authenticated/staff'
 import { Route as AuthenticatedTimetableRouteImport } from './routes/_authenticated/timetable'
@@ -100,6 +101,11 @@ const AuthenticatedNeedsAttentionRoute =
 const AuthenticatedRollRoute = AuthenticatedRollRouteImport.update({
   id: '/roll',
   path: '/roll',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSessionsRoute = AuthenticatedSessionsRouteImport.update({
+  id: '/sessions',
+  path: '/sessions',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedSetupRoute = AuthenticatedSetupRouteImport.update({
@@ -214,6 +220,7 @@ export interface FileRoutesByFullPath {
   '/leads': typeof AuthenticatedLeadsRoute
   '/needs-attention': typeof AuthenticatedNeedsAttentionRoute
   '/roll': typeof AuthenticatedRollRoute
+  '/sessions': typeof AuthenticatedSessionsRoute
   '/setup': typeof AuthenticatedSetupRoute
   '/staff': typeof AuthenticatedStaffRoute
   '/timetable': typeof AuthenticatedTimetableRoute
@@ -245,6 +252,7 @@ export interface FileRoutesByTo {
   '/leads': typeof AuthenticatedLeadsRoute
   '/needs-attention': typeof AuthenticatedNeedsAttentionRoute
   '/roll': typeof AuthenticatedRollRoute
+  '/sessions': typeof AuthenticatedSessionsRoute
   '/setup': typeof AuthenticatedSetupRoute
   '/staff': typeof AuthenticatedStaffRoute
   '/timetable': typeof AuthenticatedTimetableRoute
@@ -278,6 +286,7 @@ export interface FileRoutesById {
   '/_authenticated/leads': typeof AuthenticatedLeadsRoute
   '/_authenticated/needs-attention': typeof AuthenticatedNeedsAttentionRoute
   '/_authenticated/roll': typeof AuthenticatedRollRoute
+  '/_authenticated/sessions': typeof AuthenticatedSessionsRoute
   '/_authenticated/setup': typeof AuthenticatedSetupRoute
   '/_authenticated/staff': typeof AuthenticatedStaffRoute
   '/_authenticated/timetable': typeof AuthenticatedTimetableRoute
@@ -311,6 +320,7 @@ export interface FileRouteTypes {
     | '/leads'
     | '/needs-attention'
     | '/roll'
+    | '/sessions'
     | '/setup'
     | '/staff'
     | '/timetable'
@@ -342,6 +352,7 @@ export interface FileRouteTypes {
     | '/leads'
     | '/needs-attention'
     | '/roll'
+    | '/sessions'
     | '/setup'
     | '/staff'
     | '/timetable'
@@ -374,6 +385,7 @@ export interface FileRouteTypes {
     | '/_authenticated/leads'
     | '/_authenticated/needs-attention'
     | '/_authenticated/roll'
+    | '/_authenticated/sessions'
     | '/_authenticated/setup'
     | '/_authenticated/staff'
     | '/_authenticated/timetable'
@@ -490,6 +502,13 @@ declare module '@tanstack/react-router' {
       path: '/roll'
       fullPath: '/roll'
       preLoaderRoute: typeof AuthenticatedRollRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/sessions': {
+      id: '/_authenticated/sessions'
+      path: '/sessions'
+      fullPath: '/sessions'
+      preLoaderRoute: typeof AuthenticatedSessionsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/setup': {
@@ -642,6 +661,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedLeadsRoute: typeof AuthenticatedLeadsRoute
   AuthenticatedNeedsAttentionRoute: typeof AuthenticatedNeedsAttentionRoute
   AuthenticatedRollRoute: typeof AuthenticatedRollRoute
+  AuthenticatedSessionsRoute: typeof AuthenticatedSessionsRoute
   AuthenticatedSetupRoute: typeof AuthenticatedSetupRoute
   AuthenticatedStaffRoute: typeof AuthenticatedStaffRoute
   AuthenticatedTimetableRoute: typeof AuthenticatedTimetableRoute
@@ -665,6 +685,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedLeadsRoute: AuthenticatedLeadsRoute,
   AuthenticatedNeedsAttentionRoute: AuthenticatedNeedsAttentionRoute,
   AuthenticatedRollRoute: AuthenticatedRollRoute,
+  AuthenticatedSessionsRoute: AuthenticatedSessionsRoute,
   AuthenticatedSetupRoute: AuthenticatedSetupRoute,
   AuthenticatedStaffRoute: AuthenticatedStaffRoute,
   AuthenticatedTimetableRoute: AuthenticatedTimetableRoute,
