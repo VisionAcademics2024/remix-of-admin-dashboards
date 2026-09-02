@@ -18,7 +18,7 @@ import {
 } from "@/components/vision/ui";
 import { formatDate, formatDay, formatHours, formatMoney, formatTime } from "@/lib/format";
 import { getStudentDetail } from "@/lib/vision/people.functions";
-import { LABELS, Row } from "@/lib/vision/types";
+import { chargeSourceLabel, LABELS, Row } from "@/lib/vision/types";
 
 const detailQueryOptions = (id: string) =>
   queryOptions({
@@ -361,7 +361,7 @@ function StudentDetailPage() {
                   <Td>
                     <Code>{c.code}</Code>
                   </Td>
-                  <Td>{c.source === "hours" ? "Hours package" : "PAYG lesson"}</Td>
+                  <Td>{chargeSourceLabel(c.source)}</Td>
                   <Td className="text-right tabular-nums">{formatMoney(c.standard_amount)}</Td>
                   <Td className="text-right tabular-nums">{formatMoney(c.adjustment)}</Td>
                   <Td className="text-right font-medium tabular-nums">

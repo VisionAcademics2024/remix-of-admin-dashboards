@@ -490,6 +490,14 @@ export const LABELS = {
   },
 } as const;
 
+/** How a charge came to exist, for a screen that has to name it. */
+export function chargeSourceLabel(source: string | null | undefined): string {
+  if (source === "hours") return "Hours package";
+  if (source === "payg") return "PAYG lesson";
+  if (source === "manual") return "One-off bill";
+  return "Charge";
+}
+
 /**
  * Timetable swatches.
  *
