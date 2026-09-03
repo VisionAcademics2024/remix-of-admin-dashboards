@@ -19,7 +19,7 @@ export const getMe = createServerFn({ method: "GET" })
 
     const { data: staff, error } = await client
       .from("staff")
-      .select("user_id, full_name, email, role, is_active, created_at")
+      .select("user_id, full_name, email, role, tutor_id, is_active, created_at")
       .eq("user_id", context.userId)
       .maybeSingle();
     if (error) throw error;
@@ -99,7 +99,7 @@ export const listStaff = createServerFn({ method: "GET" })
 
     const { data: staff, error } = await client
       .from("staff")
-      .select("user_id, full_name, email, role, is_active, created_at")
+      .select("user_id, full_name, email, role, tutor_id, is_active, created_at")
       .order("full_name");
     if (error) throw error;
 
@@ -109,9 +109,19 @@ export const listStaff = createServerFn({ method: "GET" })
       .select("user_id, full_name, email, note, requested_at")
       .order("requested_at");
 
+    // The tutors an account can be pointed at. A tutor account teaches as one
+    // of these, and more than one account may point at the same tutor - which
+    // is how a test login shares a real tutor's lessons and pay.
+    const { data: tutors } = await client
+      .from("tutors")
+      .select("id, code, full_name, status")
+      .eq("status", "active")
+      .order("full_name");
+
     return {
       staff: (staff ?? []) as Staff[],
       requests: requests ?? [],
+      tutors: tutors ?? [],
       canManage: context.staff.role === "owner",
     };
   });
@@ -166,7 +176,9 @@ export const updateStaffMember = createServerFn({ method: "POST" })
     z
       .object({
         user_id: z.string().uuid(),
-        role: z.enum(["owner", "admin"]).optional(),
+        role: z.enum(["owner", "admin", "tutor"]).optional(),
+        /** Which tutor this account teaches as. Required when role is tutor. */
+        tutor_id: z.string().uuid().nullable().optional(),
         is_active: z.boolean().optional(),
         full_name: z.string().min(1).optional(),
       })
@@ -175,8 +187,10 @@ export const updateStaffMember = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { user_id, ...patch } = data;
 
-    // Never let the last active owner remove their own access.
-    if (patch.role === "admin" || patch.is_active === false) {
+    // Never let the last active owner remove their own access. Any role that is
+    // not owner counts, so demoting yourself to tutor is caught the same way
+    // demoting to admin always was.
+    if ((patch.role !== undefined && patch.role !== "owner") || patch.is_active === false) {
       const { count } = await db(context.supabase)
         .from("staff")
         .select("user_id", { count: "exact", head: true })
@@ -187,7 +201,29 @@ export const updateStaffMember = createServerFn({ method: "POST" })
       }
     }
 
-    const { error } = await db(context.supabase).from("staff").update(patch).eq("user_id", user_id);
+    // A tutor account is meaningless without a tutor to be: it would see no
+    // lessons and no pay, and read as broken rather than restricted. The
+    // database refuses it too; this says so in words first.
+    if (patch.role === "tutor" && !patch.tutor_id) {
+      const { data: existing } = await db(context.supabase)
+        .from("staff")
+        .select("tutor_id")
+        .eq("user_id", user_id)
+        .maybeSingle();
+      if (!existing?.tutor_id) {
+        throw new Error("Choose which tutor this account teaches as before making it a tutor.");
+      }
+    }
+
+    // Promoting out of the tutor role drops the link, so an owner or admin is
+    // never left pointing at somebody's lessons.
+    const values: Record<string, unknown> =
+      patch.role === "owner" || patch.role === "admin" ? { ...patch, tutor_id: null } : patch;
+
+    const { error } = await db(context.supabase)
+      .from("staff")
+      .update(values)
+      .eq("user_id", user_id);
     if (error) throw error;
     return { success: true };
   });

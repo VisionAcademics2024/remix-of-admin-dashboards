@@ -18,7 +18,15 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Row = any;
 
-export type StaffRole = "owner" | "admin";
+/**
+ * What an account is allowed to be.
+ *
+ * A tutor is not a smaller admin: they see the calendar and their own pay, mark
+ * the roll on lessons they teach, and reach nothing else. The database enforces
+ * that, not the screen - is_staff() means owner or admin, so every policy
+ * written against it already excludes a tutor.
+ */
+export type StaffRole = "owner" | "admin" | "tutor";
 export type PersonStatus = "active" | "inactive";
 export type PeriodType = "standard_term" | "holiday_intensive" | "other";
 export type PeriodStatus = "planned" | "active" | "closed";
@@ -60,6 +68,8 @@ export interface Staff {
   full_name: string;
   email: string;
   role: StaffRole;
+  /** The tutor this account teaches as. Set only on a tutor account. */
+  tutor_id?: string | null;
   is_active: boolean;
   created_at: string;
 }

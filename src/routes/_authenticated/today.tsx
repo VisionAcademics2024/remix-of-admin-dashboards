@@ -3,6 +3,7 @@ import { queryOptions, useQuery, useQueryClient, useSuspenseQuery } from "@tanst
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import {
+  BadgeDollarSign,
   CalendarClock,
   CalendarDays,
   CheckCircle2,
@@ -40,6 +41,7 @@ import {
   sydToday,
   weekStart,
 } from "@/lib/format";
+import { meQueryOptions } from "./route";
 import { getToday } from "@/lib/vision/overview.functions";
 import { daysBetween, rollFor, tutorsFor, unassigned, type SessionRoll } from "@/lib/vision/today";
 import { listTrialRoll, setTrialStatus } from "@/lib/vision/leads.functions";
@@ -57,6 +59,20 @@ export const Route = createFileRoute("/_authenticated/today")({
 function TodayPage() {
   const today = sydToday();
   const { data } = useSuspenseQuery(todayQueryOptions(today));
+  const { data: me } = useSuspenseQuery(meQueryOptions());
+
+  // A tutor sees the teaching day and their own pay, and nothing else about
+  // money. The database already refuses charges, invoices and packages to a
+  // tutor, so these blocks would come back empty rather than leaking - but an
+  // empty "Owed to you" reading $0.00 is worse than absent: it looks like the
+  // school is owed nothing, on a screen that is not theirs to read.
+  const isTutor = me.staff?.role === "tutor";
+  const myTutorId = me.staff?.tutor_id ?? null;
+  const mySessionsToday = myTutorId
+    ? (data.sessions as Row[]).filter((s) => s.tutor_id === myTutorId)
+    : [];
+  const myLessonsToday = mySessionsToday.length;
+  const myHoursToday = mySessionsToday.reduce((sum, s) => sum + Number(s.duration_hours ?? 0), 0);
   const queryClient = useQueryClient();
   const mark = useServerFn(markAttendance);
   const setTrial = useServerFn(setTrialStatus);
@@ -140,7 +156,11 @@ function TodayPage() {
       <PageHeader
         title="Today"
         eyebrow={formatDay(today)}
-        description="The teaching day first: what is on, who is teaching it, whose roll is still open and who is owed a lesson back. The money sits underneath."
+        description={
+          isTutor
+            ? "Your teaching day: what is on, whose roll is still open, and who is owed a lesson back."
+            : "The teaching day first: what is on, who is teaching it, whose roll is still open and who is owed a lesson back. The money sits underneath."
+        }
         actions={
           <>
             <Button asChild variant="outline">
@@ -205,18 +225,32 @@ function TodayPage() {
           icon={CalendarClock}
           to="/roll"
         />
-        <StatCard
-          label="Owed to you"
-          value={formatMoney(data.unpaidValue)}
-          hint={
-            data.unpaidAgeing.oldestDays == null
-              ? `${data.unpaidCount} invoices`
-              : `${data.unpaidCount} invoices · oldest ${data.unpaidAgeing.oldestDays} days`
-          }
-          tone={(data.unpaidAgeing.oldestDays ?? 0) > 60 ? "warning" : "default"}
-          icon={Receipt}
-          to="/billing"
-        />
+        {isTutor ? (
+          <StatCard
+            label="Your hours today"
+            value={formatHours(myHoursToday)}
+            hint={
+              myLessonsToday === 0
+                ? "Nothing scheduled for you"
+                : `${myLessonsToday} ${myLessonsToday === 1 ? "lesson" : "lessons"} · see your pay`
+            }
+            icon={BadgeDollarSign}
+            to="/tutor-pay"
+          />
+        ) : (
+          <StatCard
+            label="Owed to you"
+            value={formatMoney(data.unpaidValue)}
+            hint={
+              data.unpaidAgeing.oldestDays == null
+                ? `${data.unpaidCount} invoices`
+                : `${data.unpaidCount} invoices · oldest ${data.unpaidAgeing.oldestDays} days`
+            }
+            tone={(data.unpaidAgeing.oldestDays ?? 0) > 60 ? "warning" : "default"}
+            icon={Receipt}
+            to="/billing"
+          />
+        )}
       </div>
 
       <Section
@@ -328,7 +362,7 @@ function TodayPage() {
         )}
       </Section>
 
-      {(trials as Row[]).length > 0 && (
+      {!isTutor && (trials as Row[]).length > 0 && (
         <Section
           title="Trial students today"
           count={(trials as Row[]).length}
@@ -401,7 +435,15 @@ function TodayPage() {
         </Section>
       )}
 
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
+      <div
+        className={cn(
+          "grid items-start gap-4",
+          // The panel beside the timetable is hours packages, which a tutor
+          // does not see. Without it the timetable would sit in a half-width
+          // column against nothing.
+          !isTutor && "xl:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]",
+        )}
+      >
         <Section title="Today's timetable" count={data.sessions.length} className="h-full">
           {data.sessions.length > 0 && (
             <div className="mb-4">
@@ -502,56 +544,58 @@ function TodayPage() {
           )}
         </Section>
 
-        <Section
-          title="Running out of hours"
-          count={data.lowPackages.length}
-          description="At or below the low-balance threshold."
-          tone={data.lowPackages.length ? "warning" : undefined}
-          className="h-full"
-        >
-          {data.lowPackages.length === 0 ? (
-            <EmptyState
-              icon={CheckCircle2}
-              title="Every package has room"
-              hint="Balances are recalculated from attendance, so this updates itself as rolls are marked."
-            />
-          ) : (
-            <div className="scroll-x">
-              <table className="table-zebra w-full text-sm">
-                <thead>
-                  <tr>
-                    <Th>Student</Th>
-                    <Th>Package</Th>
-                    <Th className="text-right">Remaining</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.lowPackages.map((p: Row) => (
-                    <tr key={p.id}>
-                      <Td>
-                        <Link
-                          to="/students/$id"
-                          params={{ id: p.student_id }}
-                          className="font-medium hover:underline"
-                        >
-                          {p.students?.full_name}
-                        </Link>
-                      </Td>
-                      <Td>
-                        <Code>{p.code}</Code>
-                      </Td>
-                      <Td className="text-right">
-                        <StatusPill tone={p.is_overdrawn ? "danger" : "warning"}>
-                          {formatHours(p.hours_remaining)}
-                        </StatusPill>
-                      </Td>
+        {!isTutor && (
+          <Section
+            title="Running out of hours"
+            count={data.lowPackages.length}
+            description="At or below the low-balance threshold."
+            tone={data.lowPackages.length ? "warning" : undefined}
+            className="h-full"
+          >
+            {data.lowPackages.length === 0 ? (
+              <EmptyState
+                icon={CheckCircle2}
+                title="Every package has room"
+                hint="Balances are recalculated from attendance, so this updates itself as rolls are marked."
+              />
+            ) : (
+              <div className="scroll-x">
+                <table className="table-zebra w-full text-sm">
+                  <thead>
+                    <tr>
+                      <Th>Student</Th>
+                      <Th>Package</Th>
+                      <Th className="text-right">Remaining</Th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Section>
+                  </thead>
+                  <tbody>
+                    {data.lowPackages.map((p: Row) => (
+                      <tr key={p.id}>
+                        <Td>
+                          <Link
+                            to="/students/$id"
+                            params={{ id: p.student_id }}
+                            className="font-medium hover:underline"
+                          >
+                            {p.students?.full_name}
+                          </Link>
+                        </Td>
+                        <Td>
+                          <Code>{p.code}</Code>
+                        </Td>
+                        <Td className="text-right">
+                          <StatusPill tone={p.is_overdrawn ? "danger" : "warning"}>
+                            {formatHours(p.hours_remaining)}
+                          </StatusPill>
+                        </Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Section>
+        )}
       </div>
 
       {/* Who is teaching, and who is owed a lesson back. Both are about the
@@ -716,91 +760,93 @@ function TodayPage() {
         </Section>
       )}
 
-      <Section
-        title="Waiting to be charged"
-        description="PAYG lessons attended but not yet billed, plus packages with no invoice raised."
-        actions={
-          <Button asChild size="sm" variant="outline">
-            <Link to="/billing">Open billing</Link>
-          </Button>
-        }
-      >
-        {/* Figures, not cards.
+      {!isTutor && (
+        <Section
+          title="Waiting to be charged"
+          description="PAYG lessons attended but not yet billed, plus packages with no invoice raised."
+          actions={
+            <Button asChild size="sm" variant="outline">
+              <Link to="/billing">Open billing</Link>
+            </Button>
+          }
+        >
+          {/* Figures, not cards.
             A translucent card inside a translucent card is the one thing
             Apple's material rules say never to do - the second surface has
             nothing left to be translucent against, and both go muddy. Inside a
             Section the numbers are just numbers, separated by a rule. */}
-        <dl className="grid divide-y divide-[var(--edge)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-          {[
-            { label: "PAYG lessons to charge", value: data.unchargedPaygCount, hint: undefined },
-            {
-              label: "Charges to invoice",
-              value: data.toInvoiceCount,
-              hint: formatMoney(data.toInvoiceValue),
-            },
-            {
-              label: "Invoiced, unpaid",
-              value: formatMoney(data.unpaidValue),
-              hint:
-                data.unpaidAgeing.oldestDays == null
-                  ? undefined
-                  : `Oldest sent ${data.unpaidAgeing.oldestDays} days ago`,
-            },
-          ].map((figure) => (
-            <div key={figure.label} className="py-3.5 sm:px-5 sm:first:pl-0 sm:last:pr-0">
-              <dt className="text-[0.78rem] font-medium tracking-[0.004em] text-muted-foreground">
-                {figure.label}
-              </dt>
-              <dd className="mt-1 text-[1.75rem] font-semibold leading-[1] tabular-nums tracking-[-0.03em]">
-                {figure.value}
-              </dd>
-              {figure.hint && (
-                <dd className="mt-1 text-[0.75rem] tracking-[0.004em] text-muted-foreground">
-                  {figure.hint}
+          <dl className="grid divide-y divide-[var(--edge)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            {[
+              { label: "PAYG lessons to charge", value: data.unchargedPaygCount, hint: undefined },
+              {
+                label: "Charges to invoice",
+                value: data.toInvoiceCount,
+                hint: formatMoney(data.toInvoiceValue),
+              },
+              {
+                label: "Invoiced, unpaid",
+                value: formatMoney(data.unpaidValue),
+                hint:
+                  data.unpaidAgeing.oldestDays == null
+                    ? undefined
+                    : `Oldest sent ${data.unpaidAgeing.oldestDays} days ago`,
+              },
+            ].map((figure) => (
+              <div key={figure.label} className="py-3.5 sm:px-5 sm:first:pl-0 sm:last:pr-0">
+                <dt className="text-[0.78rem] font-medium tracking-[0.004em] text-muted-foreground">
+                  {figure.label}
+                </dt>
+                <dd className="mt-1 text-[1.75rem] font-semibold leading-[1] tabular-nums tracking-[-0.03em]">
+                  {figure.value}
                 </dd>
-              )}
-            </div>
-          ))}
-        </dl>
+                {figure.hint && (
+                  <dd className="mt-1 text-[0.75rem] tracking-[0.004em] text-muted-foreground">
+                    {figure.hint}
+                  </dd>
+                )}
+              </div>
+            ))}
+          </dl>
 
-        {/* How overdue, not just how much. A total says what is owed and
+          {/* How overdue, not just how much. A total says what is owed and
             nothing about whether it is a problem: twelve thousand invoiced last
             week is a good month, the same figure sent in July is a conversation
             nobody has had. */}
-        {data.unpaidValue > 0 && (
-          <div className="mt-4">
-            <div
-              className="flex h-1.5 gap-0.5 overflow-hidden rounded-full"
-              role="img"
-              aria-label={`Unpaid by age: ${formatMoney(data.unpaidAgeing.under30)} under 30 days, ${formatMoney(data.unpaidAgeing.from30to60)} 30 to 60 days, ${formatMoney(data.unpaidAgeing.over60)} over 60 days`}
-            >
-              {(
-                [
-                  ["bg-success", data.unpaidAgeing.under30],
-                  ["bg-warning", data.unpaidAgeing.from30to60],
-                  ["bg-destructive", data.unpaidAgeing.over60],
-                ] as const
-              ).map(
-                ([tone, amount]) =>
-                  amount > 0 && (
-                    <span
-                      key={tone}
-                      className={cn("h-full rounded-full", tone)}
-                      style={{ flex: amount }}
-                    />
-                  ),
-              )}
+          {data.unpaidValue > 0 && (
+            <div className="mt-4">
+              <div
+                className="flex h-1.5 gap-0.5 overflow-hidden rounded-full"
+                role="img"
+                aria-label={`Unpaid by age: ${formatMoney(data.unpaidAgeing.under30)} under 30 days, ${formatMoney(data.unpaidAgeing.from30to60)} 30 to 60 days, ${formatMoney(data.unpaidAgeing.over60)} over 60 days`}
+              >
+                {(
+                  [
+                    ["bg-success", data.unpaidAgeing.under30],
+                    ["bg-warning", data.unpaidAgeing.from30to60],
+                    ["bg-destructive", data.unpaidAgeing.over60],
+                  ] as const
+                ).map(
+                  ([tone, amount]) =>
+                    amount > 0 && (
+                      <span
+                        key={tone}
+                        className={cn("h-full rounded-full", tone)}
+                        style={{ flex: amount }}
+                      />
+                    ),
+                )}
+              </div>
+              <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[0.72rem] tracking-[0.004em] text-muted-foreground">
+                <span>Under 30 days {formatMoney(data.unpaidAgeing.under30)}</span>
+                <span>30–60 {formatMoney(data.unpaidAgeing.from30to60)}</span>
+                <span className={data.unpaidAgeing.over60 > 0 ? "text-destructive" : undefined}>
+                  Over 60 {formatMoney(data.unpaidAgeing.over60)}
+                </span>
+              </div>
             </div>
-            <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[0.72rem] tracking-[0.004em] text-muted-foreground">
-              <span>Under 30 days {formatMoney(data.unpaidAgeing.under30)}</span>
-              <span>30–60 {formatMoney(data.unpaidAgeing.from30to60)}</span>
-              <span className={data.unpaidAgeing.over60 > 0 ? "text-destructive" : undefined}>
-                Over 60 {formatMoney(data.unpaidAgeing.over60)}
-              </span>
-            </div>
-          </div>
-        )}
-      </Section>
+          )}
+        </Section>
+      )}
 
       {/* Tomorrow, only far enough ahead to catch a lesson with nobody teaching
           it the night before rather than the morning of. */}

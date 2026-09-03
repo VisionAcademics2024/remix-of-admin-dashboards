@@ -6,32 +6,60 @@ import { cn } from "@/lib/utils";
 
 import { supabase } from "@/integrations/supabase/client";
 
-
 import { AppSidebar } from "@/components/app-sidebar";
 import { meQueryOptions } from "@/lib/vision/me";
 import { formatDay, sydToday } from "@/lib/format";
 import { DataModeBadge } from "@/components/vision/data-mode-badge";
 import { EnvironmentButton } from "@/components/vision/environment";
 import { MobileNav } from "@/components/vision/mobile-nav";
-import { sectionTitleFor } from "@/components/vision/nav-items";
+import { sectionTitleFor, tutorMayOpen } from "@/components/vision/nav-items";
 
 export { meQueryOptions };
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
-  beforeLoad: async ({ context }) => {
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) {
+  beforeLoad: async ({ context, location }) => {
+    // getSession reads the token already held locally; getUser posts it to the
+    // auth server to be validated. This runs before every authenticated page,
+    // so the difference was a full network round trip on each navigation - paid
+    // to re-check something the server checks anyway: every server function
+    // goes through requireSupabaseAuth, which verifies the JWT's claims itself.
+    //
+    // So the local read decides only whether to bother asking. A token that is
+    // present but no longer valid gets past it and is refused by getMe below,
+    // which lands in the same place: the sign-in screen.
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) {
       throw redirect({ to: "/auth" });
     }
 
     // No page data may be requested before an active staff row exists, so the
     // "signed in but not approved" case is settled here, before child loaders.
-    const me = await context.queryClient.ensureQueryData(meQueryOptions());
+    const loadMe = () => context.queryClient.ensureQueryData(meQueryOptions());
+    let me: Awaited<ReturnType<typeof loadMe>>;
+    try {
+      me = await loadMe();
+    } catch {
+      // The server refused the token. Only this call is inside the try, so the
+      // redirects below are not swallowed by it.
+      throw redirect({ to: "/auth" });
+    }
+
     if (!me.staff) {
       throw redirect({ to: "/access" });
     }
-    return { user: data.user, staff: me.staff };
+
+    // A tutor typing a URL gets the same answer as a tutor reading the nav.
+    // The database would refuse the rows anyway, so this is not the security
+    // boundary - it is the difference between being told no and being shown an
+    // empty page that looks broken.
+    if (me.staff.role === "tutor" && !tutorMayOpen(location.pathname)) {
+      throw redirect({ to: "/today" });
+    }
+
+    return { user: session.user, staff: me.staff };
   },
   component: AuthenticatedLayout,
 });
