@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
-import { Plus, Wallet } from "lucide-react";
+import { Pencil, Plus, Trash2, Wallet, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,9 @@ import {
 } from "@/components/vision/ui";
 import { formatDate, formatHours, formatMoney, formatTime, formatWeekday, sydToday } from "@/lib/format";
 import {
+  closeEnrolment,
+  deleteEnrolment,
+  deletePackage,
   listCommerce,
   saveEnrolment,
   savePackage,
@@ -62,6 +65,10 @@ function EnrolmentsPage() {
   const { data } = useSuspenseQuery(commerceQueryOptions());
   const [newPackage, setNewPackage] = useState(false);
   const [newEnrol, setNewEnrol] = useState(false);
+  const [editingPackage, setEditingPackage] = useState<Row | null>(null);
+  const [removingPackage, setRemovingPackage] = useState<Row | null>(null);
+  const [editingEnrolment, setEditingEnrolment] = useState<Row | null>(null);
+  const [removingEnrolment, setRemovingEnrolment] = useState<Row | null>(null);
   const [editingEligibility, setEditingEligibility] = useState<Row | null>(null);
   const [pkgFor, setPkgFor] = useState<Row | null>(null);
 
@@ -211,6 +218,7 @@ function EnrolmentsPage() {
                   >
                     Status
                   </SortableTh>
+                  <Th className="text-right">Actions</Th>
                 </tr>
               </thead>
               <tbody>
@@ -257,6 +265,21 @@ function EnrolmentsPage() {
                         <StatusPill tone={toneForStatus("package", p.status)}>
                           {p.status}
                         </StatusPill>
+                      </Td>
+                      <Td className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button size="sm" variant="outline" onClick={() => setEditingPackage(p)}>
+                            <Pencil /> Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            aria-label={`Remove ${p.code}`}
+                            onClick={() => setRemovingPackage(p)}
+                          >
+                            <Trash2 />
+                          </Button>
+                        </div>
                       </Td>
                     </tr>
                   );
@@ -354,6 +377,7 @@ function EnrolmentsPage() {
                   >
                     Status
                   </SortableTh>
+                  <Th className="text-right">Actions</Th>
                 </tr>
               </thead>
               <tbody>
@@ -412,6 +436,21 @@ function EnrolmentsPage() {
                         {e.status}
                       </StatusPill>
                     </Td>
+                    <Td className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button size="sm" variant="outline" onClick={() => setEditingEnrolment(e)}>
+                          <Pencil /> Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          aria-label={`Remove ${e.code}`}
+                          onClick={() => setRemovingEnrolment(e)}
+                        >
+                          <Trash2 />
+                        </Button>
+                      </div>
+                    </Td>
                   </tr>
                 ))}
               </tbody>
@@ -444,6 +483,31 @@ function EnrolmentsPage() {
           onClose={() => setNewPackage(false)}
         />
       )}
+      {editingPackage && (
+        <PackageDialog
+          pkg={editingPackage}
+          eligibleIds={eligibilityByPackage.get(editingPackage.id) ?? []}
+          students={data.students}
+          enrolments={data.enrolments}
+          onClose={() => setEditingPackage(null)}
+        />
+      )}
+      {removingPackage && (
+        <RemovePackageDialog pkg={removingPackage} onClose={() => setRemovingPackage(null)} />
+      )}
+      {editingEnrolment && (
+        <EditEnrolmentDialog
+          enrolment={editingEnrolment}
+          prices={data.prices}
+          onClose={() => setEditingEnrolment(null)}
+        />
+      )}
+      {removingEnrolment && (
+        <RemoveEnrolmentDialog
+          enrolment={removingEnrolment}
+          onClose={() => setRemovingEnrolment(null)}
+        />
+      )}
       {editingEligibility && (
         <EligibilityDialog
           pkg={editingEligibility.pkg}
@@ -453,6 +517,385 @@ function EnrolmentsPage() {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Removing a package, with the consequences said out loud first.
+ *
+ * Deleting is not the same as closing. Closing leaves the record and stops the
+ * package being spent; deleting takes it off the books, and the database sets
+ * every roll entry that drew from it back to no package - so those hours stay
+ * taught but stop coming out of anything, and the student reappears in the
+ * billing audit under "Hours taught against no package".
+ *
+ * That is sometimes exactly what is wanted - a duplicate whose hours belong to
+ * the other package - so it is allowed. It is just never a surprise: the count
+ * of lessons and hours is shown before anything happens, and a package that has
+ * already been charged is refused outright.
+ */
+function RemovePackageDialog({ pkg, onClose }: { pkg: Row; onClose: () => void }) {
+  const remove = useServerFn(deletePackage);
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+
+  const used = Number(pkg.hours_used ?? 0);
+  const strands = used > 0;
+
+  async function confirm() {
+    setBusy(true);
+    try {
+      const result = await remove({ data: { id: pkg.id, confirm: true } });
+      if (!result.deleted) {
+        toast.warning("Nothing was removed.");
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["commerce"] });
+      await queryClient.invalidateQueries({ queryKey: ["billing"] });
+      await queryClient.invalidateQueries({ queryKey: ["billing-audit"] });
+      await queryClient.invalidateQueries({ queryKey: ["needs-attention-count"] });
+      toast.success(
+        result.lessons > 0
+          ? `${result.code} removed. ${result.lessons} roll ${result.lessons === 1 ? "entry" : "entries"} no longer draw from a package.`
+          : `${result.code} removed.`,
+      );
+      onClose();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Remove {pkg.code}?</DialogTitle>
+          <DialogDescription>
+            {pkg.students?.full_name}&apos;s package of {formatHours(pkg.hours_purchased)}.
+          </DialogDescription>
+        </DialogHeader>
+
+        {strands ? (
+          <WarningNote>
+            {formatHours(used)} of this package has already been taught. Removing it leaves those
+            lessons drawing from nothing, and {pkg.students?.full_name ?? "the student"} will
+            reappear in Billing under <strong>Hours taught against no package</strong> until the
+            entries are pointed at another one. If this is a duplicate and the hours belong to the
+            other package, that is exactly what you want - attribute them there afterwards.
+          </WarningNote>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No lessons have drawn from this package, so nothing else changes.
+          </p>
+        )}
+
+        <p className="text-sm text-muted-foreground">
+          If you only want to stop it being spent, <strong>close</strong> it instead from Edit -
+          that keeps the record.
+        </p>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="destructive" disabled={busy} onClick={confirm}>
+            {busy ? "Removing…" : "Remove the package"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Removing an enrolment.
+ *
+ * The database refuses to delete one with any roll entry - those entries are
+ * the record of lessons that happened - so this is for an enrolment created by
+ * mistake that never ran. Anything that did run gets closed instead, which is
+ * offered right here rather than sending you somewhere else to find it.
+ */
+function RemoveEnrolmentDialog({ enrolment, onClose }: { enrolment: Row; onClose: () => void }) {
+  const remove = useServerFn(deleteEnrolment);
+  const close = useServerFn(closeEnrolment);
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+
+  async function refresh() {
+    await queryClient.invalidateQueries({ queryKey: ["commerce"] });
+    await queryClient.invalidateQueries({ queryKey: ["billing"] });
+    await queryClient.invalidateQueries({ queryKey: ["billing-audit"] });
+    await queryClient.invalidateQueries({ queryKey: ["needs-attention-count"] });
+  }
+
+  async function run(action: "delete" | "close") {
+    setBusy(true);
+    try {
+      if (action === "delete") {
+        await remove({ data: { id: enrolment.id } });
+        toast.success(`${enrolment.code} removed.`);
+      } else {
+        await close({ data: { id: enrolment.id, ends_on: sydToday(), closure: "withdrawn" } });
+        toast.success(`${enrolment.code} closed.`);
+      }
+      await refresh();
+      onClose();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Remove {enrolment.code}?</DialogTitle>
+          <DialogDescription>
+            {enrolment.students?.full_name} in{" "}
+            {enrolment.class_offerings?.programs?.name ?? "this class"}.
+          </DialogDescription>
+        </DialogHeader>
+
+        <p className="text-sm text-muted-foreground">
+          An enrolment with lessons on the roll cannot be deleted - that history is what the hours
+          and the pay were worked out from. If this one has run, <strong>close</strong> it: it ends
+          today and stops appearing as active, without erasing anything.
+        </p>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="outline" disabled={busy} onClick={() => run("close")}>
+            <XCircle /> Close it
+          </Button>
+          <Button variant="destructive" disabled={busy} onClick={() => run("delete")}>
+            {busy ? "Working…" : "Delete"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Editing an enrolment's commercial terms.
+ *
+ * The student and the class are fixed: moving an enrolment to another student
+ * or another class would take its roll, its hours and its pay with it, which is
+ * a different operation from correcting a price. Everything that is genuinely a
+ * correction - the dates, how they pay, what they pay, the status - is here.
+ */
+function EditEnrolmentDialog({
+  enrolment,
+  prices,
+  onClose,
+}: {
+  enrolment: Row;
+  prices: Row[];
+  onClose: () => void;
+}) {
+  const save = useServerFn(saveEnrolment);
+  const queryClient = useQueryClient();
+
+  const [status, setStatus] = useState<"trial" | "active" | "closed">(enrolment.status);
+  const [method, setMethod] = useState<"hours" | "payg" | "">(enrolment.method ?? "");
+  const [priceId, setPriceId] = useState(enrolment.standard_price_id ?? "");
+  const [hoursOverride, setHoursOverride] = useState(
+    enrolment.hours_override == null ? "" : String(enrolment.hours_override),
+  );
+  const [startsOn, setStartsOn] = useState(enrolment.starts_on ?? sydToday());
+  const [endsOn, setEndsOn] = useState(enrolment.ends_on ?? "");
+  const [adjustment, setAdjustment] = useState<
+    "none" | "percentage" | "fixed_amount" | "final_price_override"
+  >(enrolment.adjustment ?? "none");
+  const [adjustmentValue, setAdjustmentValue] = useState(String(enrolment.adjustment_value ?? 0));
+  const [notes, setNotes] = useState(enrolment.notes ?? "");
+  const [busy, setBusy] = useState(false);
+
+  const selectedPrice = prices.find((p: Row) => p.id === priceId);
+  const needHours = selectedPrice?.basis === "per_hour";
+
+  const problem =
+    status !== "trial" && !method
+      ? "Only a trial may leave the billing method blank."
+      : needHours && !hoursOverride
+        ? "This price is per hour, so it needs a number of hours."
+        : null;
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit {enrolment.code}</DialogTitle>
+          <DialogDescription>
+            {enrolment.students?.full_name} in{" "}
+            {enrolment.class_offerings?.programs?.name ?? "this class"}. The student and the class
+            stay as they are - moving either would take the roll and the hours with it.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Status</Label>
+              <Select
+                value={status}
+                onValueChange={(v: "trial" | "active" | "closed") => setStatus(v)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="trial">Trial</SelectItem>
+                  <SelectItem value="closed">Closed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Billing method</Label>
+              <Select
+                value={method || "none"}
+                onValueChange={(v) => setMethod(v === "none" ? "" : (v as "hours" | "payg"))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="hours">Hours — draws from a package</SelectItem>
+                  <SelectItem value="payg">PAYG — billed per lesson</SelectItem>
+                  <SelectItem value="none">Not set (trials only)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Starts on</Label>
+              <Input type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Ends on</Label>
+              <Input type="date" value={endsOn} onChange={(e) => setEndsOn(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Price</Label>
+            <Select
+              value={priceId || "none"}
+              onValueChange={(v) => setPriceId(v === "none" ? "" : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="No price set" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No price set</SelectItem>
+                {prices.map((p: Row) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name} · {formatMoney(p.unit_rate)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {needHours && (
+            <div className="space-y-1.5">
+              <Label>Hours (this price is per hour)</Label>
+              <Input
+                type="number"
+                step="0.25"
+                value={hoursOverride}
+                onChange={(e) => setHoursOverride(e.target.value)}
+              />
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Adjustment</Label>
+              <Select value={adjustment} onValueChange={(v: typeof adjustment) => setAdjustment(v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="percentage">Percentage</SelectItem>
+                  <SelectItem value="fixed_amount">Fixed discount</SelectItem>
+                  <SelectItem value="final_price_override">Final price override</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Adjustment value</Label>
+              <Input
+                type="number"
+                step="0.01"
+                disabled={adjustment === "none"}
+                value={adjustmentValue}
+                onChange={(e) => setAdjustmentValue(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Notes</Label>
+            <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
+
+          {problem && <p className="text-[0.8rem] text-warning">{problem}</p>}
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={busy || Boolean(problem)}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await save({
+                  data: {
+                    id: enrolment.id,
+                    student_id: enrolment.student_id,
+                    class_offering_id: enrolment.class_offering_id,
+                    status,
+                    starts_on: startsOn,
+                    ends_on: endsOn,
+                    method: method || null,
+                    standard_price_id: priceId || null,
+                    hours_override: hoursOverride ? Number(hoursOverride) : null,
+                    adjustment,
+                    adjustment_value: Number(adjustmentValue || 0),
+                    notes,
+                  },
+                });
+                await queryClient.invalidateQueries({ queryKey: ["commerce"] });
+                await queryClient.invalidateQueries({ queryKey: ["billing"] });
+                await queryClient.invalidateQueries({ queryKey: ["billing-audit"] });
+                await queryClient.invalidateQueries({ queryKey: ["needs-attention-count"] });
+                toast.success("Enrolment updated.");
+                onClose();
+              } catch (error) {
+                toast.error((error as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? "Saving…" : "Save changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -989,28 +1432,48 @@ function EnrolDialog({
   );
 }
 
+/**
+ * One dialog for both creating and editing a package.
+ *
+ * Given a `pkg` it opens on that package's terms; without one it opens empty.
+ * The same form either way, because the fields are the same and a second
+ * near-identical dialog is how the two drift apart.
+ *
+ * Editing hours or price changes what the family owes, so nothing is guessed:
+ * every field is shown filled in with what is there now.
+ */
 function PackageDialog({
+  pkg,
+  eligibleIds,
   students,
   enrolments,
   onClose,
 }: {
+  /** The package being edited, or omitted to create a new one. */
+  pkg?: Row | undefined;
+  /** Enrolments this package may already be spent on. */
+  eligibleIds?: string[] | undefined;
   students: Row[];
   enrolments: Row[];
   onClose: () => void;
 }) {
   const save = useServerFn(savePackage);
   const queryClient = useQueryClient();
+  const editing = Boolean(pkg);
   const [form, setForm] = useState({
-    student_id: "",
-    package_type: "purchased" as "purchased" | "courtesy",
-    hours_purchased: "10",
-    price: "",
-    approved_on: sydToday(),
-    low_balance_threshold: "2",
-    courtesy_reason: "",
-    admin_note: "",
+    student_id: pkg?.student_id ?? "",
+    package_type: (pkg?.package_type ?? "purchased") as "purchased" | "courtesy",
+    hours_purchased: String(pkg?.hours_purchased ?? "10"),
+    price: pkg?.price == null ? "" : String(pkg.price),
+    approved_on: pkg?.approved_on ?? sydToday(),
+    low_balance_threshold: String(pkg?.low_balance_threshold ?? "2"),
+    courtesy_reason: pkg?.courtesy_reason ?? "",
+    admin_note: pkg?.admin_note ?? "",
   });
-  const [selected, setSelected] = useState<string[]>([]);
+  const [status, setStatus] = useState<"draft" | "active" | "closed" | "expired">(
+    (pkg?.status ?? "active") as "draft" | "active" | "closed" | "expired",
+  );
+  const [selected, setSelected] = useState<string[]>(eligibleIds ?? []);
   const [busy, setBusy] = useState(false);
 
   const candidates = enrolments.filter((e: Row) => e.student_id === form.student_id);
@@ -1020,10 +1483,13 @@ function PackageDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>New hours package</DialogTitle>
+          <DialogTitle>
+            {editing ? `Edit ${pkg?.code ?? "package"}` : "New hours package"}
+          </DialogTitle>
           <DialogDescription>
-            A block of hours belonging to one student. Tick which enrolments it may be spent on -
-            one package can cover several classes.
+            {editing
+              ? "Changing the hours or the price changes what this family owes. The balance is recalculated from attendance, so it follows on its own."
+              : "A block of hours belonging to one student. Tick which enrolments it may be spent on - one package can cover several classes."}
           </DialogDescription>
         </DialogHeader>
 
@@ -1032,6 +1498,7 @@ function PackageDialog({
             <Label>Student</Label>
             <Select
               value={form.student_id}
+              disabled={editing}
               onValueChange={(v) => {
                 setForm({ ...form, student_id: v });
                 setSelected([]);
@@ -1104,13 +1571,39 @@ function PackageDialog({
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Approved on</Label>
-            <Input
-              type="date"
-              value={form.approved_on}
-              onChange={(e) => setForm({ ...form, approved_on: e.target.value })}
-            />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Approved on</Label>
+              <Input
+                type="date"
+                value={form.approved_on}
+                onChange={(e) => setForm({ ...form, approved_on: e.target.value })}
+              />
+            </div>
+            {editing && (
+              <div className="space-y-1.5">
+                <Label>Status</Label>
+                <Select
+                  value={status}
+                  onValueChange={(v: "draft" | "active" | "closed" | "expired") => setStatus(v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="closed">Closed</SelectItem>
+                    <SelectItem value="expired">Expired</SelectItem>
+                  </SelectContent>
+                </Select>
+                {status === "draft" && (
+                  <p className="text-xs text-warning">
+                    A draft is skipped by the charge queue - nothing will be raised against it.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           {isCourtesy && (
@@ -1168,16 +1661,19 @@ function PackageDialog({
                 await save({
                   data: {
                     ...form,
+                    ...(pkg?.id ? { id: pkg.id } : {}),
                     price: isCourtesy ? 0 : Number(form.price || 0),
                     hours_purchased: Number(form.hours_purchased),
                     low_balance_threshold: Number(form.low_balance_threshold),
-                    status: "active",
+                    status: editing ? status : "active",
                     enrolment_ids: selected,
                   },
                 });
                 await queryClient.invalidateQueries({ queryKey: ["commerce"] });
+                await queryClient.invalidateQueries({ queryKey: ["billing"] });
+                await queryClient.invalidateQueries({ queryKey: ["billing-audit"] });
                 await queryClient.invalidateQueries({ queryKey: ["needs-attention-count"] });
-                toast.success("Package created.");
+                toast.success(editing ? "Package updated." : "Package created.");
                 onClose();
               } catch (error) {
                 toast.error((error as Error).message);
@@ -1186,7 +1682,7 @@ function PackageDialog({
               }
             }}
           >
-            Create package
+            {editing ? "Save changes" : "Create package"}
           </Button>
         </DialogFooter>
       </DialogContent>
