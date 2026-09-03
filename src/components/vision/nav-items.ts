@@ -10,6 +10,7 @@ import {
   Receipt,
   Settings,
   Sparkles,
+  Stethoscope,
   Sunrise,
   UserCog,
   Users,
@@ -56,6 +57,7 @@ const MANAGE: NavItem[] = [
 
 const UNDERSTAND: NavItem[] = [
   { title: "Needs Attention", url: "/needs-attention", icon: ListChecks, badge: true },
+  { title: "Data check", url: "/diagnostics", icon: Stethoscope },
 ];
 
 const CONFIGURE: NavItem[] = [
