@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { sydDate, sydToday } from "@/lib/format";
 import { db, requireStaff, type AnyClient } from "./guard";
+import { choosePackage } from "./billing-audit";
 import type { PricingBasis, Row } from "./types";
 
 /**
@@ -300,6 +301,31 @@ export const setPackageEligibility = createServerFn({ method: "POST" })
  *
  * Passing a null package clears all three.
  */
+/**
+ * The package a roll entry for this enrolment should draw from.
+ *
+ * The same rule the seed_roll function follows, in the one other place that
+ * writes attendance rows by hand. Eligibility is what makes a package usable -
+ * the database has a trigger that refuses any package with no eligibility row -
+ * so this only ever returns one that is already eligible, and null otherwise.
+ * Two eligible packages is a real choice and stays a person's to make.
+ */
+export async function packageForEnrolment(
+  client: ReturnType<typeof db>,
+  enrolmentId: string,
+  defaultPackageId: string | null,
+): Promise<string | null> {
+  const { data: eligible } = await client
+    .from("package_eligibility")
+    .select("package_id")
+    .eq("enrolment_id", enrolmentId);
+
+  return choosePackage(
+    defaultPackageId,
+    (eligible ?? []).map((r: Row) => r.package_id),
+  );
+}
+
 export const setEnrolmentPackage = createServerFn({ method: "POST" })
   .middleware([requireStaff])
   .inputValidator((data) =>
@@ -518,6 +544,11 @@ export const addMidTermStudent = createServerFn({ method: "POST" })
         .eq("enrolment_id", enrolmentId)
         .in("session_id", uniqueSessionIds);
       const have = new Set((already ?? []).map((r: Row) => r.session_id));
+      // The roll draws from the class's package from the first lesson, rather
+      // than waiting for someone to attach one and re-point it afterwards.
+      const rollPackageId = enrolmentId
+        ? await packageForEnrolment(client, enrolmentId, null)
+        : null;
       const toInsert = uniqueSessionIds
         .filter((sid) => !have.has(sid))
         .map((sid) => ({
@@ -525,6 +556,7 @@ export const addMidTermStudent = createServerFn({ method: "POST" })
           enrolment_id: enrolmentId,
           att_type: "regular",
           status: "not_marked",
+          package_id: rollPackageId,
         }));
       if (toInsert.length) {
         const { error: attError } = await client.from("attendance").insert(toInsert);
