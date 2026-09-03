@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { groupChargesByPayer, groupPaygByStudent, needsPlan } from "./billing-groups";
+import {
+  groupChargesByInvoice,
+  groupChargesByPayer,
+  groupPaygByStudent,
+  needsPlan,
+} from "./billing-groups";
 import type { Row } from "./types";
 
 const enrolment = (over: Partial<Row>): Row =>
@@ -129,5 +134,67 @@ describe("groupChargesByPayer", () => {
       charge({ payer_id: "g1", students: { full_name: "Brandon Chen" } }),
     ]);
     expect(groups.map((g) => g.payerName)).toEqual(["Andre Chen", "Erin Chen", "Internal"]);
+  });
+});
+
+const line = (over: Partial<Row>): Row =>
+  ({
+    id: "c1",
+    code: "CHG-00036",
+    invoice_id: "inv-1",
+    invoices: { code: "INV-2026-0007" },
+    invoice_date: "2026-09-03",
+    method: "bank_transfer",
+    xero_invoice_no: null,
+    payer_id: "g1",
+    guardians: { full_name: "Andre Chen" },
+    students: { full_name: "Beverly Chen" },
+    final_amount: 70,
+    ...over,
+  }) as Row;
+
+describe("groupChargesByInvoice", () => {
+  it("shows one invoice for charges sent together, even with no Xero number", () => {
+    // The complaint this fixes: five lessons sent as one bill read as five
+    // separate rows, because the optional Xero number was the only thing
+    // tying them together and it had been left blank.
+    const groups = groupChargesByInvoice([
+      line({ id: "c1", code: "CHG-00032" }),
+      line({ id: "c2", code: "CHG-00033" }),
+      line({ id: "c3", code: "CHG-00034", students: { full_name: "Brandon Chen" } }),
+      line({ id: "c4", code: "CHG-00035", students: { full_name: "Brandon Chen" } }),
+      line({ id: "c5", code: "CHG-00036", students: { full_name: "Brandon Chen" } }),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.label).toBe("INV-2026-0007");
+    expect(groups[0]!.charges).toHaveLength(5);
+    expect(groups[0]!.students).toEqual(["Beverly Chen", "Brandon Chen"]);
+    expect(groups[0]!.total).toBe(350);
+  });
+
+  it("keeps separate invoices apart", () => {
+    const groups = groupChargesByInvoice([
+      line({ id: "c1", invoice_id: "inv-1" }),
+      line({ id: "c2", invoice_id: "inv-2", invoices: { code: "INV-2026-0008" } }),
+    ]);
+    expect(groups).toHaveLength(2);
+  });
+
+  it("leaves a charge with no invoice standing on its own", () => {
+    // Two un-invoiced charges must never merge into one phantom invoice.
+    const groups = groupChargesByInvoice([
+      line({ id: "c1", code: "CHG-00011", invoice_id: null, invoices: null, invoice_date: null }),
+      line({ id: "c2", code: "CHG-00012", invoice_id: null, invoices: null, invoice_date: null }),
+    ]);
+    expect(groups).toHaveLength(2);
+    expect(groups.map((g) => g.label).sort()).toEqual(["CHG-00011", "CHG-00012"]);
+  });
+
+  it("puts the most recent invoice first", () => {
+    const groups = groupChargesByInvoice([
+      line({ id: "c1", invoice_id: "old", invoice_date: "2026-08-20" }),
+      line({ id: "c2", invoice_id: "new", invoice_date: "2026-09-03" }),
+    ]);
+    expect(groups[0]!.invoiceId).toBe("new");
   });
 });

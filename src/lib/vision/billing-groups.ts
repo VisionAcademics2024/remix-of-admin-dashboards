@@ -155,3 +155,64 @@ export function groupChargesByPayer(rows: Row[]): FamilyGroup[] {
     return b.students.length - a.students.length || a.payerName.localeCompare(b.payerName);
   });
 }
+
+/* ------------------------------------------------------------ Sent invoices */
+
+export interface InvoiceGroup {
+  /** The invoice row's id, or null for a charge sent before invoices existed. */
+  invoiceId: string | null;
+  /** INV- code, or the charge's own code when it stands alone. */
+  label: string;
+  /** The accounting system's reference, where one was given. */
+  xeroNo: string | null;
+  invoiceDate: string | null;
+  method: string | null;
+  payerName: string;
+  charges: Row[];
+  total: number;
+  /** Distinct students on this invoice - siblings on one bill. */
+  students: string[];
+}
+
+/**
+ * Charges gathered into the invoices they were sent on.
+ *
+ * A family that received one bill for five lessons should read as one invoice
+ * that opens to its lines, not as five rows that happen to share a date. The
+ * charges carry the invoice they belong to, so this is a straight grouping -
+ * and a charge with no invoice stands alone, which is what it is.
+ *
+ * Newest invoice first: the unpaid queue is worked from the most recent run
+ * backwards.
+ */
+export function groupChargesByInvoice(rows: Row[]): InvoiceGroup[] {
+  const groups = new Map<string, InvoiceGroup>();
+
+  for (const c of rows) {
+    // A charge with no invoice is its own group, keyed by itself, so it never
+    // merges with another one.
+    const key = c.invoice_id ?? `charge:${c.id}`;
+    const group: InvoiceGroup = groups.get(key) ?? {
+      invoiceId: c.invoice_id ?? null,
+      label: c.invoices?.code ?? c.code ?? "Charge",
+      xeroNo: c.xero_invoice_no ?? null,
+      invoiceDate: c.invoice_date ?? null,
+      method: c.method ?? null,
+      payerName: c.guardians?.full_name ?? "Internal",
+      charges: [] as Row[],
+      total: 0,
+      students: [] as string[],
+    };
+    group.charges.push(c);
+    group.total += Number(c.final_amount ?? 0);
+    const name = c.students?.full_name;
+    if (name && !group.students.includes(name)) group.students.push(name);
+    groups.set(key, group);
+  }
+
+  return [...groups.values()].sort((a, b) => {
+    const at = a.invoiceDate ? new Date(a.invoiceDate).getTime() : 0;
+    const bt = b.invoiceDate ? new Date(b.invoiceDate).getTime() : 0;
+    return bt - at || a.payerName.localeCompare(b.payerName);
+  });
+}

@@ -38,7 +38,9 @@ export const getBillingBoard = createServerFn({ method: "GET" })
           .limit(UNCHARGED_LIMIT),
         client
           .from("v_charges")
-          .select("*, students(id, code, full_name), guardians(id, full_name)")
+          .select(
+            "*, students(id, code, full_name), guardians(id, full_name), invoices(id, code, invoice_date, xero_invoice_no)",
+          )
           .order("created_at", { ascending: false })
           .limit(CHARGE_LIMIT),
         // What has already been billed, as ids only.
@@ -578,6 +580,20 @@ export const createHoursCharge = createServerFn({ method: "POST" })
  * across several charges, so a family gets one document while every lesson
  * keeps its own traceable line.
  */
+/**
+ * Send a run out as one invoice.
+ *
+ * The charges are the lines; the invoice is the document the family receives.
+ * Creating a row for it is what lets the unpaid queue show one invoice that
+ * opens to its lines, instead of five lines that were sent together and have no
+ * way of saying so - the Xero number used to be the only thing tying them
+ * together, and it is optional.
+ *
+ * One payer per invoice, refused at the server rather than trusted from the
+ * screen: a set of charges spanning two households would put one family's
+ * children on the other's bill, and that is not a mistake worth allowing
+ * anywhere in the stack.
+ */
 export const markInvoiced = createServerFn({ method: "POST" })
   .middleware([requireStaff])
   .inputValidator((data) =>
@@ -586,22 +602,54 @@ export const markInvoiced = createServerFn({ method: "POST" })
         ids: z.array(z.string().uuid()).min(1),
         invoice_date: z.string().min(1),
         xero_invoice_no: z.string().optional().or(z.literal("")),
-        // The cash/card split is invoiced as two runs; stamp how the money is
-        // expected so the unpaid queue already reads as cash or card.
+        // The cash/bank-transfer split is invoiced as two runs; stamp how the
+        // money is expected so the unpaid queue already reads as one or other.
         method: z.enum(["cash", "card", "bank_transfer", "other"]).optional(),
       })
       .parse(data),
   )
   .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+
+    const { data: rows, error: readError } = await client
+      .from("charges")
+      .select("id, payer_id, guardians(full_name)")
+      .in("id", data.ids);
+    if (readError) throw readError;
+    if ((rows ?? []).length !== data.ids.length) {
+      throw new Error("Some of those charges no longer exist.");
+    }
+
+    const payers = [...new Set((rows ?? []).map((c: Row) => c.payer_id ?? null))];
+    if (payers.length > 1) {
+      throw new Error(
+        "Those charges belong to different families, so they cannot go on one invoice. Invoice each family separately.",
+      );
+    }
+
+    const { data: invoice, error: invoiceError } = await client
+      .from("invoices")
+      .insert({
+        payer_id: payers[0] ?? null,
+        invoice_date: data.invoice_date,
+        method: data.method ?? null,
+        xero_invoice_no: data.xero_invoice_no || null,
+      })
+      .select("id, code")
+      .single();
+    if (invoiceError) throw invoiceError;
+
     const patch: Record<string, unknown> = {
       status: "invoiced",
       invoice_date: data.invoice_date,
       xero_invoice_no: data.xero_invoice_no || null,
+      invoice_id: invoice.id,
     };
     if (data.method) patch["method"] = data.method;
-    const { error } = await db(context.supabase).from("charges").update(patch).in("id", data.ids);
+
+    const { error } = await client.from("charges").update(patch).in("id", data.ids);
     if (error) throw error;
-    return { updated: data.ids.length };
+    return { updated: data.ids.length, invoice_id: invoice.id, code: invoice.code };
   });
 
 /**
