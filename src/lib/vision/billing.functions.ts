@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { db, requireStaff } from "./guard";
 import { findUnbilled } from "./billing-audit";
+import { packageForEnrolment } from "./commerce.functions";
 import type { Row } from "./types";
 
 /**
@@ -175,6 +176,73 @@ export const getBillingAudit = createServerFn({ method: "GET" })
         attendance: (attendance.data ?? []).length,
       },
     };
+  });
+
+/**
+ * Point unattributed roll entries back at the class's own package.
+ *
+ * The repair for the hours_unattributed finding. seed_roll used to create roll
+ * entries with no package, so any lesson made after a package was attached -
+ * most often the new lesson that settles a make-up - drew from nothing. Those
+ * hours were taught and marked present but never came off the balance.
+ *
+ * Only rows that currently point at nothing are touched, so an entry someone
+ * deliberately moved to a different package is left exactly as it is, and
+ * running this twice does nothing the second time. Trials are skipped: a trial
+ * never spends hours.
+ *
+ * This does not raise a charge. It attributes hours already given to the
+ * package they were always meant to come out of, which is what makes the
+ * balance true and what makes the package billable in the ordinary queue.
+ */
+export const attributeUnbilledHours = createServerFn({ method: "POST" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    z
+      .object({
+        /** One enrolment, or every enrolment the audit flagged. */
+        enrolment_ids: z.array(z.string().uuid()).min(1),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+
+    const { data: enrolments, error: readError } = await client
+      .from("enrolments")
+      .select("id, default_package_id")
+      .in("id", data.enrolment_ids);
+    if (readError) throw readError;
+
+    let attributed = 0;
+    const skipped: string[] = [];
+
+    for (const enrolment of enrolments ?? []) {
+      const packageId = await packageForEnrolment(
+        client,
+        enrolment.id,
+        enrolment.default_package_id ?? null,
+      );
+      if (!packageId) {
+        // No eligible package, or more than one and no default among them.
+        // Which package the hours belong to is then a real question, and this
+        // is not the place to guess at it.
+        skipped.push(enrolment.id);
+        continue;
+      }
+
+      const { data: updated, error } = await client
+        .from("attendance")
+        .update({ package_id: packageId })
+        .eq("enrolment_id", enrolment.id)
+        .is("package_id", null)
+        .neq("att_type", "trial")
+        .select("id");
+      if (error) throw error;
+      attributed += (updated ?? []).length;
+    }
+
+    return { attributed, skipped: skipped.length };
   });
 
 /**

@@ -55,7 +55,7 @@ export const UNBILLED_REASONS: Record<
   hours_unattributed: {
     title: "Hours taught against no package",
     explain:
-      "The student has a package, but these roll entries are not pointed at it - so the hours are taught, the balance is never drawn down, and the package looks unused. Usually a package attached after the roll was already seeded.",
+      "The student has a package, but these roll entries are not pointed at it - so the hours are taught, the balance is never drawn down, and the package looks unused. This is what a make-up settled by cancelling the lesson and creating a new one in its place used to leave behind: the new lesson's roll was seeded without a package. Attributing them draws the hours from the class's own package, which is what should have happened; it bills nobody anything extra.",
     severity: "high",
   },
   package_draft: {
@@ -77,6 +77,27 @@ export const UNBILLED_REASONS: Record<
     severity: "medium",
   },
 };
+
+/**
+ * Which package a roll entry for an enrolment should draw from.
+ *
+ * The same rule lives in the seed_roll SQL function, because the database
+ * writes rolls too. It is stated here as well so it can be tested, and so the
+ * two are checked against one description rather than drifting apart quietly.
+ *
+ * Eligibility is the gate: attendance carries a trigger that refuses any
+ * package with no package_eligibility row for the enrolment, so only an
+ * eligible package is ever chosen. Two eligible packages and no default among
+ * them is a genuine question about whose hours these are - so it returns null
+ * and the audit keeps reporting it rather than picking one.
+ */
+export function choosePackage(
+  defaultPackageId: string | null | undefined,
+  eligiblePackageIds: string[],
+): string | null {
+  if (defaultPackageId && eligiblePackageIds.includes(defaultPackageId)) return defaultPackageId;
+  return eligiblePackageIds.length === 1 ? eligiblePackageIds[0]! : null;
+}
 
 /** The rows the classifier reads, gathered by getBillingAudit. */
 export interface AuditInput {

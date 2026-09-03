@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { findUnbilled, groupUnbilled, type AuditInput } from "./billing-audit";
+import { choosePackage, findUnbilled, groupUnbilled, type AuditInput } from "./billing-audit";
 
 /** The four tables the audit reads, with only the fields the rules look at. */
 function input(over: Partial<AuditInput> = {}): AuditInput {
@@ -217,5 +217,43 @@ describe("findUnbilled — ordering and grouping", () => {
     expect(groups[0]!.items).toHaveLength(2);
     expect(groups[0]!.hours).toBe(5);
     expect(groups[0]!.title).toMatch(/no package/i);
+  });
+});
+
+/**
+ * The same rule is written twice - here, and in the seed_roll SQL function that
+ * the database uses when it seeds a roll itself. These cases describe the
+ * behaviour both have to agree on.
+ */
+describe("choosePackage — which package a roll entry draws from", () => {
+  it("uses the enrolment's own package when it is eligible", () => {
+    expect(choosePackage("pkg-1", ["pkg-1", "pkg-2"])).toBe("pkg-1");
+  });
+
+  it("refuses a default that is not eligible, even though it is named on the enrolment", () => {
+    // The database has a trigger that would reject the insert outright, so
+    // returning it here would turn a missing package into a failed roll seed.
+    expect(choosePackage("pkg-9", ["pkg-1", "pkg-2"])).toBeNull();
+  });
+
+  it("falls back to the only eligible package when no default is set", () => {
+    // One eligible package IS the package for that class - there is no choice
+    // to get wrong.
+    expect(choosePackage(null, ["pkg-1"])).toBe("pkg-1");
+  });
+
+  it("takes the single eligible package even when the default names another", () => {
+    expect(choosePackage("pkg-9", ["pkg-1"])).toBe("pkg-1");
+  });
+
+  it("stays out of it when two are eligible and neither is the default", () => {
+    // Whose hours these are is a real question; guessing would move money.
+    expect(choosePackage(null, ["pkg-1", "pkg-2"])).toBeNull();
+    expect(choosePackage(undefined, ["pkg-1", "pkg-2"])).toBeNull();
+  });
+
+  it("returns nothing when the enrolment has no eligible package at all", () => {
+    expect(choosePackage(null, [])).toBeNull();
+    expect(choosePackage("pkg-1", [])).toBeNull();
   });
 });

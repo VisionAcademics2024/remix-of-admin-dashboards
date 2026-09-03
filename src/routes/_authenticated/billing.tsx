@@ -44,6 +44,7 @@ import { groupUnbilled, type UnbilledFinding } from "@/lib/vision/billing-audit"
 import { listStudents } from "@/lib/vision/people.functions";
 import {
   adjustCharge,
+  attributeUnbilledHours,
   cancelCharge,
   createHoursCharge,
   createManualCharge,
@@ -114,7 +115,11 @@ function BillingPage() {
 
       {/* The audit sits above the pipeline on purpose. Everything below is work
           the app already knows about; this is the work it did not. */}
-      <UnbilledSection audit={audit} onNewBill={() => setNewBill(true)} />
+      <UnbilledSection
+        audit={audit}
+        onRefresh={refresh}
+        onNewBill={() => setNewBill(true)}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard label="To set up" value={data.newEnrolments.length} tone="warning" icon={Sparkles} />
@@ -200,12 +205,47 @@ function BillingPage() {
  */
 function UnbilledSection({
   audit,
+  onRefresh,
   onNewBill,
 }: {
   audit: { findings: UnbilledFinding[] } | undefined;
+  onRefresh: () => Promise<void>;
   onNewBill: () => void;
 }) {
   const groups = useMemo(() => groupUnbilled(audit?.findings ?? []), [audit]);
+  const attribute = useServerFn(attributeUnbilledHours);
+  const [fixing, setFixing] = useState(false);
+
+  /**
+   * Put these hours back on the package they were always meant to come out of.
+   *
+   * Safe to press: it only touches roll entries that point at nothing, so an
+   * entry moved to a different package on purpose is left alone, and pressing
+   * it twice does nothing the second time.
+   */
+  async function attributeAll(ids: string[]) {
+    setFixing(true);
+    try {
+      const result = await attribute({ data: { enrolment_ids: ids } });
+      await onRefresh();
+      if (result.attributed === 0) {
+        toast.warning(
+          "Nothing could be attributed - these enrolments have no single eligible package. Attach one from Enrolments & Hours.",
+        );
+      } else {
+        toast.success(
+          `${result.attributed} roll ${result.attributed === 1 ? "entry" : "entries"} now draw from the class package.` +
+            (result.skipped > 0
+              ? ` ${result.skipped} left alone - no single eligible package.`
+              : ""),
+        );
+      }
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setFixing(false);
+    }
+  }
 
   if (!audit) {
     return (
@@ -269,6 +309,19 @@ function UnbilledSection({
               <span className="rounded-full bg-[var(--mat-thick)] px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
                 {group.items.length}
               </span>
+              {/* Only this reason has an answer that is not a judgement call:
+                  the package is already known, the roll simply is not pointed
+                  at it. Everything else needs a person. */}
+              {group.reason === "hours_unattributed" && (
+                <Button
+                  size="sm"
+                  className="ml-auto"
+                  disabled={fixing}
+                  onClick={() => attributeAll(group.items.map((i) => i.id))}
+                >
+                  {fixing ? "Attributing…" : `Attribute all ${group.items.length}`}
+                </Button>
+              )}
             </div>
             <p className="mb-3 max-w-3xl text-[0.82rem] leading-relaxed text-muted-foreground">
               {group.explain}
@@ -315,11 +368,24 @@ function UnbilledSection({
                       {/* Where the fix lives, not a button that guesses at it.
                           Hours and prices are agreed with a family, never
                           inferred from a roll. */}
-                      <Button asChild size="sm" variant="outline">
-                        <Link to="/enrolments">
-                          {item.reason === "hours_no_package" ? "Add a package" : "Open enrolments"}
-                        </Link>
-                      </Button>
+                      {item.reason === "hours_unattributed" ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={fixing}
+                          onClick={() => attributeAll([item.id])}
+                        >
+                          Attribute
+                        </Button>
+                      ) : (
+                        <Button asChild size="sm" variant="outline">
+                          <Link to="/enrolments">
+                            {item.reason === "hours_no_package"
+                              ? "Add a package"
+                              : "Open enrolments"}
+                          </Link>
+                        </Button>
+                      )}
                     </Td>
                   </tr>
                 ))}
