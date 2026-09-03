@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { db, requireStaff } from "./guard";
-import { findUnbilled } from "./billing-audit";
+import { applyTaughtFilters, findUnbilled } from "./billing-audit";
 import { needsPlan } from "./billing-groups";
 import { packageForEnrolment } from "./commerce.functions";
 import type { Row } from "./types";
@@ -34,13 +34,14 @@ export const getBillingBoard = createServerFn({ method: "GET" })
       // cap it was the oldest, most overdue lessons that fell off the end and
       // stopped being billable. The ones that have waited longest are the ones
       // that must survive the cut.
-      client
-        .from("v_attendance")
-        .select(
-          "*, sessions(code, starts_at, class_offerings(code, programs(name))), enrolments(code, base_price, standard_price_id, students(id, code, full_name, default_payer_id))",
-        )
-        .eq("billing_method", "payg")
-        .eq("status", "present")
+      applyTaughtFilters(
+        client
+          .from("v_attendance")
+          .select(
+            "*, sessions(code, starts_at, class_offerings(code, programs(name))), enrolments(code, base_price, standard_price_id, students(id, code, full_name, default_payer_id))",
+          )
+          .eq("billing_method", "payg"),
+      )
         .order("lesson_starts_at", { ascending: true })
         .limit(UNCHARGED_LIMIT),
       // No invoice embed here, deliberately. v_charges is a view, and asking
@@ -203,12 +204,11 @@ export const getBillingAudit = createServerFn({ method: "GET" })
       // Only roll entries that actually consumed time. hours_consumed is
       // computed by the view, so a cancelled lesson or an absence is already
       // zero and never reaches here.
-      client
-        .from("v_attendance")
-        .select("id, enrolment_id, package_id, hours_consumed, session_date")
-        .eq("status", "present")
-        .neq("att_type", "trial")
-        .gt("hours_consumed", 0),
+      applyTaughtFilters(
+        client
+          .from("v_attendance")
+          .select("id, enrolment_id, package_id, hours_consumed, session_date"),
+      ),
       client.from("charges").select("attendance_id").neq("status", "cancelled"),
     ]);
 

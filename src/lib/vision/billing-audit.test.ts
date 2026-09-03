@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { choosePackage, findUnbilled, groupUnbilled, type AuditInput } from "./billing-audit";
+import {
+  applyTaughtFilters,
+  choosePackage,
+  countsAsTaught,
+  findUnbilled,
+  groupUnbilled,
+  type AuditInput,
+} from "./billing-audit";
+import type { Row } from "./types";
 
 /** The four tables the audit reads, with only the fields the rules look at. */
 function input(over: Partial<AuditInput> = {}): AuditInput {
@@ -255,5 +263,55 @@ describe("choosePackage — which package a roll entry draws from", () => {
   it("returns nothing when the enrolment has no eligible package at all", () => {
     expect(choosePackage(null, [])).toBeNull();
     expect(choosePackage("pkg-1", [])).toBeNull();
+  });
+});
+
+const taught = (over: Partial<Row>): Row =>
+  ({ status: "present", att_type: "regular", hours_consumed: 1.5, ...over }) as Row;
+
+describe("what counts as taught", () => {
+  it("refuses a lesson whose session was cancelled", () => {
+    // The bug this fixes. Attendance keeps its own status, so cancelling a
+    // lesson does not un-mark the students on it: the roll still says present
+    // while the session says cancelled, and hours_consumed drops to zero. The
+    // charge queue asked only for present rows, so those lessons sat in
+    // "PAYG lessons taught, not charged" reading 0 h - billable, and never
+    // taught. It is exactly what a cancelled-and-rebooked make-up leaves.
+    expect(countsAsTaught(taught({ hours_consumed: 0 }))).toBe(false);
+  });
+
+  it("refuses a trial, which is free by definition", () => {
+    expect(countsAsTaught(taught({ att_type: "trial" }))).toBe(false);
+  });
+
+  it("refuses a student who was not there", () => {
+    expect(countsAsTaught(taught({ status: "absent" }))).toBe(false);
+    expect(countsAsTaught(taught({ status: "not_marked" }))).toBe(false);
+  });
+
+  it("accepts a lesson that actually ran", () => {
+    expect(countsAsTaught(taught({}))).toBe(true);
+  });
+
+  it("applies the same three filters to a query", () => {
+    // The query and the predicate must not drift: the audit and the charge
+    // queue disagreeing is what let a cancelled lesson be billable.
+    const calls: string[] = [];
+    const fake = {
+      eq(c: string, v: unknown) {
+        calls.push(`eq:${c}=${String(v)}`);
+        return this;
+      },
+      neq(c: string, v: unknown) {
+        calls.push(`neq:${c}=${String(v)}`);
+        return this;
+      },
+      gt(c: string, v: unknown) {
+        calls.push(`gt:${c}=${String(v)}`);
+        return this;
+      },
+    };
+    applyTaughtFilters(fake);
+    expect(calls).toEqual(["eq:status=present", "neq:att_type=trial", "gt:hours_consumed=0"]);
   });
 });
