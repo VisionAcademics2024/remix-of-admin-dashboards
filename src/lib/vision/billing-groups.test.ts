@@ -198,3 +198,31 @@ describe("groupChargesByInvoice", () => {
     expect(groups[0]!.invoiceId).toBe("new");
   });
 });
+
+describe("groupChargesByInvoice — when the invoice lookup is unavailable", () => {
+  // The invoice row supplies only the INV- label. If reading invoices fails,
+  // the charges must still be there: the figures are the money, the label is
+  // decoration. This is the shape that took Billing to all-zeroes once.
+  it("still groups by invoice_id and still shows every charge", () => {
+    const groups = groupChargesByInvoice([
+      line({ id: "c1", code: "CHG-00032", invoices: null }),
+      line({ id: "c2", code: "CHG-00033", invoices: null }),
+      line({ id: "c3", code: "CHG-00034", invoices: null }),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.charges).toHaveLength(3);
+    expect(groups[0]!.total).toBe(210);
+    // Falls back to a charge code rather than rendering nothing.
+    expect(groups[0]!.label).toBe("CHG-00032");
+  });
+
+  it("still shows every charge when nothing has an invoice at all", () => {
+    const rows = [
+      line({ id: "c1", code: "CHG-00032", invoice_id: null, invoices: null }),
+      line({ id: "c2", code: "CHG-00033", invoice_id: null, invoices: null }),
+    ];
+    const groups = groupChargesByInvoice(rows);
+    expect(groups.flatMap((g) => g.charges)).toHaveLength(2);
+    expect(groups.reduce((n, g) => n + g.total, 0)).toBe(140);
+  });
+});
