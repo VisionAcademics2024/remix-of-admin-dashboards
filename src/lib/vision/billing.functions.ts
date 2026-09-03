@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { db, requireStaff } from "./guard";
 import { findUnbilled } from "./billing-audit";
+import { needsPlan } from "./billing-groups";
 import { packageForEnrolment } from "./commerce.functions";
 import type { Row } from "./types";
 
@@ -17,57 +18,64 @@ export const getBillingBoard = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const client = db(context.supabase);
 
-    const [uncharged, charges, billedKeys, packagesToCharge, newEnrolments] = await Promise.all([
-      // PAYG lessons attended but not charged.
-      //
-      // Ordered OLDEST first, deliberately. This list is capped, and the cap
-      // used to sit under a newest-first order - so once the backlog passed the
-      // cap it was the oldest, most overdue lessons that fell off the end and
-      // stopped being billable. The ones that have waited longest are the ones
-      // that must survive the cut.
-      client
-        .from("v_attendance")
-        .select(
-          "*, sessions(code, starts_at, class_offerings(code, programs(name))), enrolments(code, base_price, standard_price_id, students(id, code, full_name, default_payer_id))",
-        )
-        .eq("billing_method", "payg")
-        .eq("status", "present")
-        .order("lesson_starts_at", { ascending: true })
-        .limit(UNCHARGED_LIMIT),
-      client
-        .from("v_charges")
-        .select("*, students(id, code, full_name), guardians(id, full_name)")
-        .order("created_at", { ascending: false })
-        .limit(CHARGE_LIMIT),
-      // What has already been billed, as ids only.
-      //
-      // This is separate from the list above on purpose. "Already charged" used
-      // to be derived from that capped list, which meant that past the cap the
-      // app forgot a lesson had been billed and offered it up to be billed
-      // again. Ids are small enough to read without a cap, so the guard against
-      // double-billing is never the thing that gets truncated.
-      client.from("charges").select("attendance_id, package_id").neq("status", "cancelled"),
-      // Hours packages with no charge raised against them yet.
-      client
-        .from("v_hours_packages")
-        .select("*, students(id, code, full_name, default_payer_id)")
-        .neq("status", "draft")
-        .order("approved_on", { ascending: false }),
-      // New enrolments with no agreed price yet - a student joined a class but
-      // whether they're on Hours or PAYG, and what they pay, isn't set. They are
-      // firmed here before anything is charged.
-      client
-        .from("v_enrolments")
-        .select(
-          "id, code, status, method, base_price, starts_on, " +
-            "students(id, code, full_name, default_payer_id), " +
-            "class_offerings(code, programs(name))",
-        )
-        .eq("status", "active")
-        .or("base_price.is.null,base_price.eq.0")
-        .order("starts_on", { ascending: false })
-        .limit(200),
-    ]);
+    const [uncharged, charges, billedKeys, packageOwners, packagesToCharge, newEnrolments] =
+      await Promise.all([
+        // PAYG lessons attended but not charged.
+        //
+        // Ordered OLDEST first, deliberately. This list is capped, and the cap
+        // used to sit under a newest-first order - so once the backlog passed the
+        // cap it was the oldest, most overdue lessons that fell off the end and
+        // stopped being billable. The ones that have waited longest are the ones
+        // that must survive the cut.
+        client
+          .from("v_attendance")
+          .select(
+            "*, sessions(code, starts_at, class_offerings(code, programs(name))), enrolments(code, base_price, standard_price_id, students(id, code, full_name, default_payer_id))",
+          )
+          .eq("billing_method", "payg")
+          .eq("status", "present")
+          .order("lesson_starts_at", { ascending: true })
+          .limit(UNCHARGED_LIMIT),
+        client
+          .from("v_charges")
+          .select("*, students(id, code, full_name), guardians(id, full_name)")
+          .order("created_at", { ascending: false })
+          .limit(CHARGE_LIMIT),
+        // What has already been billed, as ids only.
+        //
+        // This is separate from the list above on purpose. "Already charged" used
+        // to be derived from that capped list, which meant that past the cap the
+        // app forgot a lesson had been billed and offered it up to be billed
+        // again. Ids are small enough to read without a cap, so the guard against
+        // double-billing is never the thing that gets truncated.
+        client.from("charges").select("attendance_id, package_id").neq("status", "cancelled"),
+        // Who owns a package at all, charged or not.
+        //
+        // Separate from the to-charge list below, which only holds uncharged
+        // ones. An hours student's price lives on their package, so "have they
+        // got one?" is the question that settles their plan - and it must not
+        // stop being true the moment someone invoices it.
+        client.from("hours_packages").select("student_id").neq("status", "draft"),
+        // Hours packages with no charge raised against them yet.
+        client
+          .from("v_hours_packages")
+          .select("*, students(id, code, full_name, default_payer_id)")
+          .neq("status", "draft")
+          .order("approved_on", { ascending: false }),
+        // New enrolments with no agreed price yet - a student joined a class but
+        // whether they're on Hours or PAYG, and what they pay, isn't set. They are
+        // firmed here before anything is charged.
+        client
+          .from("v_enrolments")
+          .select(
+            "id, code, status, method, base_price, starts_on, " +
+              "students(id, code, full_name, default_payer_id), " +
+              "class_offerings(code, programs(name))",
+          )
+          .eq("status", "active")
+          .order("starts_on", { ascending: false })
+          .limit(ENROLMENT_LIMIT),
+      ]);
 
     const chargeRows = charges.data ?? [];
     const billed = billedKeys.data ?? [];
@@ -84,13 +92,14 @@ export const getBillingBoard = createServerFn({ method: "GET" })
     const pkgToCharge = (packagesToCharge.data ?? []).filter(
       (p: Row) => !chargedPackages.has(p.id) && p.package_type !== "courtesy",
     );
-    // A student whose hours already sit in a package to charge is handled there,
-    // so don't also nag about the enrolment having no price.
-    const pkgStudentIds = new Set(pkgToCharge.map((p: Row) => p.student_id));
+    // Every student who owns a package, whatever has been billed against it.
+    const packagedStudentIds = new Set(
+      (packageOwners.data ?? []).map((p: Row) => p.student_id).filter(Boolean),
+    );
 
     return {
-      newEnrolments: (newEnrolments.data ?? []).filter(
-        (e: Row) => !pkgStudentIds.has(e.students?.id),
+      newEnrolments: (newEnrolments.data ?? []).filter((e: Row) =>
+        needsPlan(e, packagedStudentIds.has(e.students?.id)),
       ),
       toCharge: (uncharged.data ?? []).filter((a: Row) => !chargedAttendance.has(a.id)),
       packagesToCharge: pkgToCharge,
@@ -103,6 +112,7 @@ export const getBillingBoard = createServerFn({ method: "GET" })
       truncated: {
         uncharged: (uncharged.data ?? []).length >= UNCHARGED_LIMIT,
         charges: chargeRows.length >= CHARGE_LIMIT,
+        enrolments: (newEnrolments.data ?? []).length >= ENROLMENT_LIMIT,
       },
     };
   });
@@ -115,6 +125,15 @@ export const getBillingBoard = createServerFn({ method: "GET" })
  * showing part of the picture.
  */
 const UNCHARGED_LIMIT = 500;
+/**
+ * Active enrolments read to decide who still needs a plan.
+ *
+ * This one is filtered in the app rather than the query, because whether an
+ * hours student is settled depends on owning a package - which no single
+ * PostgREST filter can ask. So the cap has to be generous enough to hold every
+ * active enrolment, and honest when it is not.
+ */
+const ENROLMENT_LIMIT = 1000;
 const CHARGE_LIMIT = 1000;
 
 /**
@@ -364,6 +383,141 @@ export const createPaygCharge = createServerFn({ method: "POST" })
       );
     }
     return { success: true };
+  });
+
+/**
+ * Charge several PAYG lessons in one go.
+ *
+ * Still one charge per lesson - that is what stops a lesson being billed twice,
+ * and what lets a single lesson be discounted or cancelled later without
+ * unpicking the rest. What changes is that raising them is one action rather
+ * than five, and the charges that come out are then invoiced together under one
+ * number, so the family receives one bill with a line per lesson.
+ *
+ * All or nothing: the rows go in as one insert, so a lesson that has already
+ * been charged fails the whole batch rather than leaving half a bill raised.
+ */
+export const createPaygCharges = createServerFn({ method: "POST" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    z
+      .object({
+        items: z
+          .array(
+            z.object({
+              attendance_id: z.string().uuid(),
+              standard_amount: z.coerce.number().min(0),
+              adjustment: z.coerce.number().default(0),
+            }),
+          )
+          .min(1),
+        route: z.enum(["parent", "internal"]).default("parent"),
+        notes: z.string().optional().or(z.literal("")),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+    const ids = data.items.map((i) => i.attendance_id);
+
+    const { data: rows, error: readError } = await client
+      .from("v_attendance")
+      .select("id, student_id, enrolments(students(full_name, default_payer_id))")
+      .in("id", ids);
+    if (readError) throw readError;
+
+    const byId = new Map((rows ?? []).map((r: Row) => [r.id, r]));
+    const missing = ids.filter((id) => !byId.has(id));
+    if (missing.length > 0) {
+      throw new Error(`${missing.length} of those lessons no longer exist.`);
+    }
+
+    const payload = data.items.map((item) => {
+      const row = byId.get(item.attendance_id) as Row;
+      const payerId = row.enrolments?.students?.default_payer_id ?? null;
+      if (data.route === "parent" && !payerId) {
+        throw new Error(
+          `${row.enrolments?.students?.full_name ?? "A student"} has no default payer, so a parent-routed charge cannot be raised.`,
+        );
+      }
+      return {
+        student_id: row.student_id,
+        payer_id: data.route === "parent" ? payerId : null,
+        source: "payg",
+        attendance_id: item.attendance_id,
+        standard_amount: item.standard_amount,
+        adjustment: item.adjustment,
+        route: data.route,
+        status: "to_invoice",
+        notes: data.notes || null,
+      };
+    });
+
+    const { error } = await client.from("charges").insert(payload);
+    if (error) {
+      throw new Error(
+        error.message.includes("charges_one_per_attendance")
+          ? "One of those lessons has already been charged, so nothing was raised. Refresh and try the rest."
+          : error.message,
+      );
+    }
+    return { raised: payload.length };
+  });
+
+/**
+ * Set how long a lesson ran for.
+ *
+ * hours_consumed is not stored - it is the gap between a lesson's start and its
+ * end. A lesson whose end was never set therefore reads as zero hours, and an
+ * hours student taught in it draws nothing from their package.
+ *
+ * Editing it here moves the lesson's end time, keeping the start where it is.
+ * That is the whole lesson, not one student's part of it, so a group class
+ * changes for everyone on the roll - which is why the count comes back and has
+ * to be confirmed before anything moves.
+ */
+export const setLessonHours = createServerFn({ method: "POST" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    z
+      .object({
+        session_id: z.string().uuid(),
+        hours: z.coerce.number().positive().max(12),
+        /** Required when more than one student sits on this lesson. */
+        confirm: z.boolean().default(false),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+
+    const { data: session, error: readError } = await client
+      .from("sessions")
+      .select("id, code, starts_at")
+      .eq("id", data.session_id)
+      .maybeSingle();
+    if (readError) throw readError;
+    if (!session) throw new Error("That lesson no longer exists.");
+
+    const { data: roll, error: rollError } = await client
+      .from("attendance")
+      .select("id")
+      .eq("session_id", data.session_id);
+    if (rollError) throw rollError;
+
+    const attendees = (roll ?? []).length;
+    if (attendees > 1 && !data.confirm) {
+      return { updated: false, needsConfirm: true, attendees, code: session.code };
+    }
+
+    const endsAt = new Date(Date.parse(session.starts_at) + data.hours * 3_600_000).toISOString();
+    const { error } = await client
+      .from("sessions")
+      .update({ ends_at: endsAt })
+      .eq("id", data.session_id);
+    if (error) throw error;
+
+    return { updated: true, needsConfirm: false, attendees, code: session.code };
   });
 
 /** The hours invoice: one charge against the package, and nothing further. */

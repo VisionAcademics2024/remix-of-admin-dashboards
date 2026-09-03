@@ -436,12 +436,16 @@ export function Th({
 export function Td({
   children,
   className,
+  colSpan,
 }: {
   children?: ReactNode | undefined;
   className?: string | undefined;
+  /** For a row that spans the table, such as a group heading inside a body. */
+  colSpan?: number | undefined;
 }) {
   return (
     <td
+      colSpan={colSpan}
       className={cn(
         "border-b border-[var(--edge)] px-3.5 py-2.5 align-middle last:border-b-0",
         className,
