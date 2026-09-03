@@ -5,7 +5,6 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 import { supabase } from "@/integrations/supabase/client";
-import { DEV_AUTH_BYPASS, ensureDevSession } from "@/lib/dev-auth";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { meQueryOptions } from "@/lib/vision/me";
@@ -20,8 +19,6 @@ export { meQueryOptions };
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async ({ context, location }) => {
-    if (DEV_AUTH_BYPASS) await ensureDevSession();
-
     // getSession reads the token already held locally; getUser posts it to the
     // auth server to be validated. This runs before every authenticated page,
     // so the difference was a full network round trip on each navigation - paid
