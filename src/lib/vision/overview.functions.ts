@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { db, requireStaff } from "./guard";
+import { applyTaughtFilters } from "./billing-audit";
 import { ageing } from "./today";
 import type { Row } from "./types";
 
@@ -62,12 +63,12 @@ export const getToday = createServerFn({ method: "GET" })
           .eq("status", "active")
           .order("hours_remaining"),
         client.from("v_charges").select("id, status, final_amount, invoice_date"),
-        client
-          .from("v_attendance")
-          .select("id")
-          .eq("billing_method", "payg")
-          .eq("status", "present")
-          .limit(500),
+        // The same definition of "taught" as Billing uses. A cancelled lesson
+        // still has present students on its roll, and must not be counted here
+        // as waiting to be charged.
+        applyTaughtFilters(
+          client.from("v_attendance").select("id").eq("billing_method", "payg"),
+        ).limit(500),
       ]);
 
     // A failed read must not arrive as an empty list. Today saying "no lessons,

@@ -79,6 +79,54 @@ export const UNBILLED_REASONS: Record<
 };
 
 /**
+ * What counts as a lesson that was actually taught, and can therefore be billed.
+ *
+ * Three conditions, and all three matter:
+ *
+ *   the student was marked present;
+ *   it was not a trial, which is free by definition;
+ *   and the lesson itself ran - `hours_consumed` is zero on a cancelled
+ *   session, because the view refuses to spend hours on a lesson that did not
+ *   happen.
+ *
+ * That last one is the trap. Attendance keeps its own status, so cancelling a
+ * lesson does not un-mark the students on it: the roll still says "present"
+ * while the session says "cancelled". Asking only for present rows therefore
+ * hands back lessons nobody taught, and they arrive reading zero hours - which
+ * is exactly what a cancelled-and-rebooked make-up leaves behind.
+ *
+ * The audit had this right and the charge queue did not, so the same lessons
+ * were absent from one screen and billable on another. It is stated once here
+ * and applied everywhere, so the two cannot disagree again.
+ */
+export function applyTaughtFilters<T>(query: T): T {
+  // Cast through the narrow shape below rather than PostgREST's own builder
+  // type: chaining three filters through that generic is deep enough to make
+  // the compiler give up, and the caller's type is unchanged either way.
+  const q = query as unknown as TaughtQuery;
+  return q.eq("status", "present").neq("att_type", "trial").gt("hours_consumed", 0) as unknown as T;
+}
+
+/** The shape of a PostgREST query this uses - just the three filters. */
+interface TaughtQuery {
+  eq(column: string, value: unknown): TaughtQuery;
+  neq(column: string, value: unknown): TaughtQuery;
+  gt(column: string, value: unknown): TaughtQuery;
+}
+
+/**
+ * The same rule as a plain predicate, for rows already in hand.
+ *
+ * Kept beside the query version so a change to one is an obvious change to the
+ * other, and so the rule can be tested without a database.
+ */
+export function countsAsTaught(row: Row): boolean {
+  return (
+    row.status === "present" && row.att_type !== "trial" && Number(row.hours_consumed ?? 0) > 0
+  );
+}
+
+/**
  * Which package a roll entry for an enrolment should draw from.
  *
  * The same rule lives in the seed_roll SQL function, because the database
