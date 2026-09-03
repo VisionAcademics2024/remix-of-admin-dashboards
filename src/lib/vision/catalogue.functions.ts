@@ -17,18 +17,36 @@ export const getCatalogue = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const client = db(context.supabase);
 
-    const [periods, prices, programs, tutors] = await Promise.all([
+    const [periods, prices, programs, tutors, offerings] = await Promise.all([
       client.from("operating_periods").select("*").order("starts_on", { ascending: false }),
       client.from("standard_prices").select("*").order("effective_from", { ascending: false }),
       client.from("programs").select("*").order("name"),
       client.from("tutors").select("*").order("full_name"),
+      // Which terms each program actually runs in.
+      //
+      // A program is a curriculum template - "Year 5 R/W, 2 hours" - and does
+      // not itself belong to a term; what runs in a term is a class offering,
+      // which points at both. Reading them here is what lets the programs list
+      // say which terms a program is live in without duplicating the program
+      // once per term.
+      client
+        .from("class_offerings")
+        .select(
+          "id, program_id, status, operating_period_id, operating_periods(code, name, starts_on)",
+        )
+        .neq("status", "cancelled"),
     ]);
+
+    for (const result of [periods, prices, programs, tutors, offerings]) {
+      if (result.error) throw result.error;
+    }
 
     return {
       periods: periods.data ?? [],
       prices: prices.data ?? [],
       programs: programs.data ?? [],
       tutors: tutors.data ?? [],
+      offerings: offerings.data ?? [],
     };
   });
 
@@ -70,11 +88,43 @@ const programInput = z.object({
   is_active: z.boolean().default(true),
 });
 
+/**
+ * Save a program, and optionally start it running in a term.
+ *
+ * A program is a curriculum template and belongs to no term: "Year 5 R/W, two
+ * hours, Reading/Writing" is the same thing in Term 3 as in the holidays. What
+ * belongs to a term is a class offering, which points at both the program and
+ * the period - which is why the same program can run in several terms without
+ * being duplicated, and why its enrolments, sessions and billing stay in one
+ * place rather than splitting across near-identical rows.
+ *
+ * But that connection was only reachable from the Class Builder, so creating a
+ * program for next term meant making it here and remembering to schedule it
+ * somewhere else. `run_in_period_id` closes that: naming a term opens the class
+ * for it at the same time, dated from the term and taking its length and type
+ * from the program itself.
+ *
+ * The class lands as `planned` with no day or time, because those are not known
+ * yet and guessing them would put lessons on the timetable that nobody agreed
+ * to. It is finished in Classes, where the day, time and tutor are set and the
+ * sessions generated.
+ *
+ * Naming a term the program already runs in does nothing, so saving twice never
+ * opens a second class for the same term.
+ */
 export const saveProgram = createServerFn({ method: "POST" })
   .middleware([requireStaff])
-  .inputValidator((data) => programInput.extend({ id: z.string().uuid().optional() }).parse(data))
+  .inputValidator((data) =>
+    programInput
+      .extend({
+        id: z.string().uuid().optional(),
+        /** Open a planned class for this program in this term. */
+        run_in_period_id: z.string().uuid().nullish(),
+      })
+      .parse(data),
+  )
   .handler(async ({ context, data }) => {
-    const { id, ...values } = data;
+    const { id, run_in_period_id, ...values } = data;
     const client = db(context.supabase);
     const payload = nullify(values);
     // Return the id so a caller creating a program on the fly (Class Builder)
@@ -83,7 +133,49 @@ export const saveProgram = createServerFn({ method: "POST" })
       ? await client.from("programs").update(payload).eq("id", id).select("id, code").single()
       : await client.from("programs").insert(payload).select("id, code").single();
     if (error) throw error;
-    return { success: true, id: row?.id as string, code: row?.code as string };
+
+    const programId = row?.id as string;
+    let openedIn: string | null = null;
+
+    if (run_in_period_id && programId) {
+      const { data: existing, error: existingError } = await client
+        .from("class_offerings")
+        .select("id")
+        .eq("program_id", programId)
+        .eq("operating_period_id", run_in_period_id)
+        .neq("status", "cancelled")
+        .limit(1);
+      if (existingError) throw existingError;
+
+      if ((existing ?? []).length === 0) {
+        const { data: period, error: periodError } = await client
+          .from("operating_periods")
+          .select("id, code, starts_on, ends_on")
+          .eq("id", run_in_period_id)
+          .maybeSingle();
+        if (periodError) throw periodError;
+        if (!period) throw new Error("That term no longer exists.");
+
+        const type = values.default_offering_type ?? "group_class";
+        const { error: offeringError } = await client.from("class_offerings").insert({
+          program_id: programId,
+          operating_period_id: period.id,
+          offering_type: type,
+          // A private class is one student by constraint; a group starts at the
+          // usual size and is adjusted when the class is finished.
+          capacity: type === "private_tuition" ? 1 : 8,
+          starts_on: period.starts_on,
+          ends_on: period.ends_on,
+          recurrence: "weekly",
+          session_duration_hours: values.standard_duration_hours,
+          status: "planned",
+        });
+        if (offeringError) throw offeringError;
+        openedIn = period.code as string;
+      }
+    }
+
+    return { success: true, id: programId, code: row?.code as string, openedIn };
   });
 
 /* ----------------------------------------------------------------------- Prices */

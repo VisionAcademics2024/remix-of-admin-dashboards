@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { queryOptions, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Plus, Settings } from "lucide-react";
 import { toast } from "sonner";
 
@@ -55,8 +55,49 @@ export const Route = createFileRoute("/_authenticated/setup")({
   component: SetupPage,
 });
 
+/**
+ * The terms a program is running in.
+ *
+ * A program with no class anywhere is a template nobody has scheduled - worth
+ * saying plainly rather than leaving an empty cell, because it is the usual
+ * reason a program exists and nothing appears on the timetable.
+ */
+function ProgramTerms({ terms }: { terms: Row[] }) {
+  if (terms.length === 0) {
+    return <span className="text-xs text-muted-foreground">Not scheduled</span>;
+  }
+  return (
+    <span className="flex flex-wrap gap-1">
+      {terms.map((t: Row) => (
+        <StatusPill key={t.code} tone="info">
+          {t.code}
+        </StatusPill>
+      ))}
+    </span>
+  );
+}
+
 function SetupPage() {
   const { data } = useSuspenseQuery(catalogueQueryOptions());
+
+  // Which terms each program runs in, newest term first. A program belongs to
+  // no term itself - its classes do - so this is read from the offerings and
+  // shown here rather than stored twice.
+  const termsByProgram = useMemo(() => {
+    const map = new Map<string, Row[]>();
+    for (const o of (data.offerings ?? []) as Row[]) {
+      const period = o.operating_periods;
+      if (!o.program_id || !period) continue;
+      const list = map.get(o.program_id) ?? [];
+      if (!list.some((t) => t.code === period.code)) list.push(period);
+      map.set(o.program_id, list);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => String(b.starts_on ?? "").localeCompare(String(a.starts_on ?? "")));
+    }
+    return map;
+  }, [data.offerings]);
+
   const [dialog, setDialog] = useState<
     | { kind: "period"; row?: Row }
     | { kind: "program"; row?: Row }
@@ -160,6 +201,7 @@ function SetupPage() {
                   <Th>Code</Th>
                   <Th>Year</Th>
                   <Th>Subject</Th>
+                  <Th>Terms</Th>
                   <Th className="text-right">Standard length</Th>
                   <Th>Active</Th>
                   <Th className="text-right" />
@@ -173,7 +215,9 @@ function SetupPage() {
                       <Code>{p.code}</Code>
                     </Td>
                     <Td>{p.year_level ?? "-"}</Td>
-                    <Td>{p.subject ?? "-"}</Td>
+                    <Td>
+                      <ProgramTerms terms={termsByProgram.get(p.id) ?? []} />
+                    </Td>
                     <Td className="text-right">{formatHours(p.standard_duration_hours)}</Td>
                     <Td>
                       <StatusPill tone={p.is_active ? "success" : "muted"}>
@@ -335,7 +379,13 @@ function SetupPage() {
         <PeriodDialog row={dialog.row} onClose={() => setDialog(null)} />
       )}
       {dialog?.kind === "program" && (
-        <ProgramDialog row={dialog.row} prices={data.prices} onClose={() => setDialog(null)} />
+        <ProgramDialog
+          row={dialog.row}
+          prices={data.prices}
+          periods={data.periods}
+          runningIn={dialog.row ? (termsByProgram.get(dialog.row.id) ?? []) : []}
+          onClose={() => setDialog(null)}
+        />
       )}
       {dialog?.kind === "price" && (
         <PriceDialog
@@ -449,14 +499,20 @@ function PeriodDialog({ row, onClose }: { row?: Row; onClose: () => void }) {
 function ProgramDialog({
   row,
   prices,
+  periods,
+  runningIn,
   onClose,
 }: {
   row?: Row;
   prices: Row[];
+  periods: Row[];
+  /** Terms this program already has a class in, so they are not offered twice. */
+  runningIn: Row[];
   onClose: () => void;
 }) {
   const save = useServerFn(saveProgram);
   const done = useSaved(onClose);
+  const [runIn, setRunIn] = useState("");
   const [form, setForm] = useState({
     name: row?.name ?? "",
     code: row?.code ?? "",
@@ -518,6 +574,37 @@ function ProgramDialog({
               onChange={(v) => setForm({ ...form, default_offering_type: v })}
             />
           </div>
+          {/* A program belongs to no term - its classes do. Naming one here
+              opens the class for it, so a program made for next term is
+              scheduled in the same breath rather than remembered later. */}
+          <div className="space-y-1.5">
+            <Label>Run it in</Label>
+            <Select value={runIn || "none"} onValueChange={(v) => setRunIn(v === "none" ? "" : v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="No term yet" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No term yet</SelectItem>
+                {periods
+                  .filter((t: Row) => t.status !== "closed")
+                  .filter((t: Row) => !runningIn.some((r: Row) => r.code === t.code))
+                  .map((t: Row) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name} ·{" "}
+                      {LABELS.periodType[t.period_type as keyof typeof LABELS.periodType]}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {runningIn.length > 0 && (
+                <>Already runs in {runningIn.map((r: Row) => r.code).join(", ")}. </>
+              )}
+              Picking a term opens a planned class for it, dated from the term. You set the day,
+              time and tutor in Classes.
+            </p>
+          </div>
+
           <div className="space-y-1.5">
             <Label>Default price</Label>
             <Select
@@ -549,15 +636,20 @@ function ProgramDialog({
             onClick={async () => {
               setBusy(true);
               try {
-                await save({
+                const result = await save({
                   data: {
                     ...form,
                     id: row?.id,
                     standard_duration_hours: Number(form.standard_duration_hours),
                     default_price_id: form.default_price_id || null,
+                    run_in_period_id: runIn || null,
                   },
                 });
-                await done("Program saved.");
+                await done(
+                  result.openedIn
+                    ? `Program saved, and a planned class opened in ${result.openedIn}. Set its day and tutor in Classes.`
+                    : "Program saved.",
+                );
               } catch (error) {
                 toast.error((error as Error).message);
               } finally {
