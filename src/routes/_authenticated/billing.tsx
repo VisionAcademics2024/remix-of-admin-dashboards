@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useState } from "react";
-import { AlertTriangle, Plus, Receipt, Sparkles, Wallet } from "lucide-react";
+import { Fragment, useMemo, useState } from "react";
+import { AlertTriangle, ChevronRight, Plus, Receipt, Sparkles, Wallet } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,12 @@ import {
 import { Segmented } from "@/components/vision/segmented";
 import { formatDate, formatDay, formatHours, formatMoney, sydToday } from "@/lib/format";
 import { groupUnbilled, type UnbilledFinding } from "@/lib/vision/billing-audit";
+import {
+  groupChargesByPayer,
+  groupPaygByStudent,
+  type FamilyGroup,
+  type PaygGroup,
+} from "@/lib/vision/billing-groups";
 import { listStudents } from "@/lib/vision/people.functions";
 import {
   adjustCharge,
@@ -48,12 +54,13 @@ import {
   cancelCharge,
   createHoursCharge,
   createManualCharge,
-  createPaygCharge,
+  createPaygCharges,
   firmEnrolmentPlan,
   getBillingAudit,
   getBillingBoard,
   markInvoiced,
   markPaid,
+  setLessonHours,
   restoreCharge,
   setChargeMethod,
 } from "@/lib/vision/billing.functions";
@@ -80,7 +87,6 @@ export const Route = createFileRoute("/_authenticated/billing")({
 });
 
 type ChargePayload =
-  | { kind: "payg"; row: Row }
   | { kind: "hours"; row: Row }
   | { kind: "firm"; row: Row };
 
@@ -113,7 +119,7 @@ function BillingPage() {
         }
       />
 
-      {(data.truncated?.uncharged || data.truncated?.charges) && (
+      {(data.truncated?.uncharged || data.truncated?.charges || data.truncated?.enrolments) && (
         <WarningNote>
           This account has more billing history than one screen can hold, so the lists below are
           capped. Nothing has been lost — the oldest unbilled lessons are shown first, and the
@@ -678,7 +684,7 @@ function ToChargeBody({ data, onRefresh }: { data: Row; onRefresh: () => Promise
       <div>
         <GroupLabel
           title="PAYG lessons taught, not charged"
-          hint="One charge per lesson. Adjust the price or add a discount before charging."
+          hint="Gathered per student. Tick a family's lessons and raise them together - they invoice as one bill with a line per lesson."
         />
         {data.toCharge.length === 0 ? (
           <EmptyState
@@ -687,46 +693,7 @@ function ToChargeBody({ data, onRefresh }: { data: Row; onRefresh: () => Promise
             hint="Lessons appear here the moment a PAYG student is marked present."
           />
         ) : (
-          <TableShell>
-            <thead>
-              <tr>
-                <Th>Student</Th>
-                <Th>Lesson</Th>
-                <Th>Date</Th>
-                <Th className="text-right">Hours</Th>
-                <Th className="text-right">Raise</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.toCharge.map((a: Row) => (
-                <tr key={a.id}>
-                  <Td>
-                    <Link
-                      to="/students/$id"
-                      params={{ id: a.student_id }}
-                      className="font-medium hover:underline"
-                    >
-                      {a.enrolments?.students?.full_name}
-                    </Link>
-                    <div>
-                      <Code>{a.enrolments?.students?.code}</Code>
-                    </div>
-                  </Td>
-                  <Td>
-                    {a.sessions?.class_offerings?.programs?.name ?? "-"}{" "}
-                    <Code>{a.sessions?.code}</Code>
-                  </Td>
-                  <Td className="whitespace-nowrap">{formatDay(a.lesson_starts_at)}</Td>
-                  <Td className="text-right tabular-nums">{formatHours(a.hours_consumed)}</Td>
-                  <Td className="text-right">
-                    <Button size="sm" variant="outline" onClick={() => setPayload({ kind: "payg", row: a })}>
-                      Raise charge
-                    </Button>
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </TableShell>
+          <PaygQueue rows={data.toCharge} onRefresh={onRefresh} />
         )}
       </div>
 
@@ -791,14 +758,438 @@ function ToChargeBody({ data, onRefresh }: { data: Row; onRefresh: () => Promise
       {payload?.kind === "firm" && (
         <FirmPlanDialog enrolment={payload.row} onClose={() => setPayload(null)} onDone={onRefresh} />
       )}
-      {(payload?.kind === "payg" || payload?.kind === "hours") && (
-        <RaiseChargeDialog
-          payload={payload as { kind: "payg" | "hours"; row: Row }}
-          onClose={() => setPayload(null)}
+      {payload?.kind === "hours" && (
+        <RaiseChargeDialog payload={payload} onClose={() => setPayload(null)} onDone={onRefresh} />
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------- PAYG lessons, per student */
+
+/**
+ * The unbilled lessons, gathered per student.
+ *
+ * One row per lesson is what happened; it is not how a bill is read. A family
+ * with five lessons wants one line of dates and one total, so each student is
+ * one row here, opened to see the lessons underneath.
+ *
+ * Ticking still happens per lesson, because that is the unit that gets charged
+ * and the unit that can be wrong - a lesson taught for free, or one already
+ * settled in cash. The student row ticks all of them at once, which is the
+ * common case.
+ */
+function PaygQueue({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Promise<void> }) {
+  const groups = useMemo(() => groupPaygByStudent(rows), [rows]);
+  const [open, setOpen] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [raising, setRaising] = useState<PaygGroup[] | null>(null);
+  const [editingHours, setEditingHours] = useState<Row | null>(null);
+
+  const isOpen = (id: string) => open.includes(id);
+  const toggleOpen = (id: string) =>
+    setOpen((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]));
+  const toggleLesson = (id: string) =>
+    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+
+  function toggleStudent(group: PaygGroup) {
+    const ids = group.lessons.map((l) => l.id);
+    const allOn = ids.every((id) => selected.includes(id));
+    setSelected((s) => (allOn ? s.filter((id) => !ids.includes(id)) : [...new Set([...s, ...ids])]));
+  }
+
+  // What is ticked, still grouped by student, so the raise dialog can price
+  // each student's lessons at their own rate.
+  const chosen = useMemo(
+    () =>
+      groups
+        .map((g) => ({ ...g, lessons: g.lessons.filter((l) => selected.includes(l.id)) }))
+        .filter((g) => g.lessons.length > 0),
+    [groups, selected],
+  );
+  const chosenCount = chosen.reduce((n, g) => n + g.lessons.length, 0);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground">
+          {groups.length} {groups.length === 1 ? "student" : "students"} · {rows.length}{" "}
+          {rows.length === 1 ? "lesson" : "lessons"} waiting
+        </p>
+        <Button size="sm" disabled={chosenCount === 0} onClick={() => setRaising(chosen)}>
+          Raise {chosenCount || ""} {chosenCount === 1 ? "charge" : "charges"}
+        </Button>
+      </div>
+
+      <TableShell>
+        <thead>
+          <tr>
+            <Th className="w-10" />
+            <Th>Student</Th>
+            <Th>Lessons</Th>
+            <Th className="text-right">Hours</Th>
+            <Th className="text-right">Rate</Th>
+            <Th className="text-right" />
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map((group) => {
+            const ids = group.lessons.map((l) => l.id);
+            const ticked = ids.filter((id) => selected.includes(id)).length;
+
+            return (
+              <Fragment key={group.studentId}>
+                <tr>
+                  <Td>
+                    <Checkbox
+                      checked={ticked === ids.length}
+                      onCheckedChange={() => toggleStudent(group)}
+                      aria-label={`Select every lesson for ${group.studentName}`}
+                    />
+                  </Td>
+                  <Td>
+                    <Link
+                      to="/students/$id"
+                      params={{ id: group.studentId }}
+                      className="font-medium hover:underline"
+                    >
+                      {group.studentName}
+                    </Link>
+                    <div>
+                      <Code>{group.studentCode}</Code>
+                    </div>
+                  </Td>
+                  <Td>
+                    <button
+                      type="button"
+                      onClick={() => toggleOpen(group.studentId)}
+                      className="focus-spatial flex items-center gap-1.5 text-left"
+                      aria-expanded={isOpen(group.studentId)}
+                    >
+                      <ChevronRight
+                        className={cn(
+                          "h-3.5 w-3.5 shrink-0 transition-transform duration-150",
+                          isOpen(group.studentId) && "rotate-90",
+                        )}
+                      />
+                      <span>
+                        <span className="font-medium">{group.lessons.length}</span>{" "}
+                        {group.lessons.length === 1 ? "lesson" : "lessons"}
+                        <span className="ml-1.5 text-xs text-muted-foreground">
+                          {group.lessons.map((l) => formatDay(l.lesson_starts_at)).join(", ")}
+                        </span>
+                      </span>
+                    </button>
+                  </Td>
+                  <Td className="text-right tabular-nums">
+                    {formatHours(group.hours)}
+                    {group.zeroHourLessons > 0 && (
+                      <div className="text-xs text-warning">
+                        {group.zeroHourLessons} at 0 h
+                      </div>
+                    )}
+                  </Td>
+                  <Td className="text-right tabular-nums">
+                    {group.rate == null ? (
+                      <span className="text-xs text-warning">No price set</span>
+                    ) : (
+                      formatMoney(group.rate)
+                    )}
+                  </Td>
+                  <Td className="text-right">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setRaising([group])}
+                      disabled={group.lessons.length === 0}
+                    >
+                      Raise all {group.lessons.length}
+                    </Button>
+                  </Td>
+                </tr>
+
+                {isOpen(group.studentId) &&
+                  group.lessons.map((lesson: Row) => (
+                    <tr key={lesson.id} className="bg-[var(--mat-thin)]">
+                      <Td>
+                        <Checkbox
+                          checked={selected.includes(lesson.id)}
+                          onCheckedChange={() => toggleLesson(lesson.id)}
+                          aria-label={`Select lesson ${lesson.sessions?.code}`}
+                        />
+                      </Td>
+                      <Td />
+                      <Td className="text-sm">
+                        {lesson.sessions?.class_offerings?.programs?.name ?? "-"}{" "}
+                        <Code>{lesson.sessions?.code}</Code>
+                        <div className="text-xs text-muted-foreground">
+                          {formatDay(lesson.lesson_starts_at)}
+                        </div>
+                      </Td>
+                      <Td className="text-right tabular-nums">
+                        <button
+                          type="button"
+                          onClick={() => setEditingHours(lesson)}
+                          className="focus-spatial underline decoration-dotted underline-offset-4"
+                        >
+                          {formatHours(lesson.hours_consumed)}
+                        </button>
+                      </Td>
+                      <Td />
+                      <Td />
+                    </tr>
+                  ))}
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </TableShell>
+
+      {raising && (
+        <RaisePaygDialog
+          groups={raising}
+          onClose={() => setRaising(null)}
+          onDone={async () => {
+            setSelected([]);
+            await onRefresh();
+          }}
+        />
+      )}
+      {editingHours && (
+        <LessonHoursDialog
+          lesson={editingHours}
+          onClose={() => setEditingHours(null)}
           onDone={onRefresh}
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Raise the ticked lessons, priced per student.
+ *
+ * Each student's lessons are charged at that student's own rate, so siblings
+ * taught at different prices can still be raised in one go. The charges land in
+ * the invoice queue where the family is grouped onto one bill.
+ */
+function RaisePaygDialog({
+  groups,
+  onClose,
+  onDone,
+}: {
+  groups: PaygGroup[];
+  onClose: () => void;
+  onDone: () => Promise<void>;
+}) {
+  const raise = useServerFn(createPaygCharges);
+  const [rates, setRates] = useState<Record<string, string>>(() =>
+    Object.fromEntries(groups.map((g) => [g.studentId, g.rate == null ? "" : String(g.rate)])),
+  );
+  const [route, setRoute] = useState<"parent" | "internal">("parent");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const lessonCount = groups.reduce((n, g) => n + g.lessons.length, 0);
+  const total = groups.reduce(
+    (sum, g) => sum + Number(rates[g.studentId] || 0) * g.lessons.length,
+    0,
+  );
+  const unpriced = groups.filter((g) => !rates[g.studentId] || Number(rates[g.studentId]) < 0);
+
+  const problem =
+    unpriced.length > 0
+      ? `Set what one lesson costs for ${unpriced.map((g) => g.studentName).join(" and ")}.`
+      : null;
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            Raise {lessonCount} {lessonCount === 1 ? "charge" : "charges"}
+          </DialogTitle>
+          <DialogDescription>
+            One charge per lesson, so a single lesson can still be discounted or cancelled on its
+            own. They invoice together as one bill with a line per lesson.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-3">
+          {groups.map((group) => (
+            <div key={group.studentId} className="space-y-1.5">
+              <Label>
+                {group.studentName} · {group.lessons.length}{" "}
+                {group.lessons.length === 1 ? "lesson" : "lessons"}
+              </Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="Price per lesson"
+                  value={rates[group.studentId] ?? ""}
+                  onChange={(e) =>
+                    setRates((r) => ({ ...r, [group.studentId]: e.target.value }))
+                  }
+                />
+                <span className="w-24 shrink-0 text-right text-sm tabular-nums text-muted-foreground">
+                  {formatMoney(Number(rates[group.studentId] || 0) * group.lessons.length)}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {group.lessons.map((l) => formatDay(l.lesson_starts_at)).join(", ")}
+              </p>
+            </div>
+          ))}
+
+          <div className="space-y-1.5">
+            <Label>Route</Label>
+            <Select value={route} onValueChange={(v: "parent" | "internal") => setRoute(v)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="parent">Bill the parent</SelectItem>
+                <SelectItem value="internal">Internal</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Note (optional)</Label>
+            <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
+
+          <p className="rounded-md bg-muted/50 px-3 py-2 text-sm">
+            Total: <strong>{formatMoney(total)}</strong> across {lessonCount}{" "}
+            {lessonCount === 1 ? "lesson" : "lessons"}
+          </p>
+
+          {problem && <p className="text-[0.8rem] text-warning">{problem}</p>}
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={busy || Boolean(problem)}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const items = groups.flatMap((g) =>
+                  g.lessons.map((l: Row) => ({
+                    attendance_id: l.id,
+                    standard_amount: Number(rates[g.studentId] || 0),
+                    adjustment: 0,
+                  })),
+                );
+                const result = await raise({ data: { items, route, notes } });
+                toast.success(
+                  `Raised ${result.raised} ${result.raised === 1 ? "charge" : "charges"}. They're in the invoice queue.`,
+                );
+                await onDone();
+                onClose();
+              } catch (error) {
+                toast.error((error as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? "Raising…" : "Raise them"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * How long the lesson ran.
+ *
+ * Hours are not stored on the roll - they are the gap between the lesson's
+ * start and its end - so a lesson whose end was never set reads as zero, and
+ * nothing is drawn from a package for it. Setting it here moves the end time.
+ */
+function LessonHoursDialog({
+  lesson,
+  onClose,
+  onDone,
+}: {
+  lesson: Row;
+  onClose: () => void;
+  onDone: () => Promise<void>;
+}) {
+  const save = useServerFn(setLessonHours);
+  const [hours, setHours] = useState(String(lesson.hours_consumed ?? ""));
+  const [confirm, setConfirm] = useState(false);
+  const [shared, setShared] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    setBusy(true);
+    try {
+      const result = await save({
+        data: { session_id: lesson.session_id, hours: Number(hours), confirm },
+      });
+      if (!result.updated && result.needsConfirm) {
+        setShared(result.attendees);
+        setConfirm(true);
+        return;
+      }
+      toast.success(`${result.code} is now ${formatHours(Number(hours))}.`);
+      await onDone();
+      onClose();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>How long was {lesson.sessions?.code}?</DialogTitle>
+          <DialogDescription>
+            {formatDay(lesson.lesson_starts_at)}. The start time stays where it is; the end moves to
+            match.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-3">
+          <div className="space-y-1.5">
+            <Label>Hours</Label>
+            <Input
+              type="number"
+              step="0.25"
+              min="0.25"
+              value={hours}
+              onChange={(e) => setHours(e.target.value)}
+            />
+          </div>
+
+          {shared != null && (
+            <WarningNote>
+              {shared} students sit on this lesson, so changing its length changes the hours for all
+              of them - not just this one. If only one student was taught for a different length,
+              that is a different lesson rather than a different duration on this one.
+            </WarningNote>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button disabled={busy || !hours || Number(hours) <= 0} onClick={submit}>
+            {busy ? "Saving…" : shared != null ? "Change it anyway" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -835,6 +1226,28 @@ function ToInvoiceBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Prom
   const toggle = (id: string) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
+  // Siblings are two students and one bill. The only thing that says so is the
+  // payer they share, so the run is laid out by family: tick the family, and
+  // its charges go out together under one invoice number.
+  const families = groupChargesByPayer(visible);
+  // What is ticked, still split by household - each goes out as its own invoice.
+  const chosenFamilies = families
+    .map((f) => ({ ...f, charges: f.charges.filter((c: Row) => chosen.includes(c.id)) }))
+    .filter((f) => f.charges.length > 0)
+    .map((f) => ({
+      ...f,
+      total: f.charges.reduce((sum: number, c: Row) => sum + Number(c.final_amount ?? 0), 0),
+      // Only the children actually going out on this invoice - ticking one
+      // sibling must not put the other's name on the bill.
+      students: [...new Set(f.charges.map((c: Row) => c.students?.full_name).filter(Boolean))],
+    }));
+
+  function toggleFamily(family: FamilyGroup) {
+    const ids = family.charges.map((c) => c.id);
+    const allOn = ids.every((id) => selected.includes(id));
+    setSelected((s) => (allOn ? s.filter((id) => !ids.includes(id)) : [...new Set([...s, ...ids])]));
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -866,7 +1279,8 @@ function ToInvoiceBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Prom
               disabled={chosen.length === 0}
               onClick={() => setInvoicing(tab)}
             >
-              Invoice {chosen.length || ""} {runLabel} {chosen.length === 1 ? "charge" : "charges"}
+              Invoice {chosenFamilies.length || ""}{" "}
+              {chosenFamilies.length === 1 ? "family" : "families"}
             </Button>
           </div>
         )}
@@ -895,7 +1309,6 @@ function ToInvoiceBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Prom
               <Th className="w-10" />
               <Th>Charge</Th>
               <Th>Student</Th>
-              <Th>Payer</Th>
               <Th>Method</Th>
               <Th className="text-right">Standard</Th>
               <Th className="text-right">Adjustment</Th>
@@ -904,46 +1317,88 @@ function ToInvoiceBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Prom
             </tr>
           </thead>
           <tbody>
-            {visible.map((c: Row) => (
-              <tr key={c.id}>
-                <Td>
-                  <Checkbox checked={selected.includes(c.id)} onCheckedChange={() => toggle(c.id)} />
-                </Td>
-                <Td>
-                  <Code>{c.code}</Code>
-                  <div className="text-xs text-muted-foreground">{chargeSourceLabel(c.source)}</div>
-                </Td>
-                <Td>
-                  <Link to="/students/$id" params={{ id: c.student_id }} className="hover:underline">
-                    {c.students?.full_name}
-                  </Link>
-                </Td>
-                <Td className="text-xs text-muted-foreground">{c.guardians?.full_name ?? "Internal"}</Td>
-                <Td>
-                  <MethodSelect charge={c} onRefresh={onRefresh} />
-                </Td>
-                <Td className="text-right tabular-nums">{formatMoney(c.standard_amount)}</Td>
-                <Td className="text-right tabular-nums">
-                  {Number(c.adjustment) === 0 ? "-" : formatMoney(c.adjustment)}
-                </Td>
-                <Td className="text-right font-medium tabular-nums">{formatMoney(c.final_amount)}</Td>
-                <Td className="text-right">
-                  <div className="flex justify-end gap-1">
-                    <Button size="sm" variant="ghost" onClick={() => setAdjusting(c)}>
-                      Adjust
-                    </Button>
-                    <CancelButton id={c.id} onDone={onRefresh} />
-                  </div>
-                </Td>
-              </tr>
-            ))}
+            {families.map((family) => {
+              const ids = family.charges.map((c) => c.id);
+              const ticked = ids.filter((id) => selected.includes(id)).length;
+
+              return (
+                <Fragment key={family.payerId ?? "internal"}>
+                  {/* The family line. One tick sends the whole household out on
+                      one invoice, which is the point of grouping at all. */}
+                  <tr className="bg-[var(--mat-thin)]">
+                    <Td>
+                      <Checkbox
+                        checked={ticked === ids.length}
+                        onCheckedChange={() => toggleFamily(family)}
+                        aria-label={`Select every charge for ${family.payerName}`}
+                      />
+                    </Td>
+                    <Td colSpan={5}>
+                      <span className="font-medium">{family.payerName}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {family.students.join(" · ")}
+                        {family.students.length > 1 && " — one invoice"}
+                      </span>
+                    </Td>
+                    <Td className="text-right font-semibold tabular-nums">
+                      {formatMoney(family.total)}
+                    </Td>
+                    <Td />
+                  </tr>
+
+                  {family.charges.map((c: Row) => (
+                    <tr key={c.id}>
+                      <Td>
+                        <Checkbox
+                          checked={selected.includes(c.id)}
+                          onCheckedChange={() => toggle(c.id)}
+                        />
+                      </Td>
+                      <Td>
+                        <Code>{c.code}</Code>
+                        <div className="text-xs text-muted-foreground">
+                          {chargeSourceLabel(c.source)}
+                        </div>
+                      </Td>
+                      <Td>
+                        <Link
+                          to="/students/$id"
+                          params={{ id: c.student_id }}
+                          className="hover:underline"
+                        >
+                          {c.students?.full_name}
+                        </Link>
+                      </Td>
+                      <Td>
+                        <MethodSelect charge={c} onRefresh={onRefresh} />
+                      </Td>
+                      <Td className="text-right tabular-nums">{formatMoney(c.standard_amount)}</Td>
+                      <Td className="text-right tabular-nums">
+                        {Number(c.adjustment) === 0 ? "-" : formatMoney(c.adjustment)}
+                      </Td>
+                      <Td className="text-right font-medium tabular-nums">
+                        {formatMoney(c.final_amount)}
+                      </Td>
+                      <Td className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => setAdjusting(c)}>
+                            Adjust
+                          </Button>
+                          <CancelButton id={c.id} onDone={onRefresh} />
+                        </div>
+                      </Td>
+                    </tr>
+                  ))}
+                </Fragment>
+              );
+            })}
           </tbody>
         </TableShell>
       )}
 
       {invoicing && (
         <InvoiceDialog
-          ids={chosen}
+          families={chosenFamilies}
           method={invoicing}
           onClose={() => setInvoicing(null)}
           onDone={async () => {
@@ -1349,17 +1804,13 @@ function RaiseChargeDialog({
   onClose,
   onDone,
 }: {
-  payload: { kind: "payg" | "hours"; row: Row };
+  payload: { kind: "hours"; row: Row };
   onClose: () => void;
   onDone: () => Promise<void>;
 }) {
-  const payg = useServerFn(createPaygCharge);
   const hours = useServerFn(createHoursCharge);
-  const isHours = payload.kind === "hours";
 
-  const [amount, setAmount] = useState(
-    isHours ? String(payload.row.price ?? "") : String(payload.row.enrolments?.base_price ?? ""),
-  );
+  const [amount, setAmount] = useState(String(payload.row.price ?? ""));
   const [adjustment, setAdjustment] = useState("0");
   const [route, setRoute] = useState<"parent" | "internal">("parent");
   const [busy, setBusy] = useState(false);
@@ -1368,11 +1819,10 @@ function RaiseChargeDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isHours ? "Invoice this package" : "Charge this lesson"}</DialogTitle>
+          <DialogTitle>Invoice this package</DialogTitle>
           <DialogDescription>
-            {isHours
-              ? "One charge per package — that is the invoice. Nothing further is billed until they buy more hours."
-              : "One charge, one lesson. Discounts are negative adjustments; the standard amount is the frozen source figure."}
+            One charge per package — that is the invoice. Nothing further is billed until they buy
+            more hours.
           </DialogDescription>
         </DialogHeader>
 
@@ -1422,11 +1872,7 @@ function RaiseChargeDialog({
                   route,
                   notes: "",
                 };
-                if (isHours) {
-                  await hours({ data: { ...body, package_id: payload.row.id } });
-                } else {
-                  await payg({ data: { ...body, attendance_id: payload.row.id } });
-                }
+                await hours({ data: { ...body, package_id: payload.row.id } });
                 toast.success("Charge raised.");
                 await onDone();
                 onClose();
@@ -1518,33 +1964,51 @@ function AdjustDialog({
   );
 }
 
+/**
+ * Send a run out, one invoice per family.
+ *
+ * A run can carry several households, and they must not end up sharing a
+ * document: an invoice number is what makes a set of charges one bill, so
+ * giving two families the same number puts another family's children on your
+ * invoice. Each family therefore gets its own number and its own call, and the
+ * dialog shows them stacked so what is about to happen is legible before it
+ * happens.
+ *
+ * Numbers are optional - the CRM records the run either way - so a family left
+ * blank is still invoiced, just without a reference.
+ */
 function InvoiceDialog({
-  ids,
+  families,
   method,
   onClose,
   onDone,
 }: {
-  ids: string[];
+  families: FamilyGroup[];
   method: InvoiceRunMethod;
   onClose: () => void;
   onDone: () => Promise<void>;
 }) {
   const invoice = useServerFn(markInvoiced);
   const [date, setDate] = useState(sydToday());
-  const [xero, setXero] = useState("");
+  const [numbers, setNumbers] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const label = paymentMethodLabel(method).toLowerCase();
 
+  const chargeCount = families.reduce((n, f) => n + f.charges.length, 0);
+  const total = families.reduce((sum, f) => sum + f.total, 0);
+  const keyOf = (f: FamilyGroup) => f.payerId ?? "__internal__";
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            Invoice {ids.length} {label} {ids.length === 1 ? "charge" : "charges"}
+            Invoice {families.length} {families.length === 1 ? "family" : "families"}
           </DialogTitle>
           <DialogDescription>
-            Marks the selected {label} charges invoiced on one run. Giving them the same invoice
-            number bills them on one document while keeping each line traceable.
+            {chargeCount} {label} {chargeCount === 1 ? "charge" : "charges"}, going out as{" "}
+            {families.length} {families.length === 1 ? "invoice" : "separate invoices"} — one per
+            family, so nobody receives another household&apos;s children on their bill.
           </DialogDescription>
         </DialogHeader>
 
@@ -1553,10 +2017,29 @@ function InvoiceDialog({
             <Label>Invoice date</Label>
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
-          <div className="space-y-1.5">
-            <Label>Invoice number (optional)</Label>
-            <Input value={xero} onChange={(e) => setXero(e.target.value)} placeholder="INV-0142" />
-          </div>
+
+          {families.map((family) => (
+            <div key={keyOf(family)} className="space-y-1.5">
+              <Label>
+                {family.payerName} · {formatMoney(family.total)}
+              </Label>
+              <Input
+                value={numbers[keyOf(family)] ?? ""}
+                onChange={(e) =>
+                  setNumbers((n) => ({ ...n, [keyOf(family)]: e.target.value }))
+                }
+                placeholder="Invoice number (optional)"
+              />
+              <p className="text-xs text-muted-foreground">
+                {family.students.join(" · ")} ·{" "}
+                {family.charges.length === 1 ? "1 line" : `${family.charges.length} lines`}
+              </p>
+            </div>
+          ))}
+
+          <p className="rounded-md bg-muted/50 px-3 py-2 text-sm">
+            Total: <strong>{formatMoney(total)}</strong>
+          </p>
         </div>
 
         <DialogFooter>
@@ -1564,13 +2047,23 @@ function InvoiceDialog({
             Cancel
           </Button>
           <Button
-            disabled={busy || ids.length === 0}
+            disabled={busy || chargeCount === 0}
             onClick={async () => {
               setBusy(true);
               try {
-                await invoice({ data: { ids, invoice_date: date, xero_invoice_no: xero, method } });
+                // One call per family, so each gets its own invoice number.
+                for (const family of families) {
+                  await invoice({
+                    data: {
+                      ids: family.charges.map((c: Row) => c.id),
+                      invoice_date: date,
+                      xero_invoice_no: numbers[keyOf(family)] ?? "",
+                      method,
+                    },
+                  });
+                }
                 toast.success(
-                  `Invoiced ${ids.length} ${label} ${ids.length === 1 ? "charge" : "charges"}.`,
+                  `Invoiced ${families.length} ${families.length === 1 ? "family" : "families"} — ${chargeCount} ${chargeCount === 1 ? "charge" : "charges"}.`,
                 );
                 await onDone();
                 onClose();
@@ -1581,7 +2074,7 @@ function InvoiceDialog({
               }
             }}
           >
-            Mark invoiced
+            {busy ? "Invoicing…" : "Mark invoiced"}
           </Button>
         </DialogFooter>
       </DialogContent>
