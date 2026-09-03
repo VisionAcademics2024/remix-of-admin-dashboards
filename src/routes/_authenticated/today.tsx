@@ -1,13 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  queryOptions,
-  useQuery,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query";
+import { queryOptions, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
-import { CalendarDays, CheckCircle2, Clock, Receipt, TrendingDown } from "lucide-react";
+import {
+  CalendarClock,
+  CalendarDays,
+  CheckCircle2,
+  Clock,
+  Receipt,
+  TrendingDown,
+  UserX,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -38,6 +41,7 @@ import {
   weekStart,
 } from "@/lib/format";
 import { getToday } from "@/lib/vision/overview.functions";
+import { daysBetween, rollFor, tutorsFor, unassigned, type SessionRoll } from "@/lib/vision/today";
 import { listTrialRoll, setTrialStatus } from "@/lib/vision/leads.functions";
 import { markAttendance } from "@/lib/vision/roll.functions";
 import type { Row } from "@/lib/vision/types";
@@ -61,7 +65,8 @@ function TodayPage() {
   // they come straight from the trials table and are confirmed on their own.
   const { data: trials = [] } = useQuery({
     queryKey: ["today-trials", today],
-    queryFn: () => listTrialRoll({ data: { filter: "today", today, week_start: weekStart(today) } }),
+    queryFn: () =>
+      listTrialRoll({ data: { filter: "today", today, week_start: weekStart(today) } }),
   });
 
   async function setStatus(id: string, status: "present" | "absent") {
@@ -107,6 +112,19 @@ function TodayPage() {
   const todayCount = (data.toMark as Row[]).filter((r) => r.session_date === today).length;
   const backlogCount = data.toMark.length - todayCount;
 
+  // Who is teaching, and the lessons nobody is. Two different questions, so two
+  // different answers rather than one list with a hole in it.
+  const tutorDay = tutorsFor(sessions);
+  const uncovered = unassigned(sessions);
+  const uncoveredTomorrow = unassigned(data.tomorrow as Row[]);
+  const oldestMakeUpDays =
+    data.makeUpsOwed.length > 0
+      ? daysBetween((data.makeUpsOwed[0] as Row)?.session_date, today)
+      : null;
+  // The busiest tutor sets the scale, so the bars compare against the real day
+  // rather than an invented ceiling.
+  const heaviest = Math.max(1, ...tutorDay.map((t) => t.hours));
+
   async function setTrialAttendance(id: string, status: "attended" | "no_show" | "scheduled") {
     try {
       await setTrial({ data: { id, status } });
@@ -122,7 +140,7 @@ function TodayPage() {
       <PageHeader
         title="Today"
         eyebrow={formatDay(today)}
-        description="Who needs marking, what is on, who is running out of hours, and what is ready to invoice."
+        description="The teaching day first: what is on, who is teaching it, whose roll is still open and who is owed a lesson back. The money sits underneath."
         actions={
           <>
             <Button asChild variant="outline">
@@ -141,17 +159,9 @@ function TodayPage() {
         }
       />
 
+      {/* The day first, then what it costs. Ordered the way the page is used:
+          you are here to run this afternoon, not to read a ledger. */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <StatCard
-          label="Still to mark"
-          value={data.toMark.length}
-          hint={
-            data.toMark.length === 0 ? "Nothing outstanding" : "Lessons up to and including today"
-          }
-          tone={data.toMark.length === 0 ? "success" : "warning"}
-          icon={Clock}
-          to="/roll"
-        />
         <StatCard
           label="Lessons today"
           value={data.sessions.length}
@@ -168,17 +178,42 @@ function TodayPage() {
           to="/timetable"
         />
         <StatCard
-          label="Low or overdrawn"
-          value={data.lowPackages.length}
-          hint={data.lowPackages.length === 0 ? "Every package has room" : "Hour packages"}
-          tone={data.lowPackages.length ? "warning" : "default"}
-          icon={TrendingDown}
-          to="/enrolments"
+          label="Still to mark"
+          value={data.toMark.length}
+          hint={
+            data.toMark.length === 0
+              ? "Nothing outstanding"
+              : backlogCount > 0
+                ? `${backlogCount} from earlier days`
+                : "All from today"
+          }
+          tone={data.toMark.length === 0 ? "success" : "warning"}
+          icon={Clock}
+          to="/roll"
         />
         <StatCard
-          label="Ready to invoice"
-          value={formatMoney(data.toInvoiceValue)}
-          hint={`${data.toInvoiceCount} charges · ${formatMoney(data.unpaidValue)} unpaid`}
+          label="Make-ups owed"
+          value={data.makeUpsOwed.length}
+          hint={
+            data.makeUpsOwed.length === 0
+              ? "Every absence settled"
+              : oldestMakeUpDays == null
+                ? "Absent, never rebooked"
+                : `Oldest ${oldestMakeUpDays} days ago`
+          }
+          tone={data.makeUpsOwed.length ? "warning" : "success"}
+          icon={CalendarClock}
+          to="/roll"
+        />
+        <StatCard
+          label="Owed to you"
+          value={formatMoney(data.unpaidValue)}
+          hint={
+            data.unpaidAgeing.oldestDays == null
+              ? `${data.unpaidCount} invoices`
+              : `${data.unpaidCount} invoices · oldest ${data.unpaidAgeing.oldestDays} days`
+          }
+          tone={(data.unpaidAgeing.oldestDays ?? 0) > 60 ? "warning" : "default"}
           icon={Receipt}
           to="/billing"
         />
@@ -326,7 +361,9 @@ function TodayPage() {
                       </Link>
                     </Td>
                     <Td>
-                      <div>{t.class_offerings?.programs?.name ?? t.class_offerings?.code ?? "-"}</div>
+                      <div>
+                        {t.class_offerings?.programs?.name ?? t.class_offerings?.code ?? "-"}
+                      </div>
                       <Code>{t.sessions?.code}</Code>
                     </Td>
                     <Td className="whitespace-nowrap">
@@ -395,6 +432,7 @@ function TodayPage() {
                 const isNow = s.status !== "cancelled" && start <= minutesNow && end > minutesNow;
                 const isDone = end <= minutesNow;
                 const colour = colourFor(s.tutor_id, s.tutors?.colour);
+                const roll = rollFor(s.id, data.roll as Row[]);
 
                 return (
                   <li
@@ -433,8 +471,13 @@ function TodayPage() {
                         {s.class_offerings?.programs?.name ?? "Lesson"}
                       </div>
                       <div className="truncate text-[0.72rem] tracking-[0.004em] text-muted-foreground">
-                        <TutorDot colour={s.tutors?.colour} name={s.tutors?.full_name} />
+                        {s.tutor_id ? (
+                          <TutorDot colour={s.tutors?.colour} name={s.tutors?.full_name} />
+                        ) : (
+                          <span className="font-medium text-destructive">No tutor assigned</span>
+                        )}
                         {s.class_offerings?.room && ` · ${s.class_offerings.room}`}
+                        {roll.total > 0 && ` · ${roll.marked}/${roll.total} marked`}
                       </div>
                     </div>
 
@@ -450,7 +493,7 @@ function TodayPage() {
                         On now
                       </span>
                     ) : (
-                      <StatusPill tone={toneForStatus("session", s.status)}>{s.status}</StatusPill>
+                      <RollPill session={s} roll={roll} isDone={isDone} />
                     )}
                   </li>
                 );
@@ -511,6 +554,168 @@ function TodayPage() {
         </Section>
       </div>
 
+      {/* Who is teaching, and who is owed a lesson back. Both are about the
+          day rather than the ledger, so they sit above the money. */}
+      <div className="grid items-start gap-4 xl:grid-cols-2">
+        <Section
+          title="Tutors on today"
+          count={tutorDay.length}
+          description="Load across the day, and anything still uncovered."
+          tone={uncovered.length ? "warning" : undefined}
+          className="h-full"
+        >
+          {tutorDay.length === 0 && uncovered.length === 0 ? (
+            <EmptyState
+              icon={CalendarDays}
+              title="Nobody teaching today"
+              hint="No lessons are scheduled, so there is no cover to arrange."
+            />
+          ) : (
+            <ul className="space-y-1.5">
+              {tutorDay.map((t) => (
+                <li
+                  key={t.tutorId}
+                  className="flex items-center gap-3 rounded-2xl border border-[var(--edge)] bg-[var(--mat-thin)] px-4 py-2.5"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">
+                      <TutorDot colour={t.colour} name={t.name} />
+                    </div>
+                    <div className="text-[0.72rem] tracking-[0.004em] text-muted-foreground">
+                      {t.from && t.to && `${formatTime(t.from)}–${formatTime(t.to)} · `}
+                      {t.lessons} {t.lessons === 1 ? "lesson" : "lessons"}
+                    </div>
+                  </div>
+                  {/* The bar is scaled against the busiest tutor today, so it
+                      compares real days rather than an invented ceiling. */}
+                  <span
+                    aria-hidden
+                    className="h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-[var(--edge)]"
+                  >
+                    <span
+                      className="block h-full rounded-full bg-primary"
+                      style={{ width: `${Math.round((t.hours / heaviest) * 100)}%` }}
+                    />
+                  </span>
+                  <span className="w-12 shrink-0 text-right text-sm font-semibold tabular-nums">
+                    {formatHours(t.hours)}
+                  </span>
+                </li>
+              ))}
+
+              {uncovered.map((s: Row) => (
+                <li
+                  key={s.id}
+                  className="flex items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-2.5"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-destructive">
+                      {s.class_offerings?.programs?.name ?? "Lesson"} has nobody teaching it
+                    </div>
+                    <div className="text-[0.72rem] tracking-[0.004em] text-muted-foreground">
+                      {formatTime(s.starts_at)} · <Code>{s.code}</Code>
+                    </div>
+                  </div>
+                  <Button asChild size="sm" variant="outline">
+                    <Link to="/timetable">Assign</Link>
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+
+        <Section
+          title="Make-ups owed"
+          count={data.makeUpsOwed.length}
+          description="Marked absent and never rebooked. Oldest first."
+          tone={data.makeUpsOwed.length ? "warning" : undefined}
+          className="h-full"
+          actions={
+            data.makeUpsOwed.length > 6 ? (
+              <Button asChild size="sm" variant="outline">
+                <Link to="/roll">See all</Link>
+              </Button>
+            ) : undefined
+          }
+        >
+          {data.makeUpsOwed.length === 0 ? (
+            <EmptyState
+              icon={CheckCircle2}
+              title="Every absence settled"
+              hint="Nobody is owed a lesson back."
+            />
+          ) : (
+            <ul className="space-y-1.5">
+              {(data.makeUpsOwed as Row[]).slice(0, 6).map((a: Row) => {
+                const waited = daysBetween(a.session_date, today);
+                return (
+                  <li
+                    key={a.id}
+                    className="flex items-center gap-3 rounded-2xl border border-[var(--edge)] bg-[var(--mat-thin)] px-4 py-2.5"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium">
+                        {a.enrolments?.students?.full_name ?? "Student"}{" "}
+                        <Code>{a.enrolments?.students?.code}</Code>
+                      </div>
+                      <div className="truncate text-[0.72rem] tracking-[0.004em] text-muted-foreground">
+                        Missed {a.sessions?.class_offerings?.programs?.name ?? "a lesson"} ·{" "}
+                        {formatDay(a.session_date)}
+                      </div>
+                    </div>
+                    {waited != null && (
+                      <StatusPill
+                        tone={waited >= 28 ? "danger" : "warning"}
+                        className="normal-case"
+                      >
+                        {waited} {waited === 1 ? "day" : "days"}
+                      </StatusPill>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Section>
+      </div>
+
+      {/* Absent today is separate from the owed pile on purpose: the make-up is
+          easiest to arrange while the reason is still fresh. */}
+      {data.absentToday.length > 0 && (
+        <Section
+          title="Absent today"
+          count={data.absentToday.length}
+          description="Book the make-up while you still remember why."
+          tone="warning"
+          actions={
+            <Button asChild size="sm" variant="outline">
+              <Link to="/roll">Book a make-up</Link>
+            </Button>
+          }
+        >
+          <ul className="grid gap-1.5 sm:grid-cols-2">
+            {(data.absentToday as Row[]).map((a: Row) => (
+              <li
+                key={a.id}
+                className="flex items-center gap-3 rounded-2xl border border-[var(--edge)] bg-[var(--mat-thin)] px-4 py-2.5"
+              >
+                <UserX className="h-4 w-4 shrink-0 text-warning" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium">
+                    {a.enrolments?.students?.full_name ?? "Student"}{" "}
+                    <Code>{a.enrolments?.students?.code}</Code>
+                  </div>
+                  <div className="truncate text-[0.72rem] tracking-[0.004em] text-muted-foreground">
+                    {a.sessions?.class_offerings?.programs?.name ?? "Lesson"}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
       <Section
         title="Waiting to be charged"
         description="PAYG lessons attended but not yet billed, plus packages with no invoice raised."
@@ -533,7 +738,14 @@ function TodayPage() {
               value: data.toInvoiceCount,
               hint: formatMoney(data.toInvoiceValue),
             },
-            { label: "Invoiced, unpaid", value: formatMoney(data.unpaidValue), hint: undefined },
+            {
+              label: "Invoiced, unpaid",
+              value: formatMoney(data.unpaidValue),
+              hint:
+                data.unpaidAgeing.oldestDays == null
+                  ? undefined
+                  : `Oldest sent ${data.unpaidAgeing.oldestDays} days ago`,
+            },
           ].map((figure) => (
             <div key={figure.label} className="py-3.5 sm:px-5 sm:first:pl-0 sm:last:pr-0">
               <dt className="text-[0.78rem] font-medium tracking-[0.004em] text-muted-foreground">
@@ -550,7 +762,140 @@ function TodayPage() {
             </div>
           ))}
         </dl>
+
+        {/* How overdue, not just how much. A total says what is owed and
+            nothing about whether it is a problem: twelve thousand invoiced last
+            week is a good month, the same figure sent in July is a conversation
+            nobody has had. */}
+        {data.unpaidValue > 0 && (
+          <div className="mt-4">
+            <div
+              className="flex h-1.5 gap-0.5 overflow-hidden rounded-full"
+              role="img"
+              aria-label={`Unpaid by age: ${formatMoney(data.unpaidAgeing.under30)} under 30 days, ${formatMoney(data.unpaidAgeing.from30to60)} 30 to 60 days, ${formatMoney(data.unpaidAgeing.over60)} over 60 days`}
+            >
+              {(
+                [
+                  ["bg-success", data.unpaidAgeing.under30],
+                  ["bg-warning", data.unpaidAgeing.from30to60],
+                  ["bg-destructive", data.unpaidAgeing.over60],
+                ] as const
+              ).map(
+                ([tone, amount]) =>
+                  amount > 0 && (
+                    <span
+                      key={tone}
+                      className={cn("h-full rounded-full", tone)}
+                      style={{ flex: amount }}
+                    />
+                  ),
+              )}
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[0.72rem] tracking-[0.004em] text-muted-foreground">
+              <span>Under 30 days {formatMoney(data.unpaidAgeing.under30)}</span>
+              <span>30–60 {formatMoney(data.unpaidAgeing.from30to60)}</span>
+              <span className={data.unpaidAgeing.over60 > 0 ? "text-destructive" : undefined}>
+                Over 60 {formatMoney(data.unpaidAgeing.over60)}
+              </span>
+            </div>
+          </div>
+        )}
       </Section>
+
+      {/* Tomorrow, only far enough ahead to catch a lesson with nobody teaching
+          it the night before rather than the morning of. */}
+      {data.tomorrow.length > 0 && (
+        <Section
+          title="Tomorrow"
+          count={data.tomorrow.length}
+          description={
+            uncoveredTomorrow.length > 0
+              ? `${uncoveredTomorrow.length} ${uncoveredTomorrow.length === 1 ? "lesson has" : "lessons have"} no tutor yet.`
+              : "Every lesson has a tutor."
+          }
+          tone={uncoveredTomorrow.length ? "warning" : undefined}
+          actions={
+            <Button asChild size="sm" variant="outline">
+              <Link to="/timetable">Timetable</Link>
+            </Button>
+          }
+        >
+          <div className="scroll-x -mx-1 flex gap-2 px-1 pb-1">
+            {(data.tomorrow as Row[]).map((s: Row) => (
+              <div
+                key={s.id}
+                className={cn(
+                  "min-w-[10rem] shrink-0 rounded-2xl border bg-[var(--mat-thin)] px-3.5 py-2.5",
+                  s.tutor_id ? "border-[var(--edge)]" : "border-destructive/40 bg-destructive/10",
+                )}
+              >
+                <div className="text-[0.78rem] font-semibold tabular-nums">
+                  {formatTime(s.starts_at)}
+                </div>
+                <div className="mt-0.5 truncate text-sm">
+                  {s.class_offerings?.programs?.name ?? "Lesson"}
+                </div>
+                <div className="mt-0.5 truncate text-[0.72rem] tracking-[0.004em] text-muted-foreground">
+                  {s.tutor_id ? (
+                    <TutorDot colour={s.tutors?.colour} name={s.tutors?.full_name} />
+                  ) : (
+                    <span className="font-medium text-destructive">No tutor yet</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
     </div>
+  );
+}
+
+/**
+ * What a lesson still needs from you.
+ *
+ * The session's own status ("scheduled") is not the useful thing once the day
+ * has started - every lesson is scheduled. What changes, and what you are
+ * chasing at six in the evening, is whether the roll has been taken; and a roll
+ * half taken is its own state, because it is the one that looks finished from a
+ * distance while somebody's hours quietly never get spent.
+ */
+function RollPill({ session, roll, isDone }: { session: Row; roll: SessionRoll; isDone: boolean }) {
+  if (session.status === "cancelled") {
+    return <StatusPill tone={toneForStatus("session", session.status)}>cancelled</StatusPill>;
+  }
+  if (!session.tutor_id) {
+    return (
+      <StatusPill tone="danger" className="normal-case">
+        Needs a tutor
+      </StatusPill>
+    );
+  }
+  if (roll.state === "marked") {
+    return (
+      <StatusPill tone="success" className="normal-case">
+        {roll.total === 1 ? "Marked" : `All ${roll.total} marked`}
+      </StatusPill>
+    );
+  }
+  if (roll.state === "partial") {
+    return (
+      <StatusPill tone="warning" className="normal-case">
+        {roll.marked} of {roll.total} marked
+      </StatusPill>
+    );
+  }
+  if (roll.state === "empty") {
+    return (
+      <StatusPill tone="muted" className="normal-case">
+        No students
+      </StatusPill>
+    );
+  }
+  // Untouched: only overdue once the lesson has actually finished.
+  return (
+    <StatusPill tone={isDone ? "warning" : "muted"} className="normal-case">
+      {isDone ? "Not marked" : "To mark"}
+    </StatusPill>
   );
 }

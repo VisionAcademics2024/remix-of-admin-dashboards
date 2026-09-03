@@ -17,6 +17,7 @@ import { Route as McpRouteImport } from './routes/mcp'
 import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
 import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
+import { Route as AuthenticatedDiagnosticsRouteImport } from './routes/_authenticated/diagnostics'
 import { Route as AuthenticatedEnrolmentsRouteImport } from './routes/_authenticated/enrolments'
 import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
 import { Route as AuthenticatedNeedsAttentionRouteImport } from './routes/_authenticated/needs-attention'
@@ -82,6 +83,12 @@ const AuthenticatedBillingRoute = AuthenticatedBillingRouteImport.update({
   path: '/billing',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedDiagnosticsRoute =
+  AuthenticatedDiagnosticsRouteImport.update({
+    id: '/diagnostics',
+    path: '/diagnostics',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedEnrolmentsRoute = AuthenticatedEnrolmentsRouteImport.update({
   id: '/enrolments',
   path: '/enrolments',
@@ -216,6 +223,7 @@ export interface FileRoutesByFullPath {
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/billing': typeof AuthenticatedBillingRoute
+  '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/enrolments': typeof AuthenticatedEnrolmentsRoute
   '/leads': typeof AuthenticatedLeadsRoute
   '/needs-attention': typeof AuthenticatedNeedsAttentionRoute
@@ -248,6 +256,7 @@ export interface FileRoutesByTo {
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/billing': typeof AuthenticatedBillingRoute
+  '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/enrolments': typeof AuthenticatedEnrolmentsRoute
   '/leads': typeof AuthenticatedLeadsRoute
   '/needs-attention': typeof AuthenticatedNeedsAttentionRoute
@@ -282,6 +291,7 @@ export interface FileRoutesById {
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/_authenticated/billing': typeof AuthenticatedBillingRoute
+  '/_authenticated/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/_authenticated/enrolments': typeof AuthenticatedEnrolmentsRoute
   '/_authenticated/leads': typeof AuthenticatedLeadsRoute
   '/_authenticated/needs-attention': typeof AuthenticatedNeedsAttentionRoute
@@ -316,6 +326,7 @@ export interface FileRouteTypes {
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
     | '/billing'
+    | '/diagnostics'
     | '/enrolments'
     | '/leads'
     | '/needs-attention'
@@ -348,6 +359,7 @@ export interface FileRouteTypes {
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
     | '/billing'
+    | '/diagnostics'
     | '/enrolments'
     | '/leads'
     | '/needs-attention'
@@ -381,6 +393,7 @@ export interface FileRouteTypes {
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
     | '/_authenticated/billing'
+    | '/_authenticated/diagnostics'
     | '/_authenticated/enrolments'
     | '/_authenticated/leads'
     | '/_authenticated/needs-attention'
@@ -474,6 +487,13 @@ declare module '@tanstack/react-router' {
       path: '/billing'
       fullPath: '/billing'
       preLoaderRoute: typeof AuthenticatedBillingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/diagnostics': {
+      id: '/_authenticated/diagnostics'
+      path: '/diagnostics'
+      fullPath: '/diagnostics'
+      preLoaderRoute: typeof AuthenticatedDiagnosticsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/enrolments': {
@@ -657,6 +677,7 @@ const AuthenticatedPrototypeStudentsRouteWithChildren =
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedBillingRoute: typeof AuthenticatedBillingRoute
+  AuthenticatedDiagnosticsRoute: typeof AuthenticatedDiagnosticsRoute
   AuthenticatedEnrolmentsRoute: typeof AuthenticatedEnrolmentsRoute
   AuthenticatedLeadsRoute: typeof AuthenticatedLeadsRoute
   AuthenticatedNeedsAttentionRoute: typeof AuthenticatedNeedsAttentionRoute
@@ -681,6 +702,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedBillingRoute: AuthenticatedBillingRoute,
+  AuthenticatedDiagnosticsRoute: AuthenticatedDiagnosticsRoute,
   AuthenticatedEnrolmentsRoute: AuthenticatedEnrolmentsRoute,
   AuthenticatedLeadsRoute: AuthenticatedLeadsRoute,
   AuthenticatedNeedsAttentionRoute: AuthenticatedNeedsAttentionRoute,
