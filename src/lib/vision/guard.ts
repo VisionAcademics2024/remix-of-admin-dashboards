@@ -40,6 +40,26 @@ export const requireStaff = createMiddleware({ type: "function" })
   });
 
 /**
+ * Pay, for the person it belongs to.
+ *
+ * An owner sees everyone's; a tutor sees their own and nobody else's. An admin
+ * still sees none, which is the arrangement that was already here.
+ *
+ * The scoping is not done by this middleware - it hands the caller's role and
+ * tutor to the endpoint, which narrows its own queries, and RLS refuses the
+ * rest regardless. Two of the three are belt and braces on purpose: pay is the
+ * one place where showing the wrong row is a personnel problem, not a bug.
+ */
+export const requireOwnerOrTutor = createMiddleware({ type: "function" })
+  .middleware([requireStaff])
+  .server(async ({ next, context }) => {
+    if (context.staff.role !== "owner" && context.staff.role !== "tutor") {
+      throw new Error("Forbidden: tutor pay is visible to owners and to each tutor's own account.");
+    }
+    return next();
+  });
+
+/**
  * Owner-only. The spec offers a choice between showing an admin zeroes and
  * refusing outright; refusing is the kinder of the two, so every pay endpoint
  * uses this.

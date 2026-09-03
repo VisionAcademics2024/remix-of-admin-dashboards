@@ -66,7 +66,11 @@ export const Route = createFileRoute("/_authenticated/tutor-pay")({
     // UI gating is cosmetic; RLS and the API guard are the real boundary. This
     // just avoids showing an owner-only screen that would refuse to load.
     const me = await context.queryClient.ensureQueryData(meQueryOptions());
-    if (me.staff?.role !== "owner") throw redirect({ to: "/today" });
+    // An owner sees everyone's pay; a tutor sees their own. An admin sees none,
+    // which is how it already was.
+    if (me.staff?.role !== "owner" && me.staff?.role !== "tutor") {
+      throw redirect({ to: "/today" });
+    }
   },
   loader: ({ context }) =>
     context.queryClient.ensureQueryData(payQueryOptions(fortnightStart(sydToday()))),
@@ -74,6 +78,11 @@ export const Route = createFileRoute("/_authenticated/tutor-pay")({
 });
 
 function TutorPayPage() {
+  const { data: me } = useSuspenseQuery(meQueryOptions());
+  // A tutor reads their pay; they do not set rates, adjust lessons or mark a
+  // payout as made. The database refuses all three anyway - this keeps the page
+  // from offering buttons that could only fail.
+  const canEdit = me.staff?.role === "owner";
   const [fortnight, setFortnight] = useState(() => fortnightStart(sydToday()));
   const { data } = useSuspenseQuery(payQueryOptions(fortnight));
   const queryClient = useQueryClient();
@@ -103,7 +112,11 @@ function TutorPayPage() {
     <div className="stagger space-y-5">
       <PageHeader
         title="Tutor Pay"
-        description="Owners only. Pay is computed from lessons, not enrolments - a lesson pays its own tutor at the rate in force on its own date."
+        description={
+          canEdit
+            ? "Pay is computed from lessons, not enrolments - a lesson pays its own tutor at the rate in force on its own date."
+            : "Your pay, computed from the lessons you taught at the rate in force on each lesson's own date."
+        }
       />
 
       {/* The fortnight, stated plainly. Two are always one tap away; the arrows
@@ -229,19 +242,21 @@ function TutorPayPage() {
                               }
                             </StatusPill>
                           )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                              setPayingOut({
-                                tutor: t,
-                                payout,
-                                rate: lessons.find((l: Row) => l.hourly_rate)?.hourly_rate ?? 0,
-                              })
-                            }
-                          >
-                            {payout ? "Edit payout" : "Create payout"}
-                          </Button>
+                          {canEdit && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                setPayingOut({
+                                  tutor: t,
+                                  payout,
+                                  rate: lessons.find((l: Row) => l.hourly_rate)?.hourly_rate ?? 0,
+                                })
+                              }
+                            >
+                              {payout ? "Edit payout" : "Create payout"}
+                            </Button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -286,9 +301,11 @@ function TutorPayPage() {
                             {formatMoney(l.pay)}
                           </Td>
                           <Td className="text-right">
-                            <Button size="sm" variant="ghost" onClick={() => setAdjusting(l)}>
-                              Adjust
-                            </Button>
+                            {canEdit && (
+                              <Button size="sm" variant="ghost" onClick={() => setAdjusting(l)}>
+                                Adjust
+                              </Button>
+                            )}
                           </Td>
                         </tr>
                       ))}
@@ -338,9 +355,11 @@ function TutorPayPage() {
                         : "-"}
                     </Td>
                     <Td className="text-right">
-                      <Button size="sm" variant="outline" onClick={() => setRateFor(t)}>
-                        New rate
-                      </Button>
+                      {canEdit && (
+                        <Button size="sm" variant="outline" onClick={() => setRateFor(t)}>
+                          New rate
+                        </Button>
+                      )}
                     </Td>
                   </tr>
                 );

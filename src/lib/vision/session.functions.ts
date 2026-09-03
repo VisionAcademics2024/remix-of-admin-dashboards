@@ -19,7 +19,7 @@ export const getMe = createServerFn({ method: "GET" })
 
     const { data: staff, error } = await client
       .from("staff")
-      .select("user_id, full_name, email, role, is_active, created_at")
+      .select("user_id, full_name, email, role, tutor_id, is_active, created_at")
       .eq("user_id", context.userId)
       .maybeSingle();
     if (error) throw error;
@@ -99,7 +99,7 @@ export const listStaff = createServerFn({ method: "GET" })
 
     const { data: staff, error } = await client
       .from("staff")
-      .select("user_id, full_name, email, role, is_active, created_at")
+      .select("user_id, full_name, email, role, tutor_id, is_active, created_at")
       .order("full_name");
     if (error) throw error;
 

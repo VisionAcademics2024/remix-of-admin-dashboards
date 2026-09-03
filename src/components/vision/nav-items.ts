@@ -73,12 +73,33 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   { label: "Configure", items: CONFIGURE },
 ];
 
+/**
+ * What a tutor account may open.
+ *
+ * Everything else in the app reads students, money or settings, none of which a
+ * tutor can reach: the database refuses those rows, so leaving the links up
+ * would offer a page that can only come back empty. The nav is trimmed to match
+ * what actually works.
+ *
+ * Tutor Pay is on this list and stays owner-only for everyone else - a tutor
+ * sees their own, an admin sees none, an owner sees all - so it is filtered by
+ * name rather than by the ownerOnly flag.
+ */
+const TUTOR_URLS = new Set(["/today", "/timetable", "/roll", "/tutor-pay"]);
+
 /** The groups this member of staff may actually see. */
 export function navGroupsFor(role: StaffRole) {
   return NAV_GROUPS.map((group) => ({
     ...group,
-    items: group.items.filter((item) => !item.ownerOnly || role === "owner"),
+    items: group.items.filter((item) =>
+      role === "tutor" ? TUTOR_URLS.has(item.url) : !item.ownerOnly || role === "owner",
+    ),
   })).filter((group) => group.items.length > 0);
+}
+
+/** Is this path one a tutor account is allowed to open at all? */
+export function tutorMayOpen(path: string): boolean {
+  return [...TUTOR_URLS].some((url) => path === url || path.startsWith(`${url}/`));
 }
 
 /**

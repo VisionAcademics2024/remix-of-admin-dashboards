@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { addDays } from "@/lib/format";
-import { db, requireOwner } from "./guard";
+import { db, requireOwner, requireOwnerOrTutor } from "./guard";
 import type { Row } from "./types";
 
 /**
@@ -12,7 +12,7 @@ import type { Row } from "./types";
  */
 
 export const getFortnightPay = createServerFn({ method: "GET" })
-  .middleware([requireOwner])
+  .middleware([requireOwnerOrTutor])
   .inputValidator((data) => z.object({ fortnight_start: z.string().min(1) }).parse(data))
   .handler(async ({ context, data }) => {
     const client = db(context.supabase);
@@ -33,16 +33,36 @@ export const getFortnightPay = createServerFn({ method: "GET" })
     // whose inner join to tutors dropped any lesson with no tutor assigned. In
     // code they stay visible, grouped under "Unassigned".
     const fortnightEnd = addDays(data.fortnight_start, 13);
+
+    // A tutor asking about pay is asking about their own. Narrowed here as well
+    // as by RLS: the policies already refuse another tutor's rows, and this
+    // makes the intent legible rather than leaving it to be inferred from an
+    // empty result.
+    const onlyTutor = context.staff.role === "tutor" ? (context.staff.tutor_id ?? null) : null;
+    // Cast through a narrow shape rather than PostgREST's builder type, which is
+    // deep enough that chaining through a generic makes the compiler give up.
+    const mine = <T>(query: T, column = "tutor_id"): T => {
+      if (!onlyTutor) return query;
+      const q = query as unknown as { eq(c: string, v: unknown): unknown };
+      return q.eq(column, onlyTutor) as unknown as T;
+    };
+
     const [lessons, payouts, rates, tutors] = await Promise.all([
-      client
-        .from("v_session_pay")
-        .select("*")
-        .gte("session_date", data.fortnight_start)
-        .lte("session_date", fortnightEnd)
-        .order("session_date"),
-      client.from("tutor_payouts").select("*").eq("fortnight_start", data.fortnight_start),
-      client.from("tutor_pay_rates").select("*").order("effective_from", { ascending: false }),
-      client.from("tutors").select("id, code, full_name, colour, status").order("full_name"),
+      mine(
+        client
+          .from("v_session_pay")
+          .select("*")
+          .gte("session_date", data.fortnight_start)
+          .lte("session_date", fortnightEnd),
+      ).order("session_date"),
+      mine(client.from("tutor_payouts").select("*").eq("fortnight_start", data.fortnight_start)),
+      mine(client.from("tutor_pay_rates").select("*")).order("effective_from", {
+        ascending: false,
+      }),
+      // The tutors table keys on its own id, not on a tutor_id column.
+      mine(client.from("tutors").select("id, code, full_name, colour, status"), "id").order(
+        "full_name",
+      ),
     ]);
 
     // Lesson detail carries the class and tutor names the pay views leave out.
@@ -63,7 +83,14 @@ export const getFortnightPay = createServerFn({ method: "GET" })
     // the lessons that actually fall in the fortnight.
     const groups = new Map<
       string,
-      { tutor_id: string | null; tutor_name: string; lessons: number; hours: number; adjustments: number; total_pay: number }
+      {
+        tutor_id: string | null;
+        tutor_name: string;
+        lessons: number;
+        hours: number;
+        adjustments: number;
+        total_pay: number;
+      }
     >();
     for (const l of lessonRows) {
       const key = l.tutor_id ?? "";
