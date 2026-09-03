@@ -18,69 +18,105 @@ export const getBillingBoard = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const client = db(context.supabase);
 
-    const [uncharged, charges, billedKeys, packageOwners, packagesToCharge, newEnrolments] =
-      await Promise.all([
-        // PAYG lessons attended but not charged.
-        //
-        // Ordered OLDEST first, deliberately. This list is capped, and the cap
-        // used to sit under a newest-first order - so once the backlog passed the
-        // cap it was the oldest, most overdue lessons that fell off the end and
-        // stopped being billable. The ones that have waited longest are the ones
-        // that must survive the cut.
-        client
-          .from("v_attendance")
-          .select(
-            "*, sessions(code, starts_at, class_offerings(code, programs(name))), enrolments(code, base_price, standard_price_id, students(id, code, full_name, default_payer_id))",
-          )
-          .eq("billing_method", "payg")
-          .eq("status", "present")
-          .order("lesson_starts_at", { ascending: true })
-          .limit(UNCHARGED_LIMIT),
-        client
-          .from("v_charges")
-          .select(
-            "*, students(id, code, full_name), guardians(id, full_name), invoices(id, code, invoice_date, xero_invoice_no)",
-          )
-          .order("created_at", { ascending: false })
-          .limit(CHARGE_LIMIT),
-        // What has already been billed, as ids only.
-        //
-        // This is separate from the list above on purpose. "Already charged" used
-        // to be derived from that capped list, which meant that past the cap the
-        // app forgot a lesson had been billed and offered it up to be billed
-        // again. Ids are small enough to read without a cap, so the guard against
-        // double-billing is never the thing that gets truncated.
-        client.from("charges").select("attendance_id, package_id").neq("status", "cancelled"),
-        // Who owns a package at all, charged or not.
-        //
-        // Separate from the to-charge list below, which only holds uncharged
-        // ones. An hours student's price lives on their package, so "have they
-        // got one?" is the question that settles their plan - and it must not
-        // stop being true the moment someone invoices it.
-        client.from("hours_packages").select("student_id").neq("status", "draft"),
-        // Hours packages with no charge raised against them yet.
-        client
-          .from("v_hours_packages")
-          .select("*, students(id, code, full_name, default_payer_id)")
-          .neq("status", "draft")
-          .order("approved_on", { ascending: false }),
-        // New enrolments with no agreed price yet - a student joined a class but
-        // whether they're on Hours or PAYG, and what they pay, isn't set. They are
-        // firmed here before anything is charged.
-        client
-          .from("v_enrolments")
-          .select(
-            "id, code, status, method, base_price, starts_on, " +
-              "students(id, code, full_name, default_payer_id), " +
-              "class_offerings(code, programs(name))",
-          )
-          .eq("status", "active")
-          .order("starts_on", { ascending: false })
-          .limit(ENROLMENT_LIMIT),
-      ]);
+    const [
+      uncharged,
+      charges,
+      invoiceRows,
+      billedKeys,
+      packageOwners,
+      packagesToCharge,
+      newEnrolments,
+    ] = await Promise.all([
+      // PAYG lessons attended but not charged.
+      //
+      // Ordered OLDEST first, deliberately. This list is capped, and the cap
+      // used to sit under a newest-first order - so once the backlog passed the
+      // cap it was the oldest, most overdue lessons that fell off the end and
+      // stopped being billable. The ones that have waited longest are the ones
+      // that must survive the cut.
+      client
+        .from("v_attendance")
+        .select(
+          "*, sessions(code, starts_at, class_offerings(code, programs(name))), enrolments(code, base_price, standard_price_id, students(id, code, full_name, default_payer_id))",
+        )
+        .eq("billing_method", "payg")
+        .eq("status", "present")
+        .order("lesson_starts_at", { ascending: true })
+        .limit(UNCHARGED_LIMIT),
+      // No invoice embed here, deliberately. v_charges is a view, and asking
+      // PostgREST to follow charges.invoice_id through it failed - which took
+      // the whole request down and rendered every queue as empty. The money
+      // must not depend on a join that can fail; the invoice is read
+      // separately below and attached in the app.
+      client
+        .from("v_charges")
+        .select("*, students(id, code, full_name), guardians(id, full_name)")
+        .order("created_at", { ascending: false })
+        .limit(CHARGE_LIMIT),
+      // The invoices those charges belong to. A nicety - it supplies the
+      // INV- label - so a failure here must never blank the charges.
+      client.from("invoices").select("id, code, invoice_date, xero_invoice_no"),
+      // What has already been billed, as ids only.
+      //
+      // This is separate from the list above on purpose. "Already charged" used
+      // to be derived from that capped list, which meant that past the cap the
+      // app forgot a lesson had been billed and offered it up to be billed
+      // again. Ids are small enough to read without a cap, so the guard against
+      // double-billing is never the thing that gets truncated.
+      client.from("charges").select("attendance_id, package_id").neq("status", "cancelled"),
+      // Who owns a package at all, charged or not.
+      //
+      // Separate from the to-charge list below, which only holds uncharged
+      // ones. An hours student's price lives on their package, so "have they
+      // got one?" is the question that settles their plan - and it must not
+      // stop being true the moment someone invoices it.
+      client.from("hours_packages").select("student_id").neq("status", "draft"),
+      // Hours packages with no charge raised against them yet.
+      client
+        .from("v_hours_packages")
+        .select("*, students(id, code, full_name, default_payer_id)")
+        .neq("status", "draft")
+        .order("approved_on", { ascending: false }),
+      // New enrolments with no agreed price yet - a student joined a class but
+      // whether they're on Hours or PAYG, and what they pay, isn't set. They are
+      // firmed here before anything is charged.
+      client
+        .from("v_enrolments")
+        .select(
+          "id, code, status, method, base_price, starts_on, " +
+            "students(id, code, full_name, default_payer_id), " +
+            "class_offerings(code, programs(name))",
+        )
+        .eq("status", "active")
+        .order("starts_on", { ascending: false })
+        .limit(ENROLMENT_LIMIT),
+    ]);
+
+    // A failed query used to arrive here as an empty array, so a broken read
+    // rendered as "nothing is owed anywhere" - indistinguishable from a quiet
+    // month, and far more dangerous than an error message. These are the
+    // queries the figures are made of; if one fails, say so.
+    for (const [what, result] of [
+      ["charges", charges],
+      ["lessons to charge", uncharged],
+      ["what has already been billed", billedKeys],
+      ["packages", packagesToCharge],
+      ["enrolments", newEnrolments],
+    ] as const) {
+      if (result.error) {
+        throw new Error(`Billing could not read ${what}: ${result.error.message}`);
+      }
+    }
 
     const chargeRows = charges.data ?? [];
     const billed = billedKeys.data ?? [];
+
+    // Attach each charge's invoice. Read separately and tolerated if it fails,
+    // because the label is worth less than the figures it would take with it.
+    const invoicesById = new Map((invoiceRows.data ?? []).map((i: Row) => [i.id, i] as const));
+    for (const c of chargeRows) {
+      c.invoices = c.invoice_id ? (invoicesById.get(c.invoice_id) ?? null) : null;
+    }
     const chargedAttendance = new Set(
       billed.filter((c: Row) => c.attendance_id).map((c: Row) => c.attendance_id),
     );
