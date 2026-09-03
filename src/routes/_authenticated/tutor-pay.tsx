@@ -107,11 +107,20 @@ function TutorPayPage() {
 
   const grandTotal = data.totals.reduce((sum: number, t: Row) => sum + Number(t.total_pay ?? 0), 0);
   const grandHours = data.totals.reduce((sum: number, t: Row) => sum + Number(t.hours ?? 0), 0);
+  const grandLessons = data.totals.reduce((sum: number, t: Row) => sum + Number(t.lessons ?? 0), 0);
+
+  // A tutor is looking at one person's pay - their own - so the page says whose
+  // it is rather than counting how many tutors are on it.
+  const myName = canEdit
+    ? null
+    : (data.tutors.find((t: Row) => t.id === me.staff?.tutor_id)?.full_name ??
+      me.staff?.full_name ??
+      null);
 
   return (
     <div className="stagger space-y-5">
       <PageHeader
-        title="Tutor Pay"
+        title={myName ? `${myName} - pay` : "Tutor Pay"}
         description={
           canEdit
             ? "Pay is computed from lessons, not enrolments - a lesson pays its own tutor at the rate in force on its own date."
@@ -176,12 +185,20 @@ function TutorPayPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard
-          label="Tutors with lessons"
-          value={data.totals.filter((t: Row) => t.tutor_id).length}
-        />
+        {canEdit ? (
+          <StatCard
+            label="Tutors with lessons"
+            value={data.totals.filter((t: Row) => t.tutor_id).length}
+          />
+        ) : (
+          <StatCard label="Lessons taught" value={grandLessons} />
+        )}
         <StatCard label="Payable hours" value={formatHours(grandHours)} />
-        <StatCard label="Total pay" value={formatMoney(grandTotal)} icon={BadgeDollarSign} />
+        <StatCard
+          label={canEdit ? "Total pay" : "Your pay this fortnight"}
+          value={formatMoney(grandTotal)}
+          icon={BadgeDollarSign}
+        />
       </div>
 
       <Tabs defaultValue="hours">
@@ -205,6 +222,11 @@ function TutorPayPage() {
                 ? data.payouts.find((p: Row) => p.tutor_id === t.tutor_id)
                 : undefined;
               const unassigned = !t.tutor_id;
+              // $0.00 down every row usually means no rate has been entered,
+              // not that the work was unpaid. Say which, rather than leaving a
+              // column of zeroes to be interpreted.
+              const noRate =
+                !unassigned && lessons.length > 0 && lessons.every((l: Row) => !l.hourly_rate);
               return (
                 <div
                   key={t.tutor_id ?? "unassigned"}
@@ -267,6 +289,15 @@ function TutorPayPage() {
                       lesson on the timetable to set its tutor and it will move to that tutor here.
                     </p>
                   )}
+                  {noRate && (
+                    <p className="border-b bg-warning/5 px-4 py-2 text-xs text-muted-foreground">
+                      No hourly rate is set for {t.tutor_name}, so these lessons work out to $0.00.
+                      The hours below are real; only the money is missing.{" "}
+                      {canEdit
+                        ? "Set a rate on the Rates tab and every lesson here is priced at once."
+                        : "An owner needs to set one before this fortnight can be paid."}
+                    </p>
+                  )}
 
                   <TableShell>
                     <thead>
@@ -292,7 +323,13 @@ function TutorPayPage() {
                           <Td className="text-right tabular-nums">
                             {formatHours(l.payable_hours)}
                           </Td>
-                          <Td className="text-right tabular-nums">{formatMoney(l.hourly_rate)}</Td>
+                          <Td className="text-right tabular-nums">
+                            {l.hourly_rate == null ? (
+                              <span className="text-muted-foreground">Not set</span>
+                            ) : (
+                              formatMoney(l.hourly_rate)
+                            )}
+                          </Td>
                           <Td className="text-right tabular-nums">{formatMoney(l.base_pay)}</Td>
                           <Td className="text-right tabular-nums">
                             {Number(l.adjustment) === 0 ? "-" : formatMoney(l.adjustment)}

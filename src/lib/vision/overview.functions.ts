@@ -20,65 +20,44 @@ export const getToday = createServerFn({ method: "GET" })
     const client = db(context.supabase);
     const today = data.date;
 
-    const [toMark, todaySessions, todayRoll, makeUps, lowPackages, charges, uncharged] =
-      await Promise.all([
-        client
-          .from("v_attendance")
-          .select(
-            "*, sessions(code, starts_at, ends_at, class_offerings(code, programs(name))), enrolments(code, students(id, code, full_name))",
-          )
-          .eq("status", "not_marked")
-          .lte("session_date", today)
-          .order("lesson_starts_at", { ascending: false })
-          .limit(200),
-        client
-          .from("v_sessions")
-          .select("*, tutors(id, full_name, colour), class_offerings(code, room, programs(name))")
-          .gte("starts_at", `${shift(today, -1)}T00:00:00Z`)
-          .lte("starts_at", `${shift(today, 2)}T00:00:00Z`)
-          .order("starts_at"),
-        // Today's whole roll, marked or not. The unmarked half already comes back
-        // in toMark; this is here so a lesson can say how much of its roll is
-        // taken, which is what separates "done" from "half done".
-        client
-          .from("v_attendance")
-          .select(
-            "id, session_id, status, att_type, enrolments(students(id, code, full_name)), sessions(code, class_offerings(programs(name)))",
-          )
-          .eq("session_date", today),
-        // Absences nobody rebooked, oldest first - the longest-owed lesson is the
-        // one most likely to be forgotten entirely.
-        client
-          .from("v_attendance")
-          .select(
-            "id, session_date, make_up_state, enrolments(students(id, code, full_name)), sessions(code, class_offerings(programs(name)))",
-          )
-          .eq("status", "absent")
-          .eq("make_up_state", "outstanding")
-          .order("session_date", { ascending: true })
-          .limit(100),
-        client
-          .from("v_hours_packages")
-          .select("*, students(id, code, full_name)")
-          .eq("status", "active")
-          .order("hours_remaining"),
-        client.from("v_charges").select("id, status, final_amount, invoice_date"),
-        // The same definition of "taught" as Billing uses. A cancelled lesson
-        // still has present students on its roll, and must not be counted here
-        // as waiting to be charged.
-        applyTaughtFilters(
-          client.from("v_attendance").select("id").eq("billing_method", "payg"),
-        ).limit(500),
-      ]);
+    const [todaySessions, todayRoll, lowPackages, charges, uncharged] = await Promise.all([
+      // A day either side of today in UTC terms, because a Sydney date is not
+      // a UTC one - the filter is on starts_at, and the Sydney day is picked
+      // out of the result below.
+      client
+        .from("v_sessions")
+        .select("*, tutors(id, full_name, colour), class_offerings(code, room, programs(name))")
+        .gte("starts_at", `${shift(today, -1)}T00:00:00Z`)
+        .lte("starts_at", `${shift(today, 1)}T00:00:00Z`)
+        .order("starts_at"),
+      // Today's whole roll, marked or not, so a lesson can say how much of its
+      // roll is taken - which is what separates "done" from "half done".
+      client
+        .from("v_attendance")
+        .select(
+          "id, session_id, status, att_type, enrolments(students(id, code, full_name)), sessions(code, class_offerings(programs(name)))",
+        )
+        .eq("session_date", today),
+      client
+        .from("v_hours_packages")
+        .select("*, students(id, code, full_name)")
+        .eq("status", "active")
+        .order("hours_remaining"),
+      client.from("v_charges").select("id, status, final_amount, invoice_date"),
+      // The same definition of "taught" as Billing uses. A cancelled lesson
+      // still has present students on its roll, and must not be counted here
+      // as waiting to be charged.
+      applyTaughtFilters(
+        client.from("v_attendance").select("id").eq("billing_method", "payg"),
+      ).limit(500),
+    ]);
 
     // A failed read must not arrive as an empty list. Today saying "no lessons,
     // nothing owed" because a query broke is the same failure Billing had, and
     // it is worse here: this is the page you trust to tell you the day is clear.
     for (const [what, result] of [
-      ["the roll", toMark],
       ["today's lessons", todaySessions],
       ["today's attendance", todayRoll],
-      ["make-ups", makeUps],
       ["hours packages", lowPackages],
       ["charges", charges],
     ] as const) {
@@ -95,22 +74,17 @@ export const getToday = createServerFn({ method: "GET" })
 
     const allSessions = (todaySessions.data ?? []) as Row[];
     const sessions = allSessions.filter((s: Row) => s.session_date === today);
-    const tomorrow = allSessions.filter((s: Row) => s.session_date === shift(today, 1));
     const roll = (todayRoll.data ?? []) as Row[];
     const unpaid = chargeRows.filter((c: Row) => c.status === "invoiced");
 
     return {
       today,
-      toMark: toMark.data ?? [],
       sessions,
-      // Tomorrow, only far enough to catch a lesson with nobody teaching it.
-      tomorrow,
       // The whole of today's roll, so a lesson can report how much of it is taken.
       roll,
       // Marked absent today: the make-up is easiest to book while the reason is
       // still fresh, which is the one moment nobody is at a screen.
       absentToday: roll.filter((a: Row) => a.status === "absent"),
-      makeUpsOwed: makeUps.data ?? [],
       lowPackages: (lowPackages.data ?? []).filter((p: Row) => p.is_low || p.is_overdrawn),
       toInvoiceCount: chargeRows.filter((c: Row) => c.status === "to_invoice").length,
       toInvoiceValue: chargeRows
