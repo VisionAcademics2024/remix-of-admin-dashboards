@@ -27,7 +27,10 @@ export const requireStaff = createMiddleware({ type: "function" })
   .server(async ({ next, context }) => {
     const { data, error } = await db(context.supabase)
       .from("staff")
-      .select("user_id, full_name, email, role, is_active, created_at")
+      // tutor_id is part of the identity, not a detail: it is what scopes a
+      // tutor's pay to their own lessons. Leaving it out here silently widened
+      // every "mine only" query into "everybody's".
+      .select("user_id, full_name, email, role, tutor_id, is_active, created_at")
       .eq("user_id", context.userId)
       .maybeSingle();
 

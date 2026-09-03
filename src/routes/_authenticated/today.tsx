@@ -4,12 +4,11 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import {
   BadgeDollarSign,
-  CalendarClock,
   CalendarDays,
   CheckCircle2,
-  Clock,
   Receipt,
   TrendingDown,
+  Users,
   UserX,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -43,7 +42,7 @@ import {
 } from "@/lib/format";
 import { meQueryOptions } from "./route";
 import { getToday } from "@/lib/vision/overview.functions";
-import { daysBetween, rollFor, tutorsFor, unassigned, type SessionRoll } from "@/lib/vision/today";
+import { rollFor, tutorsFor, unassigned, type SessionRoll } from "@/lib/vision/today";
 import { listTrialRoll, setTrialStatus } from "@/lib/vision/leads.functions";
 import { markAttendance } from "@/lib/vision/roll.functions";
 import type { Row } from "@/lib/vision/types";
@@ -122,21 +121,10 @@ function TodayPage() {
   );
   const finishedCount = sessions.filter((s) => running(s).end <= minutesNow).length;
 
-  // An unmarked roll from a previous day is a different problem from one from
-  // this morning - the first is a backlog, the second is just the day in
-  // progress - so the section says which it is looking at.
-  const todayCount = (data.toMark as Row[]).filter((r) => r.session_date === today).length;
-  const backlogCount = data.toMark.length - todayCount;
-
   // Who is teaching, and the lessons nobody is. Two different questions, so two
   // different answers rather than one list with a hole in it.
   const tutorDay = tutorsFor(sessions);
   const uncovered = unassigned(sessions);
-  const uncoveredTomorrow = unassigned(data.tomorrow as Row[]);
-  const oldestMakeUpDays =
-    data.makeUpsOwed.length > 0
-      ? daysBetween((data.makeUpsOwed[0] as Row)?.session_date, today)
-      : null;
   // The busiest tutor sets the scale, so the bars compare against the real day
   // rather than an invented ceiling.
   const heaviest = Math.max(1, ...tutorDay.map((t) => t.hours));
@@ -158,8 +146,8 @@ function TodayPage() {
         eyebrow={formatDay(today)}
         description={
           isTutor
-            ? "Your teaching day: what is on, whose roll is still open, and who is owed a lesson back."
-            : "The teaching day first: what is on, who is teaching it, whose roll is still open and who is owed a lesson back. The money sits underneath."
+            ? "Your teaching day: what is on, and who is teaching it."
+            : "The teaching day first: what is on, who is teaching it, and who missed a lesson. The money sits underneath."
         }
         actions={
           <>
@@ -181,7 +169,7 @@ function TodayPage() {
 
       {/* The day first, then what it costs. Ordered the way the page is used:
           you are here to run this afternoon, not to read a ledger. */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
         <StatCard
           label="Lessons today"
           value={data.sessions.length}
@@ -198,32 +186,18 @@ function TodayPage() {
           to="/timetable"
         />
         <StatCard
-          label="Still to mark"
-          value={data.toMark.length}
+          label="Tutors on today"
+          value={tutorDay.length}
           hint={
-            data.toMark.length === 0
-              ? "Nothing outstanding"
-              : backlogCount > 0
-                ? `${backlogCount} from earlier days`
-                : "All from today"
+            uncovered.length > 0
+              ? `${uncovered.length} ${uncovered.length === 1 ? "lesson has" : "lessons have"} no tutor`
+              : tutorDay.length === 0
+                ? "Nobody teaching"
+                : "Every lesson covered"
           }
-          tone={data.toMark.length === 0 ? "success" : "warning"}
-          icon={Clock}
-          to="/roll"
-        />
-        <StatCard
-          label="Make-ups owed"
-          value={data.makeUpsOwed.length}
-          hint={
-            data.makeUpsOwed.length === 0
-              ? "Every absence settled"
-              : oldestMakeUpDays == null
-                ? "Absent, never rebooked"
-                : `Oldest ${oldestMakeUpDays} days ago`
-          }
-          tone={data.makeUpsOwed.length ? "warning" : "success"}
-          icon={CalendarClock}
-          to="/roll"
+          tone={uncovered.length ? "warning" : "default"}
+          icon={Users}
+          to="/timetable"
         />
         {isTutor ? (
           <StatCard
@@ -252,115 +226,6 @@ function TodayPage() {
           />
         )}
       </div>
-
-      <Section
-        title="Still to mark"
-        count={data.toMark.length}
-        description="Marking a student present is the act that spends their hours."
-        actions={
-          <Button asChild variant="outline" size="sm">
-            <Link to="/roll">Open the roll</Link>
-          </Button>
-        }
-        tone={data.toMark.length === 0 ? "success" : "warning"}
-      >
-        {data.toMark.length > 0 && backlogCount > 0 && (
-          <p className="mb-3 text-[0.8rem] text-muted-foreground">
-            <span className="font-medium text-foreground">{todayCount}</span> from today ·{" "}
-            <span className="font-medium text-warning">{backlogCount}</span> carried over from
-            earlier lessons.
-          </p>
-        )}
-
-        {data.toMark.length === 0 ? (
-          <EmptyState
-            icon={CheckCircle2}
-            title="Nothing left to mark"
-            hint="Every lesson up to today has a complete roll. This is what done looks like."
-          />
-        ) : (
-          // The Section is the card; the table sits flush inside it rather than
-          // in a second rounded box, so the row lines run the full width and
-          // nothing reads as cut off under Mark.
-          <div className="scroll-x">
-            <table className="table-zebra w-full text-sm">
-              <thead>
-                <tr>
-                  <Th>Student</Th>
-                  <Th>Lesson</Th>
-                  <Th>When</Th>
-                  <Th>Type</Th>
-                  <Th className="text-right">Mark</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.toMark.slice(0, 25).map((row: Row) => (
-                  <tr key={row.id}>
-                    <Td>
-                      <Link
-                        to="/students/$id"
-                        params={{ id: row.student_id }}
-                        className="font-medium hover:underline"
-                      >
-                        {row.enrolments?.students?.full_name ?? "-"}
-                      </Link>
-                      <div>
-                        <Code>{row.enrolments?.students?.code}</Code>
-                      </div>
-                    </Td>
-                    <Td>
-                      <div>{row.sessions?.class_offerings?.programs?.name ?? "-"}</div>
-                      <Code>{row.sessions?.code}</Code>
-                    </Td>
-                    <Td className="whitespace-nowrap">
-                      {row.session_date === today ? "Today" : formatDayDate(row.session_date)}
-                      <div className="text-xs text-muted-foreground">
-                        {formatTime(row.lesson_starts_at)}
-                      </div>
-                    </Td>
-                    <Td>
-                      <StatusPill tone={row.att_type === "trial" ? "info" : "neutral"}>
-                        {row.att_type === "make_up"
-                          ? "Make-up"
-                          : row.att_type === "trial"
-                            ? "Trial"
-                            : "Regular"}
-                      </StatusPill>
-                    </Td>
-                    <Td className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setStatus(row.id, "present")}
-                        >
-                          Present
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setStatus(row.id, "absent")}
-                        >
-                          Absent
-                        </Button>
-                      </div>
-                    </Td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {data.toMark.length > 25 && (
-          <p className="mt-3 text-sm text-muted-foreground">
-            Showing 25 of {data.toMark.length}.{" "}
-            <Link to="/roll" className="underline">
-              Open the roll
-            </Link>{" "}
-            for the rest.
-          </p>
-        )}
-      </Section>
 
       {!isTutor && (trials as Row[]).length > 0 && (
         <Section
@@ -598,9 +463,13 @@ function TodayPage() {
         )}
       </div>
 
-      {/* Who is teaching, and who is owed a lesson back. Both are about the
-          day rather than the ledger, so they sit above the money. */}
-      <div className="grid items-start gap-4 xl:grid-cols-2">
+      {/* Who is teaching, and who missed a lesson. Both are about the day
+          rather than the ledger, so they sit above the money.
+
+          auto-fit rather than a fixed two columns: "Absent today" only appears
+          when somebody was, and a lone box should fill the row rather than sit
+          in a half-width column against nothing. */}
+      <div className="grid items-start gap-4 sm:grid-cols-[repeat(auto-fit,minmax(24rem,1fr))]">
         <Section
           title="Tutors on today"
           count={tutorDay.length}
@@ -668,97 +537,42 @@ function TodayPage() {
             </ul>
           )}
         </Section>
-
-        <Section
-          title="Make-ups owed"
-          count={data.makeUpsOwed.length}
-          description="Marked absent and never rebooked. Oldest first."
-          tone={data.makeUpsOwed.length ? "warning" : undefined}
-          className="h-full"
-          actions={
-            data.makeUpsOwed.length > 6 ? (
+        {/* Today's absences, while the reason is still fresh - that is when a
+            make-up is easiest to arrange. */}
+        {data.absentToday.length > 0 && (
+          <Section
+            title="Absent today"
+            count={data.absentToday.length}
+            description="Book the make-up while you still remember why."
+            tone="warning"
+            actions={
               <Button asChild size="sm" variant="outline">
-                <Link to="/roll">See all</Link>
+                <Link to="/roll">Book a make-up</Link>
               </Button>
-            ) : undefined
-          }
-        >
-          {data.makeUpsOwed.length === 0 ? (
-            <EmptyState
-              icon={CheckCircle2}
-              title="Every absence settled"
-              hint="Nobody is owed a lesson back."
-            />
-          ) : (
-            <ul className="space-y-1.5">
-              {(data.makeUpsOwed as Row[]).slice(0, 6).map((a: Row) => {
-                const waited = daysBetween(a.session_date, today);
-                return (
-                  <li
-                    key={a.id}
-                    className="flex items-center gap-3 rounded-2xl border border-[var(--edge)] bg-[var(--mat-thin)] px-4 py-2.5"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">
-                        {a.enrolments?.students?.full_name ?? "Student"}{" "}
-                        <Code>{a.enrolments?.students?.code}</Code>
-                      </div>
-                      <div className="truncate text-[0.72rem] tracking-[0.004em] text-muted-foreground">
-                        Missed {a.sessions?.class_offerings?.programs?.name ?? "a lesson"} ·{" "}
-                        {formatDay(a.session_date)}
-                      </div>
+            }
+          >
+            <ul className="grid gap-1.5 sm:grid-cols-2">
+              {(data.absentToday as Row[]).map((a: Row) => (
+                <li
+                  key={a.id}
+                  className="flex items-center gap-3 rounded-2xl border border-[var(--edge)] bg-[var(--mat-thin)] px-4 py-2.5"
+                >
+                  <UserX className="h-4 w-4 shrink-0 text-warning" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">
+                      {a.enrolments?.students?.full_name ?? "Student"}{" "}
+                      <Code>{a.enrolments?.students?.code}</Code>
                     </div>
-                    {waited != null && (
-                      <StatusPill
-                        tone={waited >= 28 ? "danger" : "warning"}
-                        className="normal-case"
-                      >
-                        {waited} {waited === 1 ? "day" : "days"}
-                      </StatusPill>
-                    )}
-                  </li>
-                );
-              })}
+                    <div className="truncate text-[0.72rem] tracking-[0.004em] text-muted-foreground">
+                      {a.sessions?.class_offerings?.programs?.name ?? "Lesson"}
+                    </div>
+                  </div>
+                </li>
+              ))}
             </ul>
-          )}
-        </Section>
+          </Section>
+        )}
       </div>
-
-      {/* Absent today is separate from the owed pile on purpose: the make-up is
-          easiest to arrange while the reason is still fresh. */}
-      {data.absentToday.length > 0 && (
-        <Section
-          title="Absent today"
-          count={data.absentToday.length}
-          description="Book the make-up while you still remember why."
-          tone="warning"
-          actions={
-            <Button asChild size="sm" variant="outline">
-              <Link to="/roll">Book a make-up</Link>
-            </Button>
-          }
-        >
-          <ul className="grid gap-1.5 sm:grid-cols-2">
-            {(data.absentToday as Row[]).map((a: Row) => (
-              <li
-                key={a.id}
-                className="flex items-center gap-3 rounded-2xl border border-[var(--edge)] bg-[var(--mat-thin)] px-4 py-2.5"
-              >
-                <UserX className="h-4 w-4 shrink-0 text-warning" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">
-                    {a.enrolments?.students?.full_name ?? "Student"}{" "}
-                    <Code>{a.enrolments?.students?.code}</Code>
-                  </div>
-                  <div className="truncate text-[0.72rem] tracking-[0.004em] text-muted-foreground">
-                    {a.sessions?.class_offerings?.programs?.name ?? "Lesson"}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Section>
-      )}
 
       {!isTutor && (
         <Section
@@ -845,52 +659,6 @@ function TodayPage() {
               </div>
             </div>
           )}
-        </Section>
-      )}
-
-      {/* Tomorrow, only far enough ahead to catch a lesson with nobody teaching
-          it the night before rather than the morning of. */}
-      {data.tomorrow.length > 0 && (
-        <Section
-          title="Tomorrow"
-          count={data.tomorrow.length}
-          description={
-            uncoveredTomorrow.length > 0
-              ? `${uncoveredTomorrow.length} ${uncoveredTomorrow.length === 1 ? "lesson has" : "lessons have"} no tutor yet.`
-              : "Every lesson has a tutor."
-          }
-          tone={uncoveredTomorrow.length ? "warning" : undefined}
-          actions={
-            <Button asChild size="sm" variant="outline">
-              <Link to="/timetable">Timetable</Link>
-            </Button>
-          }
-        >
-          <div className="scroll-x -mx-1 flex gap-2 px-1 pb-1">
-            {(data.tomorrow as Row[]).map((s: Row) => (
-              <div
-                key={s.id}
-                className={cn(
-                  "min-w-[10rem] shrink-0 rounded-2xl border bg-[var(--mat-thin)] px-3.5 py-2.5",
-                  s.tutor_id ? "border-[var(--edge)]" : "border-destructive/40 bg-destructive/10",
-                )}
-              >
-                <div className="text-[0.78rem] font-semibold tabular-nums">
-                  {formatTime(s.starts_at)}
-                </div>
-                <div className="mt-0.5 truncate text-sm">
-                  {s.class_offerings?.programs?.name ?? "Lesson"}
-                </div>
-                <div className="mt-0.5 truncate text-[0.72rem] tracking-[0.004em] text-muted-foreground">
-                  {s.tutor_id ? (
-                    <TutorDot colour={s.tutors?.colour} name={s.tutors?.full_name} />
-                  ) : (
-                    <span className="font-medium text-destructive">No tutor yet</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
         </Section>
       )}
     </div>

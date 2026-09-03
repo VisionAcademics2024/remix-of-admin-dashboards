@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { addDays } from "@/lib/format";
 import { db, requireOwner, requireOwnerOrTutor } from "./guard";
+import { payScope } from "./pay-scope";
 import type { Row } from "./types";
 
 /**
@@ -34,11 +35,14 @@ export const getFortnightPay = createServerFn({ method: "GET" })
     // code they stay visible, grouped under "Unassigned".
     const fortnightEnd = addDays(data.fortnight_start, 13);
 
-    // A tutor asking about pay is asking about their own. Narrowed here as well
-    // as by RLS: the policies already refuse another tutor's rows, and this
-    // makes the intent legible rather than leaving it to be inferred from an
-    // empty result.
-    const onlyTutor = context.staff.role === "tutor" ? (context.staff.tutor_id ?? null) : null;
+    // A tutor asking about pay is asking about their own.
+    //
+    // This narrowing is not decoration. RLS refuses another tutor's *rate* and
+    // *payout* rows, but a tutor may read the whole calendar on purpose, so
+    // v_session_pay hands back every tutor's lessons. Scoping here is the only
+    // thing that keeps this screen to the person reading it - which is why
+    // payScope throws on an unlinked account instead of returning null.
+    const onlyTutor = payScope(context.staff);
     // Cast through a narrow shape rather than PostgREST's builder type, which is
     // deep enough that chaining through a generic makes the compiler give up.
     const mine = <T>(query: T, column = "tutor_id"): T => {
