@@ -42,9 +42,11 @@ import { Segmented } from "@/components/vision/segmented";
 import { formatDate, formatDay, formatHours, formatMoney, sydToday } from "@/lib/format";
 import { groupUnbilled, type UnbilledFinding } from "@/lib/vision/billing-audit";
 import {
+  groupChargesByInvoice,
   groupChargesByPayer,
   groupPaygByStudent,
   type FamilyGroup,
+  type InvoiceGroup,
   type PaygGroup,
 } from "@/lib/vision/billing-groups";
 import { listStudents } from "@/lib/vision/people.functions";
@@ -175,7 +177,7 @@ function BillingPage() {
       <Section
         title="Invoiced · unpaid"
         count={data.unpaid.length}
-        description="Sent, waiting on the money. Record a payment when it lands and it moves to Received."
+        description="One row per invoice sent — open it to see the lines. Record a payment when it lands and the whole invoice moves to Received."
         tone={data.unpaid.length ? "warning" : "default"}
       >
         <UnpaidBody rows={data.unpaid} onRefresh={refresh} />
@@ -1416,66 +1418,143 @@ function ToInvoiceBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Prom
 
 /* ------------------------------------------------------------- 3. Invoiced, unpaid */
 
+/**
+ * What has been sent and not yet paid, laid out as invoices.
+ *
+ * A family that received one bill for five lessons is one row here, opening to
+ * the lines that were on it. It used to be five rows that happened to share a
+ * date, because nothing recorded that they had gone out together - so the
+ * screen disagreed with the document the family was holding.
+ *
+ * Payment is taken at the invoice, because that is what a family pays. The
+ * lines underneath can still be adjusted or cancelled one at a time, since a
+ * wrong line is a wrong line whether or not it has been sent.
+ */
 function UnpaidBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Promise<void> }) {
-  const [paying, setPaying] = useState<Row | null>(null);
+  const invoices = useMemo(() => groupChargesByInvoice(rows), [rows]);
+  const [open, setOpen] = useState<string[]>([]);
+  const [paying, setPaying] = useState<InvoiceGroup | null>(null);
   const [adjusting, setAdjusting] = useState<Row | null>(null);
 
   if (rows.length === 0) {
     return <EmptyState icon={Wallet} title="Nothing outstanding" hint="Everything invoiced has been paid." />;
   }
 
+  const keyOf = (i: InvoiceGroup) => i.invoiceId ?? i.label;
+  const isOpen = (key: string) => open.includes(key);
+  const toggleOpen = (key: string) =>
+    setOpen((o) => (o.includes(key) ? o.filter((x) => x !== key) : [...o, key]));
+
   return (
     <>
       <TableShell>
         <thead>
           <tr>
-            <Th>Charge</Th>
-            <Th>Student</Th>
             <Th>Invoice</Th>
+            <Th>Who</Th>
+            <Th>Sent</Th>
             <Th>Method</Th>
-            <Th className="text-right">Final</Th>
+            <Th className="text-right">Total</Th>
             <Th className="text-right">Paid?</Th>
             <Th className="text-right" />
           </tr>
         </thead>
         <tbody>
-          {rows.map((c: Row) => (
-            <tr key={c.id}>
-              <Td>
-                <Code>{c.code}</Code>
-              </Td>
-              <Td>
-                <Link to="/students/$id" params={{ id: c.student_id }} className="hover:underline">
-                  {c.students?.full_name}
-                </Link>
-              </Td>
-              <Td className="text-xs text-muted-foreground">
-                {c.xero_invoice_no ?? "-"}
-                {c.invoice_date && <div>{formatDate(c.invoice_date)}</div>}
-              </Td>
-              <Td>
-                <MethodSelect charge={c} onRefresh={onRefresh} />
-              </Td>
-              <Td className="text-right font-medium tabular-nums">{formatMoney(c.final_amount)}</Td>
-              <Td className="text-right">
-                <Button size="sm" onClick={() => setPaying(c)}>
-                  Mark paid
-                </Button>
-              </Td>
-              <Td className="text-right">
-                <div className="flex justify-end gap-1">
-                  <Button size="sm" variant="ghost" onClick={() => setAdjusting(c)}>
-                    Adjust
-                  </Button>
-                  <CancelButton id={c.id} onDone={onRefresh} />
-                </div>
-              </Td>
-            </tr>
-          ))}
+          {invoices.map((invoice) => {
+            const key = keyOf(invoice);
+            const single = invoice.charges.length === 1;
+
+            return (
+              <Fragment key={key}>
+                <tr>
+                  <Td>
+                    <button
+                      type="button"
+                      onClick={() => toggleOpen(key)}
+                      className="focus-spatial flex items-center gap-1.5 text-left"
+                      aria-expanded={isOpen(key)}
+                    >
+                      <ChevronRight
+                        className={cn(
+                          "h-3.5 w-3.5 shrink-0 transition-transform duration-150",
+                          isOpen(key) && "rotate-90",
+                        )}
+                      />
+                      <span>
+                        <Code>{invoice.label}</Code>
+                        <span className="block text-xs text-muted-foreground">
+                          {single ? "1 line" : `${invoice.charges.length} lines`}
+                          {invoice.xeroNo && ` · ${invoice.xeroNo}`}
+                        </span>
+                      </span>
+                    </button>
+                  </Td>
+                  <Td>
+                    <span className="font-medium">{invoice.payerName}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {invoice.students.join(" · ")}
+                    </span>
+                  </Td>
+                  <Td className="whitespace-nowrap text-xs text-muted-foreground">
+                    {invoice.invoiceDate ? formatDate(invoice.invoiceDate) : "-"}
+                  </Td>
+                  <Td>
+                    {/* Setting it here sets it on every line, because the method
+                        is how the invoice was paid, not how one lesson was. */}
+                    <MethodSelect charge={invoice.charges[0] as Row} onRefresh={onRefresh} />
+                  </Td>
+                  <Td className="text-right font-semibold tabular-nums">
+                    {formatMoney(invoice.total)}
+                  </Td>
+                  <Td className="text-right">
+                    <Button size="sm" onClick={() => setPaying(invoice)}>
+                      Mark paid
+                    </Button>
+                  </Td>
+                  <Td />
+                </tr>
+
+                {isOpen(key) &&
+                  invoice.charges.map((c: Row) => (
+                    <tr key={c.id} className="bg-[var(--mat-thin)]">
+                      <Td>
+                        <Code>{c.code}</Code>
+                        <div className="text-xs text-muted-foreground">
+                          {chargeSourceLabel(c.source)}
+                        </div>
+                      </Td>
+                      <Td className="text-sm">
+                        <Link
+                          to="/students/$id"
+                          params={{ id: c.student_id }}
+                          className="hover:underline"
+                        >
+                          {c.students?.full_name}
+                        </Link>
+                      </Td>
+                      <Td />
+                      <Td />
+                      <Td className="text-right tabular-nums">{formatMoney(c.final_amount)}</Td>
+                      <Td />
+                      <Td className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => setAdjusting(c)}>
+                            Adjust
+                          </Button>
+                          <CancelButton id={c.id} onDone={onRefresh} />
+                        </div>
+                      </Td>
+                    </tr>
+                  ))}
+              </Fragment>
+            );
+          })}
         </tbody>
       </TableShell>
 
-      {paying && <PaymentDialog charge={paying} onClose={() => setPaying(null)} onDone={onRefresh} />}
+      {paying && (
+        <PaymentDialog invoice={paying} onClose={() => setPaying(null)} onDone={onRefresh} />
+      )}
       {adjusting && (
         <AdjustDialog charge={adjusting} onClose={() => setAdjusting(null)} onDone={onRefresh} />
       )}
@@ -1485,43 +1564,112 @@ function UnpaidBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Promise
 
 /* ------------------------------------------------------------------- 4. Received */
 
+/**
+ * Settled invoices, grouped the same way they were sent.
+ *
+ * The same shape as the unpaid queue on purpose: a family looking for what they
+ * paid should find the invoice they received, not the lessons it was made of -
+ * though those are one click away.
+ */
 function ReceivedTable({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Promise<void> }) {
+  const invoices = useMemo(() => groupChargesByInvoice(rows), [rows]);
+  const [open, setOpen] = useState<string[]>([]);
+
   if (rows.length === 0) {
     return <EmptyState icon={Wallet} title="No payments recorded yet" hint="Paid charges collect here." />;
   }
+
+  const keyOf = (i: InvoiceGroup) => i.invoiceId ?? i.label;
+  const toggleOpen = (key: string) =>
+    setOpen((o) => (o.includes(key) ? o.filter((x) => x !== key) : [...o, key]));
+
   return (
     <TableShell>
       <thead>
         <tr>
-          <Th>Charge</Th>
-          <Th>Student</Th>
           <Th>Invoice</Th>
+          <Th>Who</Th>
           <Th>Method</Th>
-          <Th className="text-right">Final</Th>
+          <Th className="text-right">Total</Th>
           <Th>Paid on</Th>
           <Th>Reference</Th>
         </tr>
       </thead>
       <tbody>
-        {rows.map((c: Row) => (
-          <tr key={c.id}>
-            <Td>
-              <Code>{c.code}</Code>
-            </Td>
-            <Td>
-              <Link to="/students/$id" params={{ id: c.student_id }} className="hover:underline">
-                {c.students?.full_name}
-              </Link>
-            </Td>
-            <Td className="text-xs text-muted-foreground">{c.xero_invoice_no ?? "-"}</Td>
-            <Td>
-              <MethodSelect charge={c} onRefresh={onRefresh} />
-            </Td>
-            <Td className="text-right font-medium tabular-nums">{formatMoney(c.final_amount)}</Td>
-            <Td className="whitespace-nowrap">{c.paid_date ? formatDate(c.paid_date) : "-"}</Td>
-            <Td className="text-xs text-muted-foreground">{c.payment_ref ?? "-"}</Td>
-          </tr>
-        ))}
+        {invoices.map((invoice) => {
+          const key = keyOf(invoice);
+          const first = invoice.charges[0] as Row;
+
+          return (
+            <Fragment key={key}>
+              <tr>
+                <Td>
+                  <button
+                    type="button"
+                    onClick={() => toggleOpen(key)}
+                    className="focus-spatial flex items-center gap-1.5 text-left"
+                    aria-expanded={open.includes(key)}
+                  >
+                    <ChevronRight
+                      className={cn(
+                        "h-3.5 w-3.5 shrink-0 transition-transform duration-150",
+                        open.includes(key) && "rotate-90",
+                      )}
+                    />
+                    <span>
+                      <Code>{invoice.label}</Code>
+                      <span className="block text-xs text-muted-foreground">
+                        {invoice.charges.length === 1 ? "1 line" : `${invoice.charges.length} lines`}
+                        {invoice.xeroNo && ` · ${invoice.xeroNo}`}
+                      </span>
+                    </span>
+                  </button>
+                </Td>
+                <Td>
+                  <span className="font-medium">{invoice.payerName}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {invoice.students.join(" · ")}
+                  </span>
+                </Td>
+                <Td>
+                  <MethodSelect charge={first} onRefresh={onRefresh} />
+                </Td>
+                <Td className="text-right font-semibold tabular-nums">
+                  {formatMoney(invoice.total)}
+                </Td>
+                <Td className="whitespace-nowrap">
+                  {first.paid_date ? formatDate(first.paid_date) : "-"}
+                </Td>
+                <Td className="text-xs text-muted-foreground">{first.payment_ref ?? "-"}</Td>
+              </tr>
+
+              {open.includes(key) &&
+                invoice.charges.map((c: Row) => (
+                  <tr key={c.id} className="bg-[var(--mat-thin)]">
+                    <Td>
+                      <Code>{c.code}</Code>
+                      <div className="text-xs text-muted-foreground">
+                        {chargeSourceLabel(c.source)}
+                      </div>
+                    </Td>
+                    <Td className="text-sm">
+                      <Link
+                        to="/students/$id"
+                        params={{ id: c.student_id }}
+                        className="hover:underline"
+                      >
+                        {c.students?.full_name}
+                      </Link>
+                    </Td>
+                    <Td />
+                    <Td className="text-right tabular-nums">{formatMoney(c.final_amount)}</Td>
+                    <Td />
+                    <Td />
+                  </tr>
+                ))}
+            </Fragment>
+          );
+        })}
       </tbody>
     </TableShell>
   );
@@ -2082,31 +2230,41 @@ function InvoiceDialog({
   );
 }
 
+/**
+ * Record what the family paid.
+ *
+ * Payment is taken at the invoice, because that is what arrives: one transfer
+ * for the whole bill, not one per lesson. Every line on it is settled together
+ * with the same date, method and reference.
+ */
 function PaymentDialog({
-  charge,
+  invoice,
   onClose,
   onDone,
 }: {
-  charge: Row;
+  invoice: InvoiceGroup;
   onClose: () => void;
   onDone: () => Promise<void>;
 }) {
   const pay = useServerFn(markPaid);
   const [date, setDate] = useState(sydToday());
   const [method, setMethod] = useState<"cash" | "card" | "bank_transfer" | "other">(
-    charge.method ?? "cash",
+    (invoice.method as "cash" | "bank_transfer") ?? "cash",
   );
   const [ref, setRef] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const lines = invoice.charges.length;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Record payment · {charge.code}</DialogTitle>
+          <DialogTitle>Record payment · {invoice.label}</DialogTitle>
           <DialogDescription>
-            {formatMoney(charge.final_amount)} for {charge.students?.full_name}. A payment needs both a
-            date and a method.
+            {formatMoney(invoice.total)} from {invoice.payerName}
+            {lines > 1 && ` — settles all ${lines} lines`}. A payment needs both a date and a
+            method.
           </DialogDescription>
         </DialogHeader>
 
@@ -2122,9 +2280,9 @@ function PaymentDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(LABELS.paymentMethod).map(([value, label]) => (
+                {INVOICE_RUN_METHODS.map((value) => (
                   <SelectItem key={value} value={value}>
-                    {label}
+                    {paymentMethodLabel(value)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -2134,6 +2292,12 @@ function PaymentDialog({
             <Label>Reference</Label>
             <Input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="Receipt no, cash tin…" />
           </div>
+
+          {lines > 1 && (
+            <p className="text-xs text-muted-foreground">
+              {invoice.students.join(" · ")} — {lines} lines on this invoice.
+            </p>
+          )}
         </div>
 
         <DialogFooter>
@@ -2145,8 +2309,17 @@ function PaymentDialog({
             onClick={async () => {
               setBusy(true);
               try {
-                await pay({ data: { ids: [charge.id], paid_date: date, method, payment_ref: ref } });
-                toast.success("Payment recorded.");
+                await pay({
+                  data: {
+                    ids: invoice.charges.map((c: Row) => c.id),
+                    paid_date: date,
+                    method,
+                    payment_ref: ref,
+                  },
+                });
+                toast.success(
+                  lines === 1 ? "Payment recorded." : `Payment recorded across ${lines} lines.`,
+                );
                 await onDone();
                 onClose();
               } catch (error) {
