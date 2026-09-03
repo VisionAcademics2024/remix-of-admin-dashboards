@@ -491,6 +491,33 @@ export const LABELS = {
 } as const;
 
 /** How a charge came to exist, for a screen that has to name it. */
+/**
+ * The methods money actually arrives by, and so the runs invoices go out in.
+ *
+ * The payment_method enum is wider than this - it still carries `card` and
+ * `other` - because it records how a payment came in historically and old rows
+ * must keep meaning what they meant. This list is the narrower question of what
+ * you can pick today: cash and bank transfer, because card is not taken.
+ *
+ * The invoice queue is split by exactly these, so anything set to a method not
+ * on this list has no run to go out in and needs picking again. Keeping that
+ * one list here is what stops the split and the picker from disagreeing, which
+ * is how charges marked "bank transfer" ended up stranded under Unassigned.
+ */
+export const INVOICE_RUN_METHODS = ["cash", "bank_transfer"] as const;
+
+export type InvoiceRunMethod = (typeof INVOICE_RUN_METHODS)[number];
+
+export function isInvoiceRunMethod(method: string | null | undefined): method is InvoiceRunMethod {
+  return method === "cash" || method === "bank_transfer";
+}
+
+/** "Bank transfer", not "bank_transfer" - for prose and for button labels. */
+export function paymentMethodLabel(method: string | null | undefined): string {
+  if (!method) return "No method";
+  return LABELS.paymentMethod[method as keyof typeof LABELS.paymentMethod] ?? method;
+}
+
 export function chargeSourceLabel(source: string | null | undefined): string {
   if (source === "hours") return "Hours package";
   if (source === "payg") return "PAYG lesson";

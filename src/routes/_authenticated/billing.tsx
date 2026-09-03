@@ -57,7 +57,15 @@ import {
   restoreCharge,
   setChargeMethod,
 } from "@/lib/vision/billing.functions";
-import { chargeSourceLabel, LABELS, Row } from "@/lib/vision/types";
+import {
+  chargeSourceLabel,
+  INVOICE_RUN_METHODS,
+  isInvoiceRunMethod,
+  type InvoiceRunMethod,
+  LABELS,
+  paymentMethodLabel,
+  Row,
+} from "@/lib/vision/types";
 
 const billingQueryOptions = () =>
   queryOptions({ queryKey: ["billing"], queryFn: () => getBillingBoard() });
@@ -97,7 +105,7 @@ function BillingPage() {
     <div className="stagger space-y-5">
       <PageHeader
         title="Billing"
-        description="Money as a pipeline — from a lesson taught to a payment received. Every figure is adjustable until it's committed, and cash and card invoice as two separate runs."
+        description="Money as a pipeline — from a lesson taught to a payment received. Every figure is adjustable until it's committed, and cash and bank transfer invoice as two separate runs."
         actions={
           <Button onClick={() => setNewBill(true)}>
             <Plus /> New bill
@@ -148,11 +156,11 @@ function BillingPage() {
         <ToChargeBody data={data} onRefresh={refresh} />
       </Section>
 
-      {/* 2. To invoice — cash / card split */}
+      {/* 2. To invoice — cash / bank transfer split */}
       <Section
         title="To invoice"
         count={data.toInvoice.length}
-        description="Charges raised, ready to send. Cash and card go out as two separate runs."
+        description="Charges raised, ready to send. Cash and bank transfer go out as two separate runs."
       >
         <ToInvoiceBody rows={data.toInvoice} onRefresh={refresh} />
       </Section>
@@ -173,7 +181,7 @@ function BillingPage() {
         count={data.received.length}
         description="Settled. Kept as the paid record."
       >
-        <ReceivedTable rows={data.received} />
+        <ReceivedTable rows={data.received} onRefresh={refresh} />
       </Section>
 
       {/* 5. Cancelled */}
@@ -797,10 +805,9 @@ function ToChargeBody({ data, onRefresh }: { data: Row; onRefresh: () => Promise
 /* ---------------------------------------------------------- 2. To invoice (split) */
 
 function ToInvoiceBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Promise<void> }) {
-  const setMethod = useServerFn(setChargeMethod);
-  const [tab, setTab] = useState<"cash" | "card" | "unassigned">("cash");
+  const [tab, setTab] = useState<InvoiceRunMethod | "unassigned">("cash");
   const [selected, setSelected] = useState<string[]>([]);
-  const [invoicing, setInvoicing] = useState<"cash" | "card" | null>(null);
+  const [invoicing, setInvoicing] = useState<InvoiceRunMethod | null>(null);
   const [adjusting, setAdjusting] = useState<Row | null>(null);
 
   if (rows.length === 0) {
@@ -809,14 +816,16 @@ function ToInvoiceBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Prom
     );
   }
 
-  const bucket = (c: Row): "cash" | "card" | "unassigned" =>
-    c.method === "cash" ? "cash" : c.method === "card" ? "card" : "unassigned";
+  // A charge belongs to the run it will go out in. Anything without a method -
+  // or on one no longer offered, like an old card charge - has no run, so it
+  // waits in Unassigned until someone says how it is being paid.
   const groups = {
-    cash: rows.filter((c) => bucket(c) === "cash"),
-    card: rows.filter((c) => bucket(c) === "card"),
-    unassigned: rows.filter((c) => bucket(c) === "unassigned"),
+    cash: rows.filter((c) => c.method === "cash"),
+    bank_transfer: rows.filter((c) => c.method === "bank_transfer"),
+    unassigned: rows.filter((c) => !isInvoiceRunMethod(c.method)),
   };
   const visible = groups[tab];
+  const runLabel = tab === "unassigned" ? "unassigned" : paymentMethodLabel(tab).toLowerCase();
   const visibleIds = visible.map((c) => c.id);
   const chosen = selected.filter((id) => visibleIds.includes(id));
   const runTotal = visible
@@ -825,15 +834,6 @@ function ToInvoiceBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Prom
 
   const toggle = (id: string) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
-
-  async function assign(id: string, method: string) {
-    try {
-      await setMethod({ data: { id, method: method as "cash" | "card" } });
-      await onRefresh();
-    } catch (error) {
-      toast.error((error as Error).message);
-    }
-  }
 
   return (
     <div className="space-y-3">
@@ -846,7 +846,11 @@ function ToInvoiceBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Prom
           }}
           options={[
             { value: "cash", label: "Cash", count: groups.cash.length },
-            { value: "card", label: "Card", count: groups.card.length },
+            {
+              value: "bank_transfer",
+              label: "Bank transfer",
+              count: groups.bank_transfer.length,
+            },
             { value: "unassigned", label: "Unassigned", count: groups.unassigned.length },
           ]}
         />
@@ -857,8 +861,12 @@ function ToInvoiceBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Prom
                 {formatMoney(runTotal)} selected
               </span>
             )}
-            <Button size="sm" disabled={chosen.length === 0} onClick={() => setInvoicing(tab)}>
-              Invoice {chosen.length || ""} {tab} {chosen.length === 1 ? "charge" : "charges"}
+            <Button
+              size="sm"
+              disabled={chosen.length === 0}
+              onClick={() => setInvoicing(tab)}
+            >
+              Invoice {chosen.length || ""} {runLabel} {chosen.length === 1 ? "charge" : "charges"}
             </Button>
           </div>
         )}
@@ -866,15 +874,19 @@ function ToInvoiceBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Prom
 
       <p className="text-xs text-muted-foreground">
         {tab === "unassigned"
-          ? "Set each charge to Cash or Card to line it up for a run. Auto-sending to Xero isn't wired in yet — you invoice manually here."
+          ? "Set each charge to Cash or Bank transfer to line it up for a run. Auto-sending to Xero isn't wired in yet — you invoice manually here."
           : "Tick the charges going out on this run, then invoice them together. Everything stays adjustable until it's marked invoiced."}
       </p>
 
       {visible.length === 0 ? (
         <EmptyState
           icon={Receipt}
-          title={`No ${tab} charges`}
-          hint={tab === "unassigned" ? "Every charge has a method set." : "Assign charges to this method from Unassigned."}
+          title={`No ${runLabel} charges`}
+          hint={
+            tab === "unassigned"
+              ? "Every charge is lined up for a run."
+              : "Assign charges to this method from Unassigned."
+          }
         />
       ) : (
         <TableShell>
@@ -908,16 +920,7 @@ function ToInvoiceBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Prom
                 </Td>
                 <Td className="text-xs text-muted-foreground">{c.guardians?.full_name ?? "Internal"}</Td>
                 <Td>
-                  <Select value={c.method ?? "none"} onValueChange={(v) => assign(c.id, v)}>
-                    <SelectTrigger className="h-8 w-28">
-                      <SelectValue placeholder="Set method" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cash">Cash</SelectItem>
-                      <SelectItem value="card">Card</SelectItem>
-                      <SelectItem value="bank_transfer">Bank transfer</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <MethodSelect charge={c} onRefresh={onRefresh} />
                 </Td>
                 <Td className="text-right tabular-nums">{formatMoney(c.standard_amount)}</Td>
                 <Td className="text-right tabular-nums">
@@ -996,7 +999,7 @@ function UnpaidBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Promise
                 {c.invoice_date && <div>{formatDate(c.invoice_date)}</div>}
               </Td>
               <Td>
-                <MethodPill method={c.method} />
+                <MethodSelect charge={c} onRefresh={onRefresh} />
               </Td>
               <Td className="text-right font-medium tabular-nums">{formatMoney(c.final_amount)}</Td>
               <Td className="text-right">
@@ -1027,7 +1030,7 @@ function UnpaidBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Promise
 
 /* ------------------------------------------------------------------- 4. Received */
 
-function ReceivedTable({ rows }: { rows: Row[] }) {
+function ReceivedTable({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Promise<void> }) {
   if (rows.length === 0) {
     return <EmptyState icon={Wallet} title="No payments recorded yet" hint="Paid charges collect here." />;
   }
@@ -1057,7 +1060,7 @@ function ReceivedTable({ rows }: { rows: Row[] }) {
             </Td>
             <Td className="text-xs text-muted-foreground">{c.xero_invoice_no ?? "-"}</Td>
             <Td>
-              <MethodPill method={c.method} />
+              <MethodSelect charge={c} onRefresh={onRefresh} />
             </Td>
             <Td className="text-right font-medium tabular-nums">{formatMoney(c.final_amount)}</Td>
             <Td className="whitespace-nowrap">{c.paid_date ? formatDate(c.paid_date) : "-"}</Td>
@@ -1137,13 +1140,65 @@ function GroupLabel({ title, hint }: { title: string; hint: string }) {
   );
 }
 
-function MethodPill({ method }: { method: string | null }) {
-  if (!method) return <span className="text-xs text-muted-foreground">—</span>;
-  const tone = method === "cash" ? "success" : method === "card" ? "info" : "neutral";
+/**
+ * How this charge is being paid, changeable in place.
+ *
+ * The same control on every queue, because the answer is corrected at every
+ * stage: chosen before the invoice run, corrected when the money turns up as a
+ * transfer rather than the cash that was expected, and corrected again later
+ * when a receipt says otherwise. Making it a pill you cannot touch on the
+ * invoiced and received tables meant the only way to fix a wrong method was to
+ * cancel the charge and raise it again.
+ *
+ * Cash and bank transfer are the choices. A charge still carrying a method that
+ * is no longer offered keeps it listed, so the cell reads as what it is instead
+ * of going blank, and can be moved onto one of the two.
+ */
+function MethodSelect({
+  charge,
+  onRefresh,
+  className,
+}: {
+  charge: Row;
+  onRefresh: () => Promise<void>;
+  className?: string;
+}) {
+  const setMethod = useServerFn(setChargeMethod);
+  const [busy, setBusy] = useState(false);
+  const legacy = charge.method && !isInvoiceRunMethod(charge.method) ? charge.method : null;
+
   return (
-    <StatusPill tone={tone}>
-      {LABELS.paymentMethod[method as keyof typeof LABELS.paymentMethod] ?? method}
-    </StatusPill>
+    <Select
+      // An empty value is what makes the placeholder show. "none" was matching
+      // no item, so a charge with no method drew an empty box that did not say
+      // it was waiting to be set.
+      value={charge.method ?? ""}
+      disabled={busy}
+      onValueChange={async (value) => {
+        if (value === charge.method) return;
+        setBusy(true);
+        try {
+          await setMethod({ data: { id: charge.id, method: value as InvoiceRunMethod } });
+          await onRefresh();
+        } catch (error) {
+          toast.error((error as Error).message);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <SelectTrigger className={cn("h-8 w-[8.75rem]", className)}>
+        <SelectValue placeholder="Set method" />
+      </SelectTrigger>
+      <SelectContent>
+        {INVOICE_RUN_METHODS.map((value) => (
+          <SelectItem key={value} value={value}>
+            {paymentMethodLabel(value)}
+          </SelectItem>
+        ))}
+        {legacy && <SelectItem value={legacy}>{paymentMethodLabel(legacy)} (old)</SelectItem>}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -1470,7 +1525,7 @@ function InvoiceDialog({
   onDone,
 }: {
   ids: string[];
-  method: "cash" | "card";
+  method: InvoiceRunMethod;
   onClose: () => void;
   onDone: () => Promise<void>;
 }) {
@@ -1478,16 +1533,17 @@ function InvoiceDialog({
   const [date, setDate] = useState(sydToday());
   const [xero, setXero] = useState("");
   const [busy, setBusy] = useState(false);
+  const label = paymentMethodLabel(method).toLowerCase();
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            Invoice {ids.length} {method} {ids.length === 1 ? "charge" : "charges"}
+            Invoice {ids.length} {label} {ids.length === 1 ? "charge" : "charges"}
           </DialogTitle>
           <DialogDescription>
-            Marks the selected {method} charges invoiced on one run. Giving them the same invoice
+            Marks the selected {label} charges invoiced on one run. Giving them the same invoice
             number bills them on one document while keeping each line traceable.
           </DialogDescription>
         </DialogHeader>
@@ -1513,7 +1569,9 @@ function InvoiceDialog({
               setBusy(true);
               try {
                 await invoice({ data: { ids, invoice_date: date, xero_invoice_no: xero, method } });
-                toast.success(`Invoiced ${ids.length} ${method} ${ids.length === 1 ? "charge" : "charges"}.`);
+                toast.success(
+                  `Invoiced ${ids.length} ${label} ${ids.length === 1 ? "charge" : "charges"}.`,
+                );
                 await onDone();
                 onClose();
               } catch (error) {
