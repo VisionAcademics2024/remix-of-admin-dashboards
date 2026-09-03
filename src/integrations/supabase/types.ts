@@ -1313,6 +1313,7 @@ export type Database = {
           full_name: string
           is_active: boolean
           role: Database["public"]["Enums"]["staff_role"]
+          tutor_id: string | null
           user_id: string
         }
         Insert: {
@@ -1321,6 +1322,7 @@ export type Database = {
           full_name: string
           is_active?: boolean
           role?: Database["public"]["Enums"]["staff_role"]
+          tutor_id?: string | null
           user_id: string
         }
         Update: {
@@ -1329,9 +1331,18 @@ export type Database = {
           full_name?: string
           is_active?: boolean
           role?: Database["public"]["Enums"]["staff_role"]
+          tutor_id?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "staff_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "tutors"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       standard_prices: {
         Row: {
@@ -2377,6 +2388,7 @@ export type Database = {
           full_name: string
           is_active: boolean
           role: Database["public"]["Enums"]["staff_role"]
+          tutor_id: string | null
           user_id: string
         }
         SetofOptions: {
@@ -2463,7 +2475,7 @@ export type Database = {
         | "ad_hoc"
       session_status: "scheduled" | "completed" | "cancelled" | "rescheduled"
       session_type: "regular" | "dedicated_make_up"
-      staff_role: "owner" | "admin"
+      staff_role: "owner" | "admin" | "tutor"
       trial_kind: "class_trial" | "diagnostic_test"
       trial_status:
         | "proposed"
@@ -2666,7 +2678,7 @@ export const Constants = {
       ],
       session_status: ["scheduled", "completed", "cancelled", "rescheduled"],
       session_type: ["regular", "dedicated_make_up"],
-      staff_role: ["owner", "admin"],
+      staff_role: ["owner", "admin", "tutor"],
       trial_kind: ["class_trial", "diagnostic_test"],
       trial_status: [
         "proposed",
