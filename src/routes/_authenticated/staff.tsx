@@ -61,7 +61,7 @@ function StaffPage() {
     <div className="stagger space-y-6">
       <PageHeader
         title="Staff"
-        description="Two roles, one hard boundary: money paid to tutors. Owners see everything; admins see everything except tutor pay."
+        description="Owners see everything. Admins see everything except tutor pay. Tutors see the calendar, the roll of their own lessons, and their own pay - nothing else, enforced by the database rather than the screen."
       />
 
       <Section
@@ -169,26 +169,66 @@ function StaffPage() {
                 <Td className="font-medium">{s.full_name}</Td>
                 <Td>{s.email}</Td>
                 <Td>
-                  <Select
-                    value={s.role}
-                    onValueChange={async (v: "owner" | "admin") => {
-                      try {
-                        await update({ data: { user_id: s.user_id, role: v } });
-                        toast.success("Role updated.");
-                        await refresh();
-                      } catch (error) {
-                        toast.error((error as Error).message);
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="w-28">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="owner">Owner</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select
+                      value={s.role}
+                      onValueChange={async (v: "owner" | "admin" | "tutor") => {
+                        try {
+                          await update({ data: { user_id: s.user_id, role: v } });
+                          toast.success("Role updated.");
+                          await refresh();
+                        } catch (error) {
+                          toast.error((error as Error).message);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-28">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="owner">Owner</SelectItem>
+                        <SelectItem value="tutor">Tutor</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    {/* A tutor account teaches as somebody. Two accounts may
+                        point at the same tutor, which is how a test login
+                        shares a real tutor's lessons and pay. */}
+                    {s.role === "tutor" && (
+                      <Select
+                        value={s.tutor_id ?? ""}
+                        onValueChange={async (v) => {
+                          try {
+                            await update({
+                              data: { user_id: s.user_id, role: "tutor", tutor_id: v },
+                            });
+                            toast.success("Tutor linked.");
+                            await refresh();
+                          } catch (error) {
+                            toast.error((error as Error).message);
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="w-44">
+                          <SelectValue placeholder="Teaches as…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(data.tutors as Row[]).map((t: Row) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.full_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+
+                    {s.role === "tutor" && !s.tutor_id && (
+                      <StatusPill tone="warning" className="normal-case">
+                        Pick a tutor
+                      </StatusPill>
+                    )}
+                  </div>
                 </Td>
                 <Td>{formatDate(s.created_at)}</Td>
                 <Td className="text-right">
