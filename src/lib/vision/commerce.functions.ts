@@ -4,6 +4,7 @@ import { z } from "zod";
 import { sydDate, sydToday } from "@/lib/format";
 import { db, requireStaff, type AnyClient } from "./guard";
 import { choosePackage } from "./billing-audit";
+import { buildEnrolmentPayload } from "./enrolment-terms";
 import type { PricingBasis, Row } from "./types";
 
 /**
@@ -131,15 +132,9 @@ export const saveEnrolment = createServerFn({ method: "POST" })
       }
     }
 
-    const payload: Record<string, unknown> = {
-      ...values,
-      ends_on: values.ends_on || null,
-      method: values.method || null,
-      standard_price_id: values.standard_price_id || null,
-      hours_override: values.hours_override ?? null,
-      default_package_id: values.default_package_id || null,
-      notes: values.notes || null,
-    };
+    // Which package an enrolment draws from has its own endpoint, and editing
+    // the commercial terms must not disturb it - see buildEnrolmentPayload.
+    const payload = buildEnrolmentPayload(values);
     if (basePrice !== null) payload["base_price"] = basePrice;
 
     if (id) {
@@ -268,6 +263,130 @@ async function syncEligibility(client: AnyClient, packageId: string, enrolmentId
     if (error) throw error;
   }
 }
+
+/**
+ * Delete a package outright.
+ *
+ * A duplicate created by mistake should be able to go away, and closing it
+ * leaves it on the books forever. But deleting one is not a neutral act, and
+ * the foreign keys say exactly why:
+ *
+ *   charges.package_id            on delete RESTRICT
+ *   attendance.package_id         on delete SET NULL
+ *   enrolments.default_package_id on delete SET NULL
+ *   package_eligibility           on delete CASCADE
+ *
+ * So a package that has been invoiced cannot be deleted at all - and should
+ * not be, because the charge is the record of money asked for. That one is
+ * refused with an explanation rather than a raw constraint error.
+ *
+ * The dangerous one is attendance. SET NULL means deleting a package silently
+ * un-points every roll entry that drew from it: the hours stay taught, the
+ * balance they came out of disappears, and the student lands straight back in
+ * "Hours taught against no package". That is allowed, because sometimes it is
+ * exactly right - the package was a duplicate and the hours belong to the other
+ * one - but never silently. It needs `confirm`, and the caller is told how many
+ * lessons and hours it will strand.
+ */
+export const deletePackage = createServerFn({ method: "POST" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    z
+      .object({
+        id: z.string().uuid(),
+        /** Required when roll entries draw from this package. */
+        confirm: z.boolean().default(false),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+
+    const { data: pkg, error: readError } = await client
+      .from("hours_packages")
+      .select("id, code, students(full_name)")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (readError) throw readError;
+    if (!pkg) throw new Error("That package no longer exists.");
+
+    // Money already asked for. The database would refuse this anyway; saying
+    // why, and what to do instead, is more use than the constraint's message.
+    const { data: charges, error: chargeError } = await client
+      .from("charges")
+      .select("code, status")
+      .eq("package_id", data.id)
+      .neq("status", "cancelled");
+    if (chargeError) throw chargeError;
+    if ((charges ?? []).length > 0) {
+      const codes = (charges ?? []).map((c: Row) => c.code).join(", ");
+      throw new Error(
+        `${pkg.code} has been charged (${codes}), so it cannot be deleted - the charge is the record of what was asked for. Cancel that charge first, or close the package instead.`,
+      );
+    }
+
+    // Roll entries that would be stranded.
+    const { data: drawing, error: drawError } = await client
+      .from("v_attendance")
+      .select("id, hours_consumed")
+      .eq("package_id", data.id);
+    if (drawError) throw drawError;
+
+    const lessons = (drawing ?? []).length;
+    const hours = (drawing ?? []).reduce(
+      (sum: number, a: Row) => sum + Number(a.hours_consumed ?? 0),
+      0,
+    );
+
+    if (lessons > 0 && !data.confirm) {
+      return { deleted: false, needsConfirm: true, lessons, hours, code: pkg.code };
+    }
+
+    const { error } = await client.from("hours_packages").delete().eq("id", data.id);
+    if (error) throw error;
+
+    return { deleted: true, needsConfirm: false, lessons, hours, code: pkg.code };
+  });
+
+/**
+ * Delete an enrolment outright.
+ *
+ * attendance.enrolment_id is ON DELETE RESTRICT, so an enrolment with any roll
+ * entry cannot be deleted - and should not be: those entries are the record of
+ * lessons that happened. Closing it is the honest end for one that ran; delete
+ * is for one created by mistake that never did.
+ */
+export const deleteEnrolment = createServerFn({ method: "POST" })
+  .middleware([requireStaff])
+  .inputValidator((data) => z.object({ id: z.string().uuid() }).parse(data))
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+
+    const { data: enrolment, error: readError } = await client
+      .from("enrolments")
+      .select("id, code")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (readError) throw readError;
+    if (!enrolment) throw new Error("That enrolment no longer exists.");
+
+    const { data: roll, error: rollError } = await client
+      .from("attendance")
+      .select("id")
+      .eq("enrolment_id", data.id)
+      .limit(1);
+    if (rollError) throw rollError;
+
+    if ((roll ?? []).length > 0) {
+      throw new Error(
+        `${enrolment.code} has roll entries, so it cannot be deleted - those are the record of lessons that happened. Close it instead, which ends it without erasing the history.`,
+      );
+    }
+
+    const { error } = await client.from("enrolments").delete().eq("id", data.id);
+    if (error) throw error;
+    return { success: true };
+  });
 
 /**
  * Eligibility is the most misunderstood relationship in the system - a student
