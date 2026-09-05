@@ -35,7 +35,7 @@ import {
   TutorDot,
 } from "@/components/vision/ui";
 import { cn } from "@/lib/utils";
-import { formatDate, formatMoney, sydToday } from "@/lib/format";
+import { formatDate, formatMoney, fortnightStart, sydToday } from "@/lib/format";
 import { listTutors, saveTutor } from "@/lib/vision/catalogue.functions";
 import { addPayRate } from "@/lib/vision/pay.functions";
 import { DEFAULT_TUTOR_COLOUR, type Row } from "@/lib/vision/types";
@@ -278,12 +278,18 @@ function TutorDialog({ row, onClose }: { row?: Row; onClose: () => void }) {
 function RatesDialog({ tutor, onClose }: { tutor: Row; onClose: () => void }) {
   const add = useServerFn(addPayRate);
   const queryClient = useQueryClient();
+  const history: Row[] = tutor.rates ?? [];
+
   const [rate, setRate] = useState("");
-  const [from, setFrom] = useState(() => sydToday());
+  // A tutor's first rate dated today leaves everything they have already taught
+  // unpriced, which is the state this screen exists to get out of. So the first
+  // one starts at the top of the current fortnight; a later one is a raise, and
+  // a raise starts when it starts rather than repricing history.
+  const [from, setFrom] = useState(() =>
+    history.length === 0 ? fortnightStart(sydToday()) : sydToday(),
+  );
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-
-  const history: Row[] = tutor.rates ?? [];
 
   async function submit() {
     if (!rate) {
@@ -360,6 +366,11 @@ function RatesDialog({ tutor, onClose }: { tutor: Row; onClose: () => void }) {
             <div className="space-y-1.5">
               <Label>Starts from</Label>
               <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+              <p className="text-xs text-muted-foreground">
+                {history.length === 0
+                  ? "Set to the start of this fortnight so lessons already taught price up. Move it earlier to reach older ones."
+                  : "Lessons before this date keep the rate above."}
+              </p>
             </div>
           </div>
           <div className="space-y-1.5">

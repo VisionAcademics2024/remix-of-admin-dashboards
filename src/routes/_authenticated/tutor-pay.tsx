@@ -468,7 +468,18 @@ function TutorPayPage() {
       {adjusting && (
         <AdjustmentDialog lesson={adjusting} onClose={() => setAdjusting(null)} onDone={refresh} />
       )}
-      {rateFor && <RateDialog tutor={rateFor} onClose={() => setRateFor(null)} onDone={refresh} />}
+      {rateFor && (
+        <RateDialog
+          tutor={rateFor}
+          // A tutor's first rate should cover the fortnight you are looking at,
+          // not start today and leave the lessons you just saw unpriced. A
+          // later rate is a raise, and a raise starts when it starts.
+          isFirst={!data.rates.some((r: Row) => r.tutor_id === rateFor.id)}
+          fortnight={fortnight}
+          onClose={() => setRateFor(null)}
+          onDone={refresh}
+        />
+      )}
       {payingOut && (
         <PayoutDialog
           payload={payingOut}
@@ -554,16 +565,20 @@ function AdjustmentDialog({
 
 function RateDialog({
   tutor,
+  isFirst,
+  fortnight,
   onClose,
   onDone,
 }: {
   tutor: Row;
+  isFirst: boolean;
+  fortnight: string;
   onClose: () => void;
   onDone: () => Promise<void>;
 }) {
   const add = useServerFn(addPayRate);
   const [rate, setRate] = useState("");
-  const [from, setFrom] = useState(sydToday());
+  const [from, setFrom] = useState(isFirst ? fortnight : sydToday());
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -573,7 +588,9 @@ function RateDialog({
         <DialogHeader>
           <DialogTitle>New rate for {tutor.full_name}</DialogTitle>
           <DialogDescription>
-            Adds a row rather than overwriting. Lessons before this date keep the old rate.
+            {isFirst
+              ? "Adds a row rather than overwriting. Dated to the start of this fortnight so the lessons on screen price up - move it earlier to reach older ones."
+              : "Adds a row rather than overwriting. Lessons before this date keep the old rate."}
           </DialogDescription>
         </DialogHeader>
 
@@ -590,6 +607,9 @@ function RateDialog({
           <div className="space-y-1.5">
             <Label>Effective from</Label>
             <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            <p className="text-xs text-muted-foreground">
+              Lessons taught before this date stay unpriced. Back-date it to cover them.
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label>Note</Label>
