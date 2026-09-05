@@ -52,6 +52,7 @@ import {
   payoutTotal,
   savePayout,
 } from "@/lib/vision/pay.functions";
+import { rateIsMissing, rateOf } from "@/lib/vision/pay-rate";
 import { meQueryOptions } from "./route";
 import { LABELS, Row } from "@/lib/vision/types";
 
@@ -222,11 +223,10 @@ function TutorPayPage() {
                 ? data.payouts.find((p: Row) => p.tutor_id === t.tutor_id)
                 : undefined;
               const unassigned = !t.tutor_id;
-              // $0.00 down every row usually means no rate has been entered,
-              // not that the work was unpaid. Say which, rather than leaving a
-              // column of zeroes to be interpreted.
-              const noRate =
-                !unassigned && lessons.length > 0 && lessons.every((l: Row) => !l.hourly_rate);
+              // $0.00 down every row means one of two opposite things: no rate
+              // has been entered, or the rate really is nothing (the owners
+              // teach and are not paid hourly). Only the first needs saying.
+              const noRate = !unassigned && rateIsMissing(lessons);
               return (
                 <div
                   key={t.tutor_id ?? "unassigned"}
@@ -272,7 +272,7 @@ function TutorPayPage() {
                                 setPayingOut({
                                   tutor: t,
                                   payout,
-                                  rate: lessons.find((l: Row) => l.hourly_rate)?.hourly_rate ?? 0,
+                                  rate: rateOf(lessons),
                                 })
                               }
                             >
