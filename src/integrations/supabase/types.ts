@@ -2398,6 +2398,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      current_tutor_id: { Args: never; Returns: string }
       fortnight_start: { Args: { d: string }; Returns: string }
       generate_sessions: { Args: { p_offering_id: string }; Returns: number }
       increment_sessions_used: {
@@ -2406,12 +2407,14 @@ export type Database = {
       }
       is_owner: { Args: never; Returns: boolean }
       is_staff: { Args: never; Returns: boolean }
+      is_tutor: { Args: never; Returns: boolean }
       seed_roll: { Args: { p_session_id: string }; Returns: number }
       seed_roll_for_offering: {
         Args: { p_offering_id: string }
         Returns: number
       }
       syd_date: { Args: { ts: string }; Returns: string }
+      teaches_session: { Args: { p_session_id: string }; Returns: boolean }
     }
     Enums: {
       adjustment_type:
