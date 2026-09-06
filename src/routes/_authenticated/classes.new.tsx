@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import {
@@ -8,6 +8,7 @@ import {
   Check,
   ChevronsUpDown,
   CircleDashed,
+  History,
   Layers,
   Plus,
   UserPlus,
@@ -43,6 +44,7 @@ import {
   formatHours,
   formatTime,
   formatWeekday,
+  sydDate,
   sydneyLocalToInstant,
   sydToday,
 } from "@/lib/format";
@@ -51,12 +53,21 @@ import {
   generateSessions,
   getClassOffering,
   listClassOfferings,
+  listJoinableSessions,
   saveClassOffering,
 } from "@/lib/vision/classes.functions";
 import { createSession } from "@/lib/vision/schedule.functions";
 import { addMidTermStudent, listCommerce, saveEnrolment } from "@/lib/vision/commerce.functions";
-import { listTrialSessions } from "@/lib/vision/leads.functions";
 import { listStudents } from "@/lib/vision/people.functions";
+import {
+  buildMidTermClasses,
+  splitLessons,
+  suggestedHours,
+  tallyAll,
+  tallySelection,
+  type ClassSelection,
+  type JoinableLesson,
+} from "@/lib/vision/mid-term";
 import { LABELS, Row } from "@/lib/vision/types";
 
 // The class builder makes repeating classes; single lessons are the session
@@ -293,13 +304,7 @@ function SessionFlow({ catalogue }: { catalogue: Row }) {
   );
 }
 
-function SessionBuilder({
-  catalogue,
-  onCreated,
-}: {
-  catalogue: Row;
-  onCreated: () => void;
-}) {
+function SessionBuilder({ catalogue, onCreated }: { catalogue: Row; onCreated: () => void }) {
   const addSession = useServerFn(createSession);
   const queryClient = useQueryClient();
   const { data: classes } = useQuery({
@@ -396,10 +401,7 @@ function SessionBuilder({
 
       <div className="space-y-1.5">
         <Label>Tutor</Label>
-        <Select
-          value={tutorId || "none"}
-          onValueChange={(v) => setTutorId(v === "none" ? "" : v)}
-        >
+        <Select value={tutorId || "none"} onValueChange={(v) => setTutorId(v === "none" ? "" : v)}>
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
@@ -428,7 +430,9 @@ function SessionBuilder({
           Create one-off session
         </Button>
         {!chosen && (
-          <p className="mt-2 text-xs text-muted-foreground">Choose the class this lesson belongs to.</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Choose the class this lesson belongs to.
+          </p>
         )}
       </div>
     </div>
@@ -1146,18 +1150,28 @@ function StepTwo({
 }
 
 /**
- * Add a mid-term student onto the exact lessons they'll attend, across one or
- * more classes, without generating a whole term. They land on those rolls and
- * in Billing (active but unpriced) for the admin to firm the price.
+ * Add a student to the lessons they'll come to - and the ones they already
+ * have.
+ *
+ * Two things happen here that read as one. Forwards: pick the lessons they'll
+ * sit in, across as many classes as they've joined. Backwards: tick the ones
+ * they've already been to, which is the part that actually owes money and the
+ * part this screen used to hide - it only ever offered future dates, so a
+ * fortnight of lessons already taught could not be billed from anywhere.
+ *
+ * The hours block is bought here too, and pointed at these enrolments as it is
+ * created. That is what keeps the student out of Billing's "On hours, but no
+ * package was ever bought" - the hours agreed with the family exist as a real
+ * purchase, the lessons draw from it, and Billing has a price to firm rather
+ * than a hole to find.
  */
 function MidTermFlow() {
   const add = useServerFn(addMidTermStudent);
   const queryClient = useQueryClient();
   const { data: students } = useQuery({ queryKey: ["students"], queryFn: () => listStudents() });
-  const { data: classes } = useQuery({ queryKey: ["classes"], queryFn: () => listClassOfferings() });
-  const { data: sessions = [] } = useQuery({
-    queryKey: ["trial-sessions"],
-    queryFn: () => listTrialSessions(),
+  const { data: classes } = useQuery({
+    queryKey: ["classes"],
+    queryFn: () => listClassOfferings(),
   });
 
   const [studentId, setStudentId] = useState("");
@@ -1165,20 +1179,44 @@ function MidTermFlow() {
   const [hours, setHours] = useState("10");
   const [addedIds, setAddedIds] = useState<string[]>([]);
   const [picks, setPicks] = useState<Record<string, string[]>>({});
-  const [custom, setCustom] = useState<
-    Record<string, Array<{ tempId: string; starts_at: string; ends_at: string; label: string }>>
-  >({});
+  const [custom, setCustom] = useState<Record<string, CustomLesson[]>>({});
   const [busy, setBusy] = useState(false);
-  const [doneCount, setDoneCount] = useState<number | null>(null);
+  const [done, setDone] = useState<MidTermResult | null>(null);
+
+  const today = sydToday();
+
+  // One query per class in the builder, so adding a second class does not
+  // re-fetch the first. Each returns the class's lessons either side of today,
+  // and says which ones this student is already on.
+  const lessonQueries = useQueries({
+    queries: addedIds.map((id) => ({
+      queryKey: ["joinable-sessions", id, studentId],
+      queryFn: () =>
+        listJoinableSessions({
+          data: { class_offering_id: id, ...(studentId ? { student_id: studentId } : {}) },
+        }),
+    })),
+  });
 
   const classById = (id: string) => (classes ?? []).find((c: Row) => c.id === id);
-  const upcomingFor = (id: string) =>
-    (sessions as Row[]).filter((s) => s.class_offering_id === id);
   const notAdded = (classes ?? []).filter((c: Row) => !addedIds.includes(c.id));
 
-  const totalFor = (id: string) => (picks[id]?.length ?? 0) + (custom[id]?.length ?? 0);
-  const total = addedIds.reduce((n, id) => n + totalFor(id), 0);
-  const classesWithPicks = addedIds.filter((id) => totalFor(id) > 0).length;
+  // What the screen and the server both count from: ticks, hand-typed dates,
+  // and the lessons behind them. The rules live in mid-term.ts so the summary
+  // line, the suggested hours and the payload can never disagree.
+  const selections: ClassSelection[] = addedIds.map((id, i) => ({
+    class_offering_id: id,
+    lessons: (lessonQueries[i]?.data ?? []).map((s: Row) => ({
+      id: s.id,
+      session_date: s.session_date,
+      duration_hours: Number(s.duration_hours ?? 0),
+      on_roll: !!s.on_roll,
+    })),
+    selected: picks[id] ?? [],
+    added: custom[id] ?? [],
+  }));
+  const tally = tallyAll(selections, today);
+  const suggested = suggestedHours(selections, today);
   const student = (students ?? []).find((s: Row) => s.id === studentId);
 
   function addClass(id: string) {
@@ -1204,14 +1242,41 @@ function MidTermFlow() {
       return { ...p, [id]: cur.includes(sid) ? cur.filter((x) => x !== sid) : [...cur, sid] };
     });
   }
+  /** Tick or clear a whole group at once - a term of backlog is a lot of clicks. */
+  function toggleMany(id: string, ids: string[], on: boolean) {
+    setPicks((p) => {
+      const cur = new Set(p[id] ?? []);
+      for (const sid of ids) {
+        if (on) cur.add(sid);
+        else cur.delete(sid);
+      }
+      return { ...p, [id]: [...cur] };
+    });
+  }
   function addDate(id: string, local: string, length: number) {
     if (!local) return;
     const starts_at = sydneyLocalToInstant(local);
     const ends_at = new Date(Date.parse(starts_at) + (length || 1.5) * 3_600_000).toISOString();
-    const tempId = `c-${id}-${Date.now()}`;
     setCustom((c) => ({
       ...c,
-      [id]: [...(c[id] ?? []), { tempId, starts_at, ends_at, label: formatDayDate(starts_at) }],
+      [id]: [
+        ...(c[id] ?? []),
+        {
+          tempId: `c-${id}-${Date.now()}`,
+          starts_at,
+          ends_at,
+          // A date already gone is a lesson already taught. Flip it on the chip
+          // if it isn't - a booked lesson nobody turned up to, say.
+          attended: sydDate(starts_at) < today,
+          label: formatDayDate(starts_at),
+        },
+      ],
+    }));
+  }
+  function toggleCustomAttended(id: string, tempId: string) {
+    setCustom((c) => ({
+      ...c,
+      [id]: (c[id] ?? []).map((x) => (x.tempId === tempId ? { ...x, attended: !x.attended } : x)),
     }));
   }
   function removeCustom(id: string, tempId: string) {
@@ -1221,29 +1286,21 @@ function MidTermFlow() {
   async function submit() {
     setBusy(true);
     try {
-      const payload = addedIds
-        .filter((id) => totalFor(id) > 0)
-        .map((id) => ({
-          class_offering_id: id,
-          session_ids: picks[id] ?? [],
-          new_sessions: (custom[id] ?? []).map((c) => ({
-            starts_at: c.starts_at,
-            ends_at: c.ends_at,
-          })),
-        }));
       const res = await add({
         data: {
           student_id: studentId,
           method: plan,
           hours: plan === "hours" ? Number(hours) || 0 : 0,
-          classes: payload,
+          classes: buildMidTermClasses(selections, today),
         },
       });
       await queryClient.invalidateQueries({ queryKey: ["roll"] });
       await queryClient.invalidateQueries({ queryKey: ["timetable"] });
       await queryClient.invalidateQueries({ queryKey: ["today"] });
       await queryClient.invalidateQueries({ queryKey: ["billing"] });
-      setDoneCount(res.lessons ?? total);
+      await queryClient.invalidateQueries({ queryKey: ["billing-audit"] });
+      await queryClient.invalidateQueries({ queryKey: ["joinable-sessions"] });
+      setDone(res);
       toast.success(`${student?.full_name ?? "Student"} added to ${res.lessons} lessons.`);
     } catch (error) {
       toast.error((error as Error).message);
@@ -1252,15 +1309,32 @@ function MidTermFlow() {
     }
   }
 
-  if (doneCount !== null) {
+  if (done) {
     return (
       <Card className="border-success/40">
         <CardContent className="space-y-3 py-6 text-center">
           <p className="text-sm">
-            <span className="font-semibold">{student?.full_name}</span> is now on {doneCount}{" "}
-            {doneCount === 1 ? "lesson" : "lessons"}. Their name shows on those rolls, and they're in
-            Billing to price.
+            <span className="font-semibold">{student?.full_name}</span> is now on {done.lessons}{" "}
+            {done.lessons === 1 ? "lesson" : "lessons"}
+            {done.backlog > 0 ? (
+              <>, {done.backlog} of them marked as already taught and ready to bill</>
+            ) : null}
+            . Their name shows on those rolls.
           </p>
+          {done.package_id ? (
+            <p className="text-sm text-muted-foreground">
+              A {formatHours(done.hours)} package was bought and attached to{" "}
+              {tally.classes === 1 ? "the class" : "both classes"}, so the lessons draw from it.
+              Billing has it waiting with the price for you to set.
+              {done.attributed > 0
+                ? ` ${done.attributed} earlier roll ${done.attributed === 1 ? "entry" : "entries"} that drew from nothing now draw from it too.`
+                : ""}
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Each lesson taught lands in Billing to charge, with no price set until you firm it.
+            </p>
+          )}
           <div className="flex justify-center gap-2">
             <Button variant="outline" asChild>
               <Link to="/roll">Open the roll</Link>
@@ -1270,7 +1344,7 @@ function MidTermFlow() {
             </Button>
             <Button
               onClick={() => {
-                setDoneCount(null);
+                setDone(null);
                 setStudentId("");
                 setAddedIds([]);
                 setPicks({});
@@ -1291,7 +1365,10 @@ function MidTermFlow() {
       <StepCard step={1} title="The student" done={!!studentId}>
         <div className="space-y-1.5">
           <Label>Who's joining</Label>
-          <Select value={studentId || "none"} onValueChange={(v) => setStudentId(v === "none" ? "" : v)}>
+          <Select
+            value={studentId || "none"}
+            onValueChange={(v) => setStudentId(v === "none" ? "" : v)}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Choose a student…" />
             </SelectTrigger>
@@ -1306,17 +1383,23 @@ function MidTermFlow() {
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            Not a student yet? Add them on Students &amp; Families first. Pricing is set later in Billing.
+            Not a student yet? Add them on Students &amp; Families first. Pricing is set later in
+            Billing.
           </p>
         </div>
       </StepCard>
 
-      {/* 2. Classes & dates */}
+      {/* 2. Classes & dates, forwards and back */}
       <StepCard
         step={2}
-        title="Classes & the dates they'll come"
-        done={total > 0}
-        summary={total > 0 ? `${total} lessons` : undefined}
+        title="Classes & the lessons they'll come to"
+        done={tally.lessons > 0}
+        summary={
+          tally.lessons > 0
+            ? `${tally.lessons} ${tally.lessons === 1 ? "lesson" : "lessons"} · ${formatHours(tally.hours)}` +
+              (tally.backlogLessons > 0 ? ` · ${tally.backlogLessons} to bill` : "")
+            : undefined
+        }
       >
         <div className="space-y-3">
           <Select value="none" onValueChange={(v) => v !== "none" && addClass(v)}>
@@ -1336,80 +1419,38 @@ function MidTermFlow() {
 
           {addedIds.length === 0 && (
             <p className="text-xs text-muted-foreground">
-              No classes yet. Pick one above to choose the lessons they'll sit in on.
+              No classes yet. Add as many as they've joined - the lessons you tick across all of
+              them go on in one go.
             </p>
           )}
 
-          {addedIds.map((id) => {
-            const c = classById(id);
-            const lessons = upcomingFor(id);
-            const chosen = picks[id] ?? [];
-            return (
-              <div key={id} className="overflow-hidden rounded-lg border border-[var(--edge)]">
-                <div className="flex flex-wrap items-center gap-2 border-b border-[var(--edge)] bg-[var(--mat-thin)] px-3 py-2">
-                  <span className="font-medium">{c?.programs?.name ?? "Class"}</span>
-                  <Code>{c?.code}</Code>
-                  <span className="text-xs text-muted-foreground">{c ? classWhen(c) : ""}</span>
-                  <span className="ml-auto text-xs font-medium text-primary">{totalFor(id)} selected</span>
-                  <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => removeClass(id)}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                <div className="max-h-56 space-y-0.5 overflow-y-auto p-2">
-                  {lessons.length === 0 && (custom[id]?.length ?? 0) === 0 && (
-                    <p className="px-1 py-2 text-xs text-muted-foreground">
-                      No upcoming lessons on the timetable. Add a specific date below.
-                    </p>
-                  )}
-                  {lessons.map((s: Row) => {
-                    const on = chosen.includes(s.id);
-                    return (
-                      <label
-                        key={s.id}
-                        className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm hover:bg-[var(--mat-thin)]"
-                      >
-                        <Checkbox checked={on} onCheckedChange={() => toggle(id, s.id)} />
-                        <span className="font-medium">{formatDayDate(s.starts_at)}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {formatTime(s.starts_at)}
-                          {s.tutors?.full_name ? ` · ${s.tutors.full_name}` : ""}
-                        </span>
-                      </label>
-                    );
-                  })}
-                  {(custom[id] ?? []).map((cl) => (
-                    <div
-                      key={cl.tempId}
-                      className="flex items-center gap-2.5 rounded-md bg-primary/10 px-2 py-1.5 text-sm"
-                    >
-                      <Check className="h-4 w-4 text-primary" />
-                      <span className="font-medium">{cl.label}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {formatTime(cl.starts_at)} · added date
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="ml-auto h-6 px-1.5"
-                        onClick={() => removeCustom(id, cl.tempId)}
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-                <AddDateRow
-                  defaultLength={Number(c?.session_duration_hours ?? 1.5)}
-                  onAdd={(local, length) => addDate(id, local, length)}
-                />
-              </div>
-            );
-          })}
+          {addedIds.map((id, i) => (
+            <ClassLessonPicker
+              key={id}
+              offering={classById(id)}
+              lessons={(lessonQueries[i]?.data ?? []) as Row[]}
+              loading={lessonQueries[i]?.isPending ?? false}
+              selected={picks[id] ?? []}
+              custom={custom[id] ?? []}
+              tally={tallySelection(selections[i]!, today)}
+              onToggle={(sid) => toggle(id, sid)}
+              onToggleMany={(ids, on) => toggleMany(id, ids, on)}
+              onAddDate={(local, length) => addDate(id, local, length)}
+              onToggleCustom={(tempId) => toggleCustomAttended(id, tempId)}
+              onRemoveCustom={(tempId) => removeCustom(id, tempId)}
+              onRemove={() => removeClass(id)}
+            />
+          ))}
         </div>
       </StepCard>
 
       {/* 3. Billing */}
-      <StepCard step={3} title="How they're billed" done={plan === "payg" || Number(hours) > 0}>
+      <StepCard
+        step={3}
+        title="How they're billed"
+        done={plan === "payg" || Number(hours) > 0}
+        summary={plan === "hours" && Number(hours) > 0 ? formatHours(Number(hours)) : undefined}
+      >
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>Plan</Label>
@@ -1426,34 +1467,298 @@ function MidTermFlow() {
           {plan === "hours" && (
             <div className="space-y-1.5">
               <Label>Hours they're paying for</Label>
-              <Input type="number" min="0" step="0.5" value={hours} onChange={(e) => setHours(e.target.value)} />
+              <Input
+                type="number"
+                min="0"
+                step="0.5"
+                value={hours}
+                onChange={(e) => setHours(e.target.value)}
+              />
+              {suggested > 0 && Number(hours) !== suggested && (
+                <button
+                  type="button"
+                  className="text-xs text-primary hover:underline"
+                  onClick={() => setHours(String(suggested))}
+                >
+                  The lessons ticked come to {formatHours(suggested)} — use that
+                </button>
+              )}
             </div>
           )}
         </div>
         <p className="mt-3 rounded-md bg-[var(--mat-thin)] px-3 py-2 text-sm text-muted-foreground">
           {plan === "hours" ? (
             <>
-              Shows in Billing as <span className="font-medium text-foreground">{student?.full_name ?? "the student"} · {hours || 0} hours</span> with the price left empty for you to set.
+              A package of{" "}
+              <span className="font-medium text-foreground">{formatHours(Number(hours) || 0)}</span>{" "}
+              is bought for{" "}
+              <span className="font-medium text-foreground">
+                {student?.full_name ?? "the student"}
+              </span>{" "}
+              and attached to {tally.classes > 1 ? `all ${tally.classes} classes` : "the class"}, so
+              every lesson above draws from it — including the{" "}
+              {tally.backlogLessons > 0 ? `${tally.backlogLessons} already taught` : "backlog"}.
+              Billing shows it with the price left empty for you to set.
             </>
           ) : (
-            <>Each attended lesson lands in Billing to charge, with no price set until you firm it.</>
+            <>
+              Each lesson taught lands in Billing to charge, with no price set until you firm it.
+              Lessons ticked as already taught are charged from the moment you add them.
+            </>
           )}
         </p>
       </StepCard>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--edge)] bg-[var(--mat-thin)] px-4 py-3">
         <p className="text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">{total}</span> lessons across{" "}
-          <span className="font-medium text-foreground">{classesWithPicks}</span> classes · they'll
-          appear on those rolls.
+          <span className="font-medium text-foreground">{tally.lessons}</span>{" "}
+          {tally.lessons === 1 ? "lesson" : "lessons"} across{" "}
+          <span className="font-medium text-foreground">{tally.classes}</span>{" "}
+          {tally.classes === 1 ? "class" : "classes"} ·{" "}
+          <span className="font-medium text-foreground">{formatHours(tally.hours)}</span>
+          {tally.backlogLessons > 0 && (
+            <>
+              {" · "}
+              <span className="font-medium text-foreground">
+                {tally.backlogLessons} already taught
+              </span>{" "}
+              ({formatHours(tally.backlogHours)} to bill)
+            </>
+          )}
         </p>
         <Button
-          disabled={busy || !studentId || total === 0 || (plan === "hours" && Number(hours) <= 0)}
+          disabled={
+            busy || !studentId || tally.lessons === 0 || (plan === "hours" && Number(hours) <= 0)
+          }
           onClick={submit}
         >
-          Add to {total} {total === 1 ? "lesson" : "lessons"}
+          {busy
+            ? "Adding…"
+            : `Add to ${tally.lessons} ${tally.lessons === 1 ? "lesson" : "lessons"}`}
         </Button>
       </div>
+    </div>
+  );
+}
+
+/** A date typed in by hand, held in the builder until it is sent. */
+interface CustomLesson {
+  tempId: string;
+  starts_at: string;
+  ends_at: string;
+  attended: boolean;
+  label: string;
+}
+
+/** What addMidTermStudent hands back, for the screen that says what happened. */
+interface MidTermResult {
+  lessons: number;
+  backlog: number;
+  package_id: string | null;
+  hours: number;
+  attributed: number;
+}
+
+/**
+ * One class's lessons, split into what has already been taught and what is
+ * still to come.
+ *
+ * The split is the whole point. A tick in the backlog is a statement that the
+ * student sat in that lesson - it goes on the roll as present, consumes hours
+ * and becomes billable straight away. A tick above the line is a booking, and
+ * the tutor marks it on the day as usual.
+ */
+function ClassLessonPicker({
+  offering,
+  lessons,
+  loading,
+  selected,
+  custom,
+  tally,
+  onToggle,
+  onToggleMany,
+  onAddDate,
+  onToggleCustom,
+  onRemoveCustom,
+  onRemove,
+}: {
+  offering: Row | undefined;
+  lessons: Row[];
+  loading: boolean;
+  selected: string[];
+  custom: CustomLesson[];
+  tally: { lessons: number; hours: number; backlogLessons: number; backlogHours: number };
+  onToggle: (sessionId: string) => void;
+  onToggleMany: (sessionIds: string[], on: boolean) => void;
+  onAddDate: (local: string, length: number) => void;
+  onToggleCustom: (tempId: string) => void;
+  onRemoveCustom: (tempId: string) => void;
+  onRemove: () => void;
+}) {
+  const today = sydToday();
+  const { backlog, upcoming } = splitLessons(
+    lessons.map((s) => ({
+      id: s.id,
+      session_date: s.session_date,
+      duration_hours: Number(s.duration_hours ?? 0),
+      on_roll: !!s.on_roll,
+    })),
+    today,
+  );
+  const byId = new Map(lessons.map((s) => [s.id, s]));
+  const pickable = (group: JoinableLesson[]) => group.filter((l) => !l.on_roll).map((l) => l.id);
+  const allPicked = (group: JoinableLesson[]) => {
+    const ids = pickable(group);
+    return ids.length > 0 && ids.every((id) => selected.includes(id));
+  };
+
+  const row = (lesson: JoinableLesson, isBacklogRow: boolean) => {
+    const s = byId.get(lesson.id);
+    const on = selected.includes(lesson.id);
+    if (lesson.on_roll) {
+      return (
+        <div
+          key={lesson.id}
+          className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm opacity-60"
+        >
+          <Check className="h-4 w-4 text-success" />
+          <span className="font-medium">{formatDayDate(s?.starts_at)}</span>
+          <span className="text-xs text-muted-foreground">
+            already on this roll
+            {s?.roll_status
+              ? ` · ${LABELS.attendanceStatus[s.roll_status as keyof typeof LABELS.attendanceStatus] ?? s.roll_status}`
+              : ""}
+          </span>
+        </div>
+      );
+    }
+    return (
+      <label
+        key={lesson.id}
+        className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm hover:bg-[var(--mat-thin)]"
+      >
+        <Checkbox checked={on} onCheckedChange={() => onToggle(lesson.id)} />
+        <span className="font-medium">{formatDayDate(s?.starts_at)}</span>
+        <span className="text-xs text-muted-foreground">
+          {formatTime(s?.starts_at)}
+          {s?.tutors?.full_name ? ` · ${s.tutors.full_name}` : ""}
+        </span>
+        <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+          {formatHours(lesson.duration_hours)}
+        </span>
+        {isBacklogRow && on && (
+          <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.7rem] font-medium text-warning-foreground">
+            to bill
+          </span>
+        )}
+      </label>
+    );
+  };
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-[var(--edge)]">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--edge)] bg-[var(--mat-thin)] px-3 py-2">
+        <span className="font-medium">{offering?.programs?.name ?? "Class"}</span>
+        <Code>{offering?.code}</Code>
+        <span className="text-xs text-muted-foreground">{offering ? classWhen(offering) : ""}</span>
+        <span className="ml-auto text-xs font-medium text-primary">
+          {tally.lessons} selected · {formatHours(tally.hours)}
+        </span>
+        <Button size="sm" variant="ghost" className="h-7 px-2" onClick={onRemove}>
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <div className="max-h-80 overflow-y-auto p-2">
+        {loading && <p className="px-1 py-2 text-xs text-muted-foreground">Loading lessons…</p>}
+
+        {!loading && backlog.length > 0 && (
+          <div className="mb-2">
+            <div className="flex items-center gap-2 px-1 pb-1">
+              <History className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground">
+                Already taught — tick what they came to, and it bills
+              </span>
+              <button
+                type="button"
+                className="ml-auto text-xs text-primary hover:underline"
+                onClick={() => onToggleMany(pickable(backlog), !allPicked(backlog))}
+              >
+                {allPicked(backlog) ? "Clear" : "Tick all"}
+              </button>
+            </div>
+            <div className="space-y-0.5 rounded-md bg-[var(--mat-thin)]/60 p-1">
+              {backlog.map((l) => row(l, true))}
+            </div>
+          </div>
+        )}
+
+        {!loading && (
+          <div>
+            <div className="flex items-center gap-2 px-1 pb-1">
+              <CalendarPlus className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground">Still to come</span>
+              {upcoming.length > 0 && (
+                <button
+                  type="button"
+                  className="ml-auto text-xs text-primary hover:underline"
+                  onClick={() => onToggleMany(pickable(upcoming), !allPicked(upcoming))}
+                >
+                  {allPicked(upcoming) ? "Clear" : "Tick all"}
+                </button>
+              )}
+            </div>
+            {upcoming.length === 0 ? (
+              <p className="px-1 py-1.5 text-xs text-muted-foreground">
+                Nothing else on the timetable for this class. Add a specific date below.
+              </p>
+            ) : (
+              <div className="space-y-0.5">{upcoming.map((l) => row(l, false))}</div>
+            )}
+          </div>
+        )}
+
+        {custom.length > 0 && (
+          <div className="mt-2 space-y-0.5">
+            {custom.map((cl) => (
+              <div
+                key={cl.tempId}
+                className="flex items-center gap-2.5 rounded-md bg-primary/10 px-2 py-1.5 text-sm"
+              >
+                <Check className="h-4 w-4 text-primary" />
+                <span className="font-medium">{cl.label}</span>
+                <span className="text-xs text-muted-foreground">{formatTime(cl.starts_at)}</span>
+                <button
+                  type="button"
+                  title="Was the student there? A lesson already taught is billed; one still to come is not."
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[0.7rem] font-medium",
+                    cl.attended
+                      ? "bg-warning/15 text-warning-foreground"
+                      : "bg-[var(--mat-thick)] text-muted-foreground",
+                  )}
+                  onClick={() => onToggleCustom(cl.tempId)}
+                >
+                  {cl.attended ? "already taught" : "still to come"}
+                </button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ml-auto h-6 px-1.5"
+                  onClick={() => onRemoveCustom(cl.tempId)}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <AddDateRow
+        defaultLength={Number(offering?.session_duration_hours ?? 1.5)}
+        onAdd={onAddDate}
+      />
     </div>
   );
 }

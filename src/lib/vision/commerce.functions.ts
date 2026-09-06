@@ -533,22 +533,53 @@ export const updatePackageStatus = createServerFn({ method: "POST" })
   });
 
 /**
- * Add a mid-term student onto the exact lessons they'll attend.
+ * Add a mid-term student onto the exact lessons they'll attend - and the ones
+ * they already have.
  *
- * A student who joins part-way through does not want a whole term generated for
- * them - they want to be on a handful of specific dates, across one or more
- * classes, and to show up on those rolls. This does all of that in one call:
+ * A student who joins part-way through does not want a whole term generated
+ * for them. They want to be on a handful of specific dates, often across more
+ * than one class at once, and to show up on those rolls. Half of those dates
+ * are usually in the past: they have been coming for a fortnight while the
+ * paperwork caught up, and those lessons are exactly the ones the family owes
+ * for. This does all of it in one call:
  *
- * 1. An active, UNPRICED enrolment on each class (reused if one already exists),
- *    so the student lands in Billing → "What we need to charge" for the admin to
- *    firm the price.
- * 2. A roll entry on each chosen lesson only - the ticked dates, nothing else -
- *    so their name appears on those lessons' attendance.
- * 3. For a date not on the timetable yet, the lesson is reused if one is already
- *    at that slot (which is what avoids the "sessions_regular_slot" clash), and
- *    only created when the slot is genuinely free.
- * 4. For an Hours plan, one purchased package with the hours filled in and the
- *    price left at 0, so Billing shows the name and hours with an empty price.
+ * 1. The hours package FIRST, when the plan is Hours. This is the order that
+ *    matters and the reason this function was rewritten - see below.
+ * 2. An active enrolment on each class (reused if one already exists), priced
+ *    at nothing so the student lands in Billing → "What we need to charge" for
+ *    the admin to firm the price against what was agreed.
+ * 3. The package made eligible for each of those enrolments and set as their
+ *    default, which is what lets any roll - this one, and every lesson seeded
+ *    afterwards - draw from it.
+ * 4. A roll entry on each chosen lesson only. Lessons already taught go on as
+ *    `present`, because that is what happened and because only a present row
+ *    consumes hours; lessons still to come are left unmarked for the tutor.
+ * 5. For a date not on the timetable yet, the lesson is reused if one already
+ *    sits at that slot (which is what avoids the "sessions_regular_slot"
+ *    clash), and only created when the slot is genuinely free.
+ *
+ * ## Why the package comes first
+ *
+ * Billing's audit has a finding called "On hours, but no package was ever
+ * bought": an enrolment set to draw hours from a package, lessons taught
+ * against it, and nothing to invoice. Its sibling, "Hours taught against no
+ * package", is the same wound one layer down - the package exists but the roll
+ * points at nothing, so the balance never moves and the package reads unused.
+ *
+ * This function used to create both of them, every single time. The roll went
+ * in first with `packageForEnrolment`, which can only return a package that is
+ * already eligible - and nothing was, because the package was created in the
+ * last few lines of the handler, after every roll entry had been written.
+ * Every mid-term join on an Hours plan therefore produced a package attached
+ * to nobody and a roll drawing from nothing. It was invisible while only
+ * future lessons could be picked, because an unmarked lesson consumes no hours
+ * and the audit only counts what was taught. Ticking the backlog makes it
+ * visible immediately, which is why the two changes belong in one commit.
+ *
+ * So: package, then eligibility, then roll. Step 6 then re-points any roll
+ * entry on those enrolments that is still drawing from nothing - the same
+ * repair as Billing's "Attribute" button, applied where the package is being
+ * bought rather than left for someone to notice later.
  */
 export const addMidTermStudent = createServerFn({ method: "POST" })
   .middleware([requireStaff])
@@ -562,9 +593,18 @@ export const addMidTermStudent = createServerFn({ method: "POST" })
           .array(
             z.object({
               class_offering_id: z.string().uuid(),
+              /** Lessons still to come: a roll entry, left for the tutor to mark. */
               session_ids: z.array(z.string().uuid()).default([]),
+              /** Lessons already taught: marked present, so they consume hours and bill. */
+              attended_session_ids: z.array(z.string().uuid()).default([]),
               new_sessions: z
-                .array(z.object({ starts_at: z.string().min(1), ends_at: z.string().min(1) }))
+                .array(
+                  z.object({
+                    starts_at: z.string().min(1),
+                    ends_at: z.string().min(1),
+                    attended: z.boolean().default(false),
+                  }),
+                )
                 .default([]),
             }),
           )
@@ -575,11 +615,40 @@ export const addMidTermStudent = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const client = db(context.supabase);
     let lessonCount = 0;
+    let backlogCount = 0;
+
+    // 1. The package, before anything can need it. Priced at 0 on purpose:
+    //    what the family pays is agreed with them and firmed in Billing, and a
+    //    number invented here would be a number nobody agreed to.
+    let packageId: string | null = null;
+    if (data.method === "hours" && data.hours > 0) {
+      const { data: pkg, error: pkgError } = await client
+        .from("hours_packages")
+        .insert({
+          student_id: data.student_id,
+          package_type: "purchased",
+          hours_purchased: data.hours,
+          price: 0,
+          status: "active",
+        })
+        .select("id")
+        .single();
+      if (pkgError) throw pkgError;
+      packageId = pkg.id as string;
+    }
+
+    const touchedEnrolments: string[] = [];
 
     for (const entry of data.classes) {
       // Resolve every chosen lesson to a real session id: the ticked existing
       // ones, plus any off-timetable date (reused at its slot, else created).
-      const sessionIds = [...entry.session_ids];
+      // `attended` travels with the id, because it decides how the roll entry
+      // is marked and a hand-typed backlog date must not lose that on the way.
+      const chosenIds: Array<{ id: string; attended: boolean }> = [
+        ...entry.session_ids.map((id) => ({ id, attended: false })),
+        ...entry.attended_session_ids.map((id) => ({ id, attended: true })),
+      ];
+
       for (const ns of entry.new_sessions) {
         const { data: existing } = await client
           .from("sessions")
@@ -588,7 +657,7 @@ export const addMidTermStudent = createServerFn({ method: "POST" })
           .eq("starts_at", ns.starts_at)
           .maybeSingle();
         if (existing) {
-          sessionIds.push(existing.id);
+          chosenIds.push({ id: existing.id, attended: ns.attended });
         } else {
           const { data: created, error: createError } = await client
             .from("sessions")
@@ -601,12 +670,22 @@ export const addMidTermStudent = createServerFn({ method: "POST" })
             .select("id")
             .single();
           if (createError) throw createError;
-          sessionIds.push(created.id);
+          chosenIds.push({ id: created.id, attended: ns.attended });
         }
       }
-      if (!sessionIds.length) continue;
+      if (!chosenIds.length) continue;
 
-      // The enrolment starts on the earliest lesson they're joining.
+      // One decision per lesson, even if the same lesson arrived twice.
+      const attendedById = new Map<string, boolean>();
+      for (const { id, attended } of chosenIds) {
+        attendedById.set(id, (attendedById.get(id) ?? false) || attended);
+      }
+      const sessionIds = [...attendedById.keys()];
+
+      // 2. The enrolment starts on the earliest lesson they're joining, which
+      //    with a backlog is a date already past. That matters: seed_roll only
+      //    puts an enrolment on lessons at or after its start, so an enrolment
+      //    that starts next week would skip the very lessons being billed.
       const { data: chosen } = await client
         .from("sessions")
         .select("id, starts_at")
@@ -621,7 +700,7 @@ export const addMidTermStudent = createServerFn({ method: "POST" })
       // active, unpriced one so Billing can firm the price.
       const { data: existingEnrol } = await client
         .from("enrolments")
-        .select("id")
+        .select("id, starts_on, default_package_id")
         .eq("student_id", data.student_id)
         .eq("class_offering_id", entry.class_offering_id)
         .neq("status", "closed")
@@ -651,50 +730,124 @@ export const addMidTermStudent = createServerFn({ method: "POST" })
           );
         }
         enrolmentId = enrolment.id;
+      } else if (existingEnrol?.starts_on && startsOn < existingEnrol.starts_on) {
+        // Backlog reaching behind the enrolment it belongs to. Pulling the
+        // start date back keeps the enrolment covering every lesson billed
+        // under it. A clash on (student, class, start date) means another
+        // enrolment already owns that date, and this one is left as it is
+        // rather than fighting it - the roll below still goes on correctly.
+        const { error: moveError } = await client
+          .from("enrolments")
+          .update({ starts_on: startsOn })
+          .eq("id", enrolmentId);
+        if (moveError && !moveError.message.includes("enrolments_unique")) throw moveError;
+      }
+      touchedEnrolments.push(enrolmentId!);
+
+      // 3. Eligibility, then the default. Without the eligibility row the
+      //    database refuses to spend this package on this roll at all, and
+      //    without the default every later lesson seeds unattributed again.
+      //    Attaching a package makes it an hours enrolment, the same rule
+      //    setEnrolmentPackage follows.
+      if (packageId) {
+        const { data: already } = await client
+          .from("package_eligibility")
+          .select("enrolment_id")
+          .eq("package_id", packageId)
+          .eq("enrolment_id", enrolmentId);
+        if (!already || already.length === 0) {
+          const { error: eligError } = await client
+            .from("package_eligibility")
+            .insert({ package_id: packageId, enrolment_id: enrolmentId });
+          if (eligError) throw eligError;
+        }
+        const { error: defError } = await client
+          .from("enrolments")
+          .update({ default_package_id: packageId, method: "hours" })
+          .eq("id", enrolmentId);
+        if (defError) throw defError;
       }
 
-      // Put them on the roll for exactly the chosen lessons - nothing else.
-      // Skip any lesson they're already on rather than relying on ON CONFLICT,
-      // which can't be used here (the attendance uniqueness varies by database).
-      const uniqueSessionIds = [...new Set(sessionIds)];
-      const { data: already } = await client
+      // 4. Put them on the roll for exactly the chosen lessons - nothing else.
+      //    Skip any lesson they're already on rather than relying on ON
+      //    CONFLICT, which can't be used here (the attendance uniqueness
+      //    varies by database).
+      const { data: existingRoll } = await client
         .from("attendance")
-        .select("session_id")
+        .select("id, session_id, status")
         .eq("enrolment_id", enrolmentId)
-        .in("session_id", uniqueSessionIds);
-      const have = new Set((already ?? []).map((r: Row) => r.session_id));
-      // The roll draws from the class's package from the first lesson, rather
-      // than waiting for someone to attach one and re-point it afterwards.
-      const rollPackageId = enrolmentId
-        ? await packageForEnrolment(client, enrolmentId, null)
-        : null;
-      const toInsert = uniqueSessionIds
-        .filter((sid) => !have.has(sid))
+        .in("session_id", sessionIds);
+      const rollBySession = new Map((existingRoll ?? []).map((r: Row) => [r.session_id, r]));
+
+      // The roll draws from the package the enrolment now has, rather than
+      // waiting for someone to attach one and re-point it afterwards.
+      // On a PAYG plan, or when no new hours were bought, the enrolment may
+      // already draw from a package of its own - that one still applies.
+      const rollPackageId = await packageForEnrolment(
+        client,
+        enrolmentId!,
+        packageId ?? (existingEnrol?.default_package_id as string | null) ?? null,
+      );
+
+      const toInsert = sessionIds
+        .filter((sid) => !rollBySession.has(sid))
         .map((sid) => ({
           session_id: sid,
           enrolment_id: enrolmentId,
           att_type: "regular",
-          status: "not_marked",
+          // A lesson already taught is marked as taught. That is what makes it
+          // consume hours, and consuming hours is what makes it billable.
+          status: attendedById.get(sid) ? "present" : "not_marked",
           package_id: rollPackageId,
         }));
       if (toInsert.length) {
         const { error: attError } = await client.from("attendance").insert(toInsert);
         if (attError) throw attError;
       }
-      lessonCount += uniqueSessionIds.length;
+
+      // A backlog lesson they were already on but nobody had marked. Only
+      // "not_marked" is touched: an absence someone recorded on purpose is
+      // theirs, and this is not the screen to overrule it.
+      const toMark = (existingRoll ?? [])
+        .filter((r: Row) => attendedById.get(r.session_id) && r.status === "not_marked")
+        .map((r: Row) => r.id);
+      if (toMark.length) {
+        const { error: markError } = await client
+          .from("attendance")
+          .update({ status: "present" })
+          .in("id", toMark);
+        if (markError) throw markError;
+      }
+
+      lessonCount += toInsert.length + toMark.length;
+      backlogCount += toInsert.filter((r) => r.status === "present").length + toMark.length;
     }
 
-    // The hours they've paid for, priced later in Billing.
-    if (data.method === "hours" && data.hours > 0) {
-      const { error: pkgError } = await client.from("hours_packages").insert({
-        student_id: data.student_id,
-        package_type: "purchased",
-        hours_purchased: data.hours,
-        price: 0,
-        status: "active",
-      });
-      if (pkgError) throw pkgError;
+    // 5. Anything on these enrolments still drawing from nothing now draws
+    //    from the package that was just bought. This is the repair behind
+    //    Billing's "Attribute" button, done here because the answer is not in
+    //    doubt: the package was created for these very lessons. It bills
+    //    nobody anything extra - it points hours already given at the purchase
+    //    they were always meant to come out of, and running it twice does
+    //    nothing the second time.
+    let attributed = 0;
+    if (packageId && touchedEnrolments.length) {
+      const { data: repointed, error: repointError } = await client
+        .from("attendance")
+        .update({ package_id: packageId })
+        .in("enrolment_id", [...new Set(touchedEnrolments)])
+        .is("package_id", null)
+        .neq("att_type", "trial")
+        .select("id");
+      if (repointError) throw repointError;
+      attributed = (repointed ?? []).length;
     }
 
-    return { lessons: lessonCount };
+    return {
+      lessons: lessonCount,
+      backlog: backlogCount,
+      package_id: packageId,
+      hours: packageId ? data.hours : 0,
+      attributed,
+    };
   });
