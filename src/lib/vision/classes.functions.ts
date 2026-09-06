@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { sydneyLocalToInstant } from "@/lib/format";
+import { addDays, sydneyLocalToInstant, sydToday } from "@/lib/format";
 import { db, requireStaff } from "./guard";
 import type { Row } from "./types";
 
@@ -76,6 +76,84 @@ export const getClassOffering = createServerFn({ method: "GET" })
       enrolments: enrolments.data ?? [],
       sessions: sessions.data ?? [],
     };
+  });
+
+/**
+ * The lessons a mid-term joiner can be put on: the ones still to come, and the
+ * backlog behind them.
+ *
+ * A student who starts half way through a term has usually already sat in a
+ * lesson or two before anyone opened the builder, and those are the lessons
+ * the family actually owes for. Offering only future dates - which is what the
+ * picker used to do - meant the backlog was invisible, so it was never marked,
+ * never consumed hours, and never billed.
+ *
+ * So this reaches backwards as well as forwards. Cancelled lessons are left
+ * out because they consume nothing, and a dedicated make-up belongs to the
+ * student it was made for, not to whoever is joining now.
+ *
+ * `student_id` is optional and only used to say which lessons they are already
+ * on: attendance is unique per (session, enrolment), so offering one twice
+ * would send the database an insert it must refuse.
+ */
+export const listJoinableSessions = createServerFn({ method: "GET" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    z
+      .object({
+        class_offering_id: z.string().uuid(),
+        student_id: z.string().uuid().optional(),
+        /** How far the backlog reaches. A term runs about ten weeks. */
+        past_days: z.coerce.number().int().min(0).max(365).default(120),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+    const today = sydToday();
+
+    const { data: rows, error } = await client
+      .from("v_sessions")
+      .select(
+        "id, code, class_offering_id, starts_at, ends_at, status, session_type, " +
+          "session_date, duration_hours, tutors(full_name, colour)",
+      )
+      .eq("class_offering_id", data.class_offering_id)
+      .neq("status", "cancelled")
+      .neq("session_type", "dedicated_make_up")
+      .gte("session_date", addDays(today, -data.past_days))
+      .order("starts_at")
+      .limit(300);
+    if (error) throw error;
+
+    const sessions = (rows ?? []) as Row[];
+
+    let roll: Row[] = [];
+    if (data.student_id && sessions.length > 0) {
+      const { data: mine, error: rollError } = await client
+        .from("v_attendance")
+        .select("id, session_id, status, att_type, package_id")
+        .eq("student_id", data.student_id)
+        .in(
+          "session_id",
+          sessions.map((s) => s.id),
+        );
+      if (rollError) throw rollError;
+      roll = mine ?? [];
+    }
+    const rollBySession = new Map(roll.map((a) => [a.session_id, a]));
+
+    return sessions.map((s) => {
+      const mine = rollBySession.get(s.id);
+      return {
+        ...s,
+        duration_hours: Number(s.duration_hours ?? 0),
+        /** Already taught, so ticking it is a bill to raise rather than a booking. */
+        is_backlog: s.session_date < today,
+        on_roll: !!mine,
+        roll_status: (mine?.status as string | undefined) ?? null,
+      };
+    });
   });
 
 const offeringInput = z.object({
