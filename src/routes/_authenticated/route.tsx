@@ -13,6 +13,7 @@ import { DataModeBadge } from "@/components/vision/data-mode-badge";
 import { EnvironmentButton } from "@/components/vision/environment";
 import { MobileNav } from "@/components/vision/mobile-nav";
 import { sectionTitleFor, tutorMayOpen } from "@/components/vision/nav-items";
+import { isAuthFailure } from "@/lib/vision/auth-failure";
 
 export { meQueryOptions };
 
@@ -32,7 +33,9 @@ export const Route = createFileRoute("/_authenticated")({
       data: { session },
     } = await supabase.auth.getSession();
     if (!session) {
-      throw redirect({ to: "/auth" });
+      // Carrying where they were heading, so signing in lands there rather
+      // than dropping everyone on /today.
+      throw redirect({ to: "/auth", search: { next: location.href } });
     }
 
     // No page data may be requested before an active staff row exists, so the
@@ -41,10 +44,28 @@ export const Route = createFileRoute("/_authenticated")({
     let me: Awaited<ReturnType<typeof loadMe>>;
     try {
       me = await loadMe();
-    } catch {
-      // The server refused the token. Only this call is inside the try, so the
-      // redirects below are not swallowed by it.
-      throw redirect({ to: "/auth" });
+    } catch (error) {
+      // Only a refused token means "sign in again". This used to send every
+      // failure of this call to /auth - and /auth asks the auth server whether
+      // the token is valid and sends a valid one straight back here. So any
+      // failure that was not about the token put the two guards in a loop:
+      // /today -> /auth -> /today, forever, which looks from the outside like a
+      // sign-in that "just refreshes". A 500, a dropped connection, a policy
+      // erroring: none of them are fixed by signing in, and all of them used to
+      // land there. They now surface as themselves.
+      if (!isAuthFailure(error)) throw error;
+
+      // The token really is bad, so drop it before leaving. Without this /auth
+      // still sees a session it believes in and bounces straight back - the
+      // same loop by a shorter route. Local scope only: the point is to clear
+      // what this browser is holding, and a network round trip to revoke it
+      // would be one more thing that can fail on the way to a login screen.
+      try {
+        await supabase.auth.signOut({ scope: "local" });
+      } catch {
+        /* Already gone, or storage refused. Leaving is what matters. */
+      }
+      throw redirect({ to: "/auth", search: { next: location.href } });
     }
 
     if (!me.staff) {

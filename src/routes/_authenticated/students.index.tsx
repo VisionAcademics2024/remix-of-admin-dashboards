@@ -46,6 +46,7 @@ import {
   listGuardians,
   listStudents,
   setDefaultPayer,
+  unlinkGuardian,
   updateGuardian,
   updateStudent,
 } from "@/lib/vision/people.functions";
@@ -314,14 +315,22 @@ function StudentsPage() {
 
       {newStudent && <NewStudentDialog onClose={() => setNewStudent(false)} />}
       {newGuardian && <NewGuardianDialog onClose={() => setNewGuardian(false)} />}
-      {editStudent && (
-        <EditStudentDialog student={editStudent} onClose={() => setEditStudent(null)} />
+      {/* Edit and Family are one window now: the student's own fields, then
+          the parents underneath. Two buttons still open it, because the table
+          reads either way round, but there is only one place to change
+          anything. */}
+      {(editStudent || linking) && (
+        <EditStudentDialog
+          student={(editStudent ?? linking)!}
+          guardians={guardians}
+          onClose={() => {
+            setEditStudent(null);
+            setLinking(null);
+          }}
+        />
       )}
       {editGuardian && (
         <EditGuardianDialog guardian={editGuardian} onClose={() => setEditGuardian(null)} />
-      )}
-      {linking && (
-        <FamilyDialog student={linking} guardians={guardians} onClose={() => setLinking(null)} />
       )}
     </div>
   );
@@ -522,9 +531,42 @@ function NewGuardianDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function EditStudentDialog({ student, onClose }: { student: Row; onClose: () => void }) {
+/**
+ * One window for a student and the people who pay for them.
+ *
+ * These used to be two dialogs - Edit for the child's own fields, Family for
+ * the parents - opened from two different buttons on the same row. Almost
+ * nothing is ever changed in one without wanting to check the other: a family
+ * rings up, the phone number is wrong and so is the year level, and correcting
+ * both meant closing one dialog and hunting for the other button.
+ *
+ * So it is one window with two sections, the parents below the student. The
+ * student's fields and the parents' fields are one form saved by one button;
+ * attaching, detaching and choosing who pays are structural and act
+ * immediately, because each is a decision on its own rather than a field being
+ * typed into.
+ */
+function EditStudentDialog({
+  student: initial,
+  guardians,
+  onClose,
+}: {
+  student: Row;
+  guardians: Row[];
+  onClose: () => void;
+}) {
   const update = useServerFn(updateStudent);
+  const saveGuardian = useServerFn(updateGuardian);
+  const link = useServerFn(linkGuardian);
   const queryClient = useQueryClient();
+
+  // The attach and detach buttons act at once, so the student this reads has to
+  // be the live one rather than the snapshot the table handed over - otherwise
+  // a parent attached here would not appear until the dialog was reopened.
+  const { data: students } = useSuspenseQuery(studentsQueryOptions());
+  const student = (students as Row[]).find((s: Row) => s.id === initial.id) ?? initial;
+  const attached: Row[] = student.guardians ?? [];
+
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
     full_name: student.full_name ?? "",
@@ -537,13 +579,82 @@ function EditStudentDialog({ student, onClose }: { student: Row; onClose: () => 
     notes: student.notes ?? "",
   });
 
+  // Parent edits, keyed by guardian id and holding only what has been typed.
+  // Absent means untouched, which is what keeps Save from rewriting a parent
+  // nobody looked at.
+  const [parentEdits, setParentEdits] = useState<
+    Record<string, { full_name: string; mobile: string; email: string; relationship: string }>
+  >({});
+
+  const editsFor = (g: Row) =>
+    parentEdits[g.id] ?? {
+      full_name: g.full_name ?? "",
+      mobile: g.mobile ?? "",
+      email: g.email ?? "",
+      relationship: g.relationship ?? "",
+    };
+  const editParent = (g: Row, patch: Partial<ReturnType<typeof editsFor>>) =>
+    setParentEdits((all) => ({ ...all, [g.id]: { ...editsFor(g), ...patch } }));
+
+  async function refresh() {
+    await queryClient.invalidateQueries({ queryKey: ["students"] });
+    await queryClient.invalidateQueries({ queryKey: ["guardians"] });
+    await queryClient.invalidateQueries({ queryKey: ["needs-attention-count"] });
+  }
+
+  /**
+   * Save the student, and every parent whose fields were actually changed.
+   *
+   * A parent's own record and their relationship to this student live in two
+   * tables, so a changed name and a changed relationship are two writes. Both
+   * go through the endpoints that already exist rather than a combined one, so
+   * this screen cannot be the only place the rules hold.
+   */
   async function submit() {
     setBusy(true);
     try {
       await update({ data: { ...form, id: student.id } });
-      await queryClient.invalidateQueries({ queryKey: ["students"] });
-      await queryClient.invalidateQueries({ queryKey: ["needs-attention-count"] });
-      toast.success("Student updated.");
+
+      for (const g of attached) {
+        const edited = parentEdits[g.id];
+        if (!edited) continue;
+
+        const nameChanged = edited.full_name !== (g.full_name ?? "");
+        const mobileChanged = edited.mobile !== (g.mobile ?? "");
+        const emailChanged = edited.email !== (g.email ?? "");
+        if (nameChanged || mobileChanged || emailChanged) {
+          if (!edited.full_name.trim()) {
+            throw new Error(`${g.full_name ?? "A parent"} needs a name.`);
+          }
+          // Status and notes are not on this form, so they are carried over
+          // from the full record. Sending the form alone would default the
+          // status to active and blank the notes on every save.
+          const full = guardians.find((x: Row) => x.id === g.id);
+          await saveGuardian({
+            data: {
+              id: g.id,
+              full_name: edited.full_name,
+              mobile: edited.mobile,
+              email: edited.email,
+              status: (full?.status ?? "active") as "active" | "inactive",
+              notes: full?.notes ?? "",
+            },
+          });
+        }
+
+        if (edited.relationship !== (g.relationship ?? "")) {
+          await link({
+            data: {
+              student_id: student.id,
+              guardian_id: g.id,
+              relationship: edited.relationship,
+            },
+          });
+        }
+      }
+
+      await refresh();
+      toast.success("Saved.");
       onClose();
     } catch (error) {
       toast.error((error as Error).message);
@@ -554,12 +665,16 @@ function EditStudentDialog({ student, onClose }: { student: Row; onClose: () => 
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      {/* Two sections is more than a phone can show at once, so the window
+          scrolls rather than squeezing the fields. */}
+      <DialogContent className="max-h-[88dvh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             Edit {student.full_name} <Code>{student.code}</Code>
           </DialogTitle>
-          <DialogDescription>Their details. Parents are managed under Family.</DialogDescription>
+          <DialogDescription>
+            Their details, and the parents attached to them. Scroll down for the family.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-3">
@@ -607,6 +722,9 @@ function EditStudentDialog({ student, onClose }: { student: Row; onClose: () => 
                   <SelectItem value="inactive">Inactive</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Students are made inactive, never deleted.
+              </p>
             </div>
           </div>
           <Field
@@ -624,6 +742,17 @@ function EditStudentDialog({ student, onClose }: { student: Row; onClose: () => 
           </div>
         </div>
 
+        <ParentsSection
+          student={student}
+          attached={attached}
+          guardians={guardians}
+          editsFor={editsFor}
+          onEdit={editParent}
+          busy={busy}
+          setBusy={setBusy}
+          refresh={refresh}
+        />
+
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
             Cancel
@@ -634,6 +763,278 @@ function EditStudentDialog({ student, onClose }: { student: Row; onClose: () => 
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * The family half of the edit window.
+ *
+ * Parents belong to the student and one parent can belong to several children,
+ * which is why attaching someone already on file is offered first: it is what
+ * keeps one record covering both siblings instead of two half-filled ones.
+ *
+ * Exactly one parent pays. That is a decision rather than a field, so it is a
+ * button that acts, not something Save picks up later - and so is detaching.
+ */
+function ParentsSection({
+  student,
+  attached,
+  guardians,
+  editsFor,
+  onEdit,
+  busy,
+  setBusy,
+  refresh,
+}: {
+  student: Row;
+  attached: Row[];
+  guardians: Row[];
+  editsFor: (g: Row) => { full_name: string; mobile: string; email: string; relationship: string };
+  onEdit: (
+    g: Row,
+    patch: Partial<{ full_name: string; mobile: string; email: string; relationship: string }>,
+  ) => void;
+  busy: boolean;
+  setBusy: (v: boolean) => void;
+  refresh: () => Promise<void>;
+}) {
+  const link = useServerFn(linkGuardian);
+  const addParent = useServerFn(addGuardianToStudent);
+  const setPayer = useServerFn(setDefaultPayer);
+  const unlink = useServerFn(unlinkGuardian);
+  const queryClient = useQueryClient();
+
+  const [mode, setMode] = useState<"existing" | "new">("existing");
+  const [existingId, setExistingId] = useState("");
+  const [relationship, setRelationship] = useState("");
+  const [fresh, setFresh] = useState({ full_name: "", email: "", mobile: "" });
+  const [makePayer, setMakePayer] = useState(false);
+  const [adding, setAdding] = useState(false);
+
+  const unattached = guardians.filter((g: Row) => !attached.some((l: Row) => l.id === g.id));
+
+  async function act(what: () => Promise<unknown>, done: string) {
+    setBusy(true);
+    try {
+      await what();
+      await refresh();
+      toast.success(done);
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 border-t pt-4">
+      <div>
+        <h3 className="text-sm font-semibold">Parents</h3>
+        <p className="text-xs text-muted-foreground">
+          Their details are edited here and saved with the student. Exactly one of them pays.
+        </p>
+      </div>
+
+      {attached.length === 0 ? (
+        <p className="rounded-md border border-dashed px-3 py-4 text-center text-sm text-muted-foreground">
+          No parent attached yet.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {attached.map((g: Row) => {
+            const edited = editsFor(g);
+            const isPayer = student.default_payer_id === g.id;
+            return (
+              <div key={g.id} className="space-y-2 rounded-lg border p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Code>{g.code}</Code>
+                  {isPayer ? (
+                    <StatusPill tone="success">Default payer</StatusPill>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7"
+                      disabled={busy}
+                      onClick={() =>
+                        act(
+                          () => setPayer({ data: { student_id: student.id, guardian_id: g.id } }),
+                          `${g.full_name} now pays.`,
+                        )
+                      }
+                    >
+                      Make payer
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="ml-auto h-7 px-2 text-muted-foreground hover:text-destructive"
+                    disabled={busy}
+                    title={
+                      isPayer
+                        ? "The payer cannot be detached - make someone else the payer first."
+                        : "Detach this parent from this student"
+                    }
+                    onClick={() =>
+                      act(
+                        () => unlink({ data: { student_id: student.id, guardian_id: g.id } }),
+                        `${g.full_name} detached.`,
+                      )
+                    }
+                  >
+                    Detach
+                  </Button>
+                </div>
+
+                <Field
+                  label="Parent's name"
+                  value={edited.full_name}
+                  onChange={(v) => onEdit(g, { full_name: v })}
+                />
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Field
+                    label="Mobile"
+                    value={edited.mobile}
+                    onChange={(v) => onEdit(g, { mobile: v })}
+                  />
+                  <Field
+                    label="Email"
+                    value={edited.email}
+                    onChange={(v) => onEdit(g, { email: v })}
+                  />
+                </div>
+                <Field
+                  label="Relationship"
+                  value={edited.relationship}
+                  onChange={(v) => onEdit(g, { relationship: v })}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="space-y-3 rounded-md border p-3">
+        <Label>Attach a parent</Label>
+        <p className="text-xs text-muted-foreground">
+          Attach someone already on file when this is a sibling - that is what keeps one parent
+          record covering both children instead of two half-filled ones.
+        </p>
+
+        <Tabs value={mode} onValueChange={(v) => setMode(v as "existing" | "new")}>
+          <TabsList className="w-full">
+            <TabsTrigger value="existing" className="flex-1">
+              Already on file
+            </TabsTrigger>
+            <TabsTrigger value="new" className="flex-1">
+              Someone new
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="existing" className="mt-3 space-y-2">
+            <Select value={existingId} onValueChange={setExistingId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose someone already on file…" />
+              </SelectTrigger>
+              <SelectContent>
+                {unattached.map((g: Row) => (
+                  <SelectItem key={g.id} value={g.id}>
+                    {g.full_name} · {g.code}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              placeholder="Relationship (mother, father, grandparent…)"
+              value={relationship}
+              onChange={(e) => setRelationship(e.target.value)}
+            />
+            <Button
+              size="sm"
+              className="w-full"
+              disabled={!existingId || busy || adding}
+              onClick={async () => {
+                setAdding(true);
+                await act(
+                  () =>
+                    link({
+                      data: { student_id: student.id, guardian_id: existingId, relationship },
+                    }),
+                  "Parent attached.",
+                );
+                setExistingId("");
+                setRelationship("");
+                setAdding(false);
+              }}
+            >
+              Attach
+            </Button>
+          </TabsContent>
+
+          <TabsContent value="new" className="mt-3 space-y-2">
+            <Input
+              placeholder="Full name"
+              value={fresh.full_name}
+              onChange={(e) => setFresh({ ...fresh, full_name: e.target.value })}
+            />
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <Input
+                placeholder="Mobile"
+                value={fresh.mobile}
+                onChange={(e) => setFresh({ ...fresh, mobile: e.target.value })}
+              />
+              <Input
+                placeholder="Email"
+                value={fresh.email}
+                onChange={(e) => setFresh({ ...fresh, email: e.target.value })}
+              />
+            </div>
+            <Input
+              placeholder="Relationship (mother, father, grandparent…)"
+              value={relationship}
+              onChange={(e) => setRelationship(e.target.value)}
+            />
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 accent-current"
+                checked={makePayer}
+                onChange={(e) => setMakePayer(e.target.checked)}
+              />
+              Make them the default payer
+            </label>
+            <Button
+              size="sm"
+              className="w-full"
+              disabled={!fresh.full_name || busy || adding}
+              onClick={async () => {
+                setAdding(true);
+                await act(async () => {
+                  await addParent({
+                    data: {
+                      ...fresh,
+                      notes: "",
+                      student_id: student.id,
+                      relationship,
+                      make_payer: makePayer,
+                      status: "active",
+                    },
+                  });
+                  await queryClient.invalidateQueries({ queryKey: ["guardians"] });
+                }, `${fresh.full_name} attached to ${student.full_name}.`);
+                setFresh({ full_name: "", email: "", mobile: "" });
+                setRelationship("");
+                setMakePayer(false);
+                setAdding(false);
+              }}
+            >
+              Create and attach
+            </Button>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
   );
 }
 
@@ -725,252 +1126,6 @@ function EditGuardianDialog({ guardian, onClose }: { guardian: Row; onClose: () 
           </Button>
           <Button disabled={!form.full_name || busy} onClick={submit}>
             Save changes
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function FamilyDialog({
-  student,
-  guardians,
-  onClose,
-}: {
-  student: Row;
-  guardians: Row[];
-  onClose: () => void;
-}) {
-  const link = useServerFn(linkGuardian);
-  const addParent = useServerFn(addGuardianToStudent);
-  const setPayer = useServerFn(setDefaultPayer);
-  const update = useServerFn(updateStudent);
-  const queryClient = useQueryClient();
-
-  const [mode, setMode] = useState<"existing" | "new">("existing");
-  const [existingId, setExistingId] = useState("");
-  const [relationship, setRelationship] = useState("");
-  const [fresh, setFresh] = useState({ full_name: "", email: "", mobile: "", notes: "" });
-  const [makePayer, setMakePayer] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  async function refresh() {
-    await queryClient.invalidateQueries({ queryKey: ["students"] });
-    await queryClient.invalidateQueries({ queryKey: ["needs-attention-count"] });
-  }
-
-  const linked = student.guardians ?? [];
-  const unlinked = guardians.filter((g: Row) => !linked.some((l: Row) => l.id === g.id));
-
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{student.full_name}'s family</DialogTitle>
-          <DialogDescription>
-            Parents belong to the student, and one parent can belong to several. Exactly one of them
-            pays.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          <div>
-            <Label className="mb-2 block">Parents attached</Label>
-            {linked.length === 0 ? (
-              <p className="rounded-md border border-dashed px-3 py-4 text-center text-sm text-muted-foreground">
-                No parent attached yet.
-              </p>
-            ) : (
-              <ul className="divide-y rounded-md border">
-                {linked.map((g: Row) => (
-                  <li key={g.id} className="flex items-center justify-between gap-2 px-3 py-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium">{g.full_name}</div>
-                      <div className="truncate text-xs text-muted-foreground">
-                        {g.relationship || g.email || g.mobile || "-"}
-                      </div>
-                    </div>
-                    {student.default_payer_id === g.id ? (
-                      <StatusPill tone="success">Default payer</StatusPill>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={async () => {
-                          setBusy(true);
-                          try {
-                            await setPayer({ data: { student_id: student.id, guardian_id: g.id } });
-                            toast.success(`${g.full_name} is now the default payer.`);
-                            await refresh();
-                            onClose();
-                          } catch (error) {
-                            toast.error((error as Error).message);
-                          } finally {
-                            setBusy(false);
-                          }
-                        }}
-                      >
-                        Make payer
-                      </Button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="space-y-3 rounded-md border p-3">
-            <Label>Attach a parent</Label>
-            <p className="text-xs text-muted-foreground">
-              Attach someone already on file when this is a sibling - that is what keeps one parent
-              record covering both children instead of two half-filled ones.
-            </p>
-
-            <Tabs value={mode} onValueChange={(v) => setMode(v as "existing" | "new")}>
-              <TabsList className="w-full">
-                <TabsTrigger value="existing" className="flex-1">
-                  Already on file
-                </TabsTrigger>
-                <TabsTrigger value="new" className="flex-1">
-                  Someone new
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="existing" className="mt-3 space-y-2">
-                <Select value={existingId} onValueChange={setExistingId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose someone already on file…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {unlinked.map((g: Row) => (
-                      <SelectItem key={g.id} value={g.id}>
-                        {g.full_name} · {g.code}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  placeholder="Relationship (mother, father, grandparent…)"
-                  value={relationship}
-                  onChange={(e) => setRelationship(e.target.value)}
-                />
-                <Button
-                  size="sm"
-                  className="w-full"
-                  disabled={!existingId || busy}
-                  onClick={async () => {
-                    setBusy(true);
-                    try {
-                      await link({
-                        data: { student_id: student.id, guardian_id: existingId, relationship },
-                      });
-                      toast.success("Parent attached.");
-                      await refresh();
-                      onClose();
-                    } catch (error) {
-                      toast.error((error as Error).message);
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                >
-                  Attach
-                </Button>
-              </TabsContent>
-
-              <TabsContent value="new" className="mt-3 space-y-2">
-                <Input
-                  placeholder="Full name"
-                  value={fresh.full_name}
-                  onChange={(e) => setFresh({ ...fresh, full_name: e.target.value })}
-                />
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <Input
-                    placeholder="Mobile"
-                    value={fresh.mobile}
-                    onChange={(e) => setFresh({ ...fresh, mobile: e.target.value })}
-                  />
-                  <Input
-                    placeholder="Email"
-                    value={fresh.email}
-                    onChange={(e) => setFresh({ ...fresh, email: e.target.value })}
-                  />
-                </div>
-                <Input
-                  placeholder="Relationship (mother, father, grandparent…)"
-                  value={relationship}
-                  onChange={(e) => setRelationship(e.target.value)}
-                />
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    className="h-3.5 w-3.5 accent-current"
-                    checked={makePayer}
-                    onChange={(e) => setMakePayer(e.target.checked)}
-                  />
-                  Make them the default payer
-                </label>
-                <Button
-                  size="sm"
-                  className="w-full"
-                  disabled={!fresh.full_name || busy}
-                  onClick={async () => {
-                    setBusy(true);
-                    try {
-                      await addParent({
-                        data: {
-                          ...fresh,
-                          student_id: student.id,
-                          relationship,
-                          make_payer: makePayer,
-                          status: "active",
-                        },
-                      });
-                      await queryClient.invalidateQueries({ queryKey: ["guardians"] });
-                      toast.success(`${fresh.full_name} attached to ${student.full_name}.`);
-                      await refresh();
-                      onClose();
-                    } catch (error) {
-                      toast.error((error as Error).message);
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                >
-                  Create and attach
-                </Button>
-              </TabsContent>
-            </Tabs>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Student status</Label>
-            <Select
-              value={student.status}
-              onValueChange={async (v) => {
-                await update({ data: { ...student, status: v as "active" | "inactive" } });
-                await refresh();
-                onClose();
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Students are made inactive, never deleted.
-            </p>
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>
-            Done
           </Button>
         </DialogFooter>
       </DialogContent>
