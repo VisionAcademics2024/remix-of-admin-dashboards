@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { queryOptions, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { UserCog } from "lucide-react";
 import { toast } from "sonner";
 
@@ -14,6 +14,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   EmptyState,
   PageHeader,
@@ -23,13 +33,14 @@ import {
   Td,
   Th,
 } from "@/components/vision/ui";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatMoney } from "@/lib/format";
 import { linkedTutorMismatch, sharedTutorLinks } from "@/lib/vision/tutor-access";
 import type { Row } from "@/lib/vision/types";
 import {
   approveAccessRequest,
   declineAccessRequest,
   listStaff,
+  updateStaffAccount,
   updateStaffMember,
 } from "@/lib/vision/session.functions";
 import { meQueryOptions } from "./route";
@@ -52,6 +63,7 @@ function StaffPage() {
   const decline = useServerFn(declineAccessRequest);
   const update = useServerFn(updateStaffMember);
   const [pendingRole, setPendingRole] = useState<Record<string, "owner" | "admin">>({});
+  const [editing, setEditing] = useState<Row | null>(null);
 
   // Which tutor each account actually teaches as, by name, and the tutors two
   // accounts are both pointed at - the two things that decide whether a person
@@ -60,6 +72,41 @@ function StaffPage() {
     (data.tutors as Row[]).map((t: Row) => [t.id as string, t.full_name as string]),
   );
   const sharedLinks = sharedTutorLinks(data.staff as Row[]);
+
+  // The hourly rate that belongs to the tutor this account is linked to, read
+  // from the dated rate rows rather than assumed from the account's name - the
+  // two are set separately, which is exactly how an account ends up showing
+  // somebody else's figure.
+  const rates = data.rateByTutorId as Record<
+    string,
+    { hourly_rate: number; effective_from: string } | undefined
+  >;
+
+  function payRateCell(s: Row) {
+    if (s.role !== "tutor") {
+      return <span className="text-muted-foreground">Not paid hourly</span>;
+    }
+    if (!s.tutor_id) {
+      return <span className="text-muted-foreground">Link a tutor first</span>;
+    }
+    const rate = rates[s.tutor_id as string];
+    if (!rate) {
+      return (
+        <StatusPill tone="warning" className="normal-case">
+          No rate set
+        </StatusPill>
+      );
+    }
+    return (
+      <div className="flex flex-col">
+        <span className="tabular-nums font-medium">{formatMoney(rate.hourly_rate)} / hour</span>
+        <span className="text-xs text-muted-foreground">
+          {tutorNameById.get(s.tutor_id as string) ?? "Unknown tutor"} · from{" "}
+          {formatDate(rate.effective_from)}
+        </span>
+      </div>
+    );
+  }
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: ["staff"] });
@@ -168,6 +215,7 @@ function StaffPage() {
               <Th>Name</Th>
               <Th>Email</Th>
               <Th>Role</Th>
+              <Th>Pay rate</Th>
               <Th>Added</Th>
               <Th className="text-right">Active</Th>
             </tr>
@@ -257,9 +305,13 @@ function StaffPage() {
                     )}
                   </div>
                 </Td>
+                <Td>{payRateCell(s)}</Td>
                 <Td>{formatDate(s.created_at)}</Td>
                 <Td className="text-right">
                   <div className="flex items-center justify-end gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setEditing(s)}>
+                      Edit account
+                    </Button>
                     <StatusPill tone={s.is_active ? "success" : "muted"}>
                       {s.is_active ? "Active" : "Deactivated"}
                     </StatusPill>
@@ -283,10 +335,117 @@ function StaffPage() {
         </TableShell>
 
         <p className="mt-3 text-xs text-muted-foreground">
-          Deactivating is a switch, never a delete - deleting the row would lose the audit trail on
-          per-lesson pay adjustments. A role change takes effect on the person's next request.
+          Each tutor account shows the rate of the tutor it is linked to, on the date that rate
+          started. Change a rate on the Tutor pay page - a new rate is a new dated row, so past
+          fortnights keep the figure they were paid at.
         </p>
       </Section>
+
+      <EditAccountDialog account={editing} onClose={() => setEditing(null)} onSaved={refresh} />
     </div>
+  );
+}
+
+/**
+ * Name, email address and password for one account. Roles, the tutor link and
+ * access stay on the table, because changing who somebody is and changing what
+ * they can see are different decisions.
+ */
+function EditAccountDialog({
+  account,
+  onClose,
+  onSaved,
+}: {
+  account: Row | null;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const save = useServerFn(updateStaffAccount);
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setFullName((account?.full_name as string) ?? "");
+    setEmail((account?.email as string) ?? "");
+    setPassword("");
+  }, [account]);
+
+  if (!account) return null;
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit account</DialogTitle>
+          <DialogDescription>
+            Update the name, the sign-in email or set a new password. Leave the password blank to
+            keep the current one.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="staff-name">Full name</Label>
+            <Input id="staff-name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="staff-email">Email</Label>
+            <Input
+              id="staff-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="staff-password">New password</Label>
+            <Input
+              id="staff-password"
+              type="password"
+              autoComplete="new-password"
+              placeholder="Leave blank to keep the current password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              At least 8 characters. A password found in a known breach is refused.
+            </p>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button
+            disabled={saving}
+            onClick={async () => {
+              setSaving(true);
+              try {
+                await save({
+                  data: {
+                    user_id: account.user_id as string,
+                    full_name: fullName,
+                    email,
+                    ...(password ? { password } : {}),
+                  },
+                });
+                toast.success("Account updated.");
+                await onSaved();
+                onClose();
+              } catch (error) {
+                toast.error((error as Error).message);
+              } finally {
+                setSaving(false);
+              }
+            }}
+          >
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

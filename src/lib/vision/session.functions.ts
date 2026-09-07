@@ -118,12 +118,96 @@ export const listStaff = createServerFn({ method: "GET" })
       .eq("status", "active")
       .order("full_name");
 
+    // The hourly rate in force TODAY for each tutor, so an account shows the
+    // rate that actually belongs to the tutor it is linked to. Rates are dated
+    // rows, never a single editable figure, so the newest row that has already
+    // started is the one that counts.
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Australia/Sydney" });
+    const { data: rateRows } = await client
+      .from("tutor_pay_rates")
+      .select("tutor_id, hourly_rate, effective_from")
+      .lte("effective_from", today)
+      .order("effective_from", { ascending: false });
+
+    const rateByTutorId: Record<string, { hourly_rate: number; effective_from: string }> = {};
+    for (const r of rateRows ?? []) {
+      const row = r as { tutor_id: string; hourly_rate: number; effective_from: string };
+      if (!rateByTutorId[row.tutor_id]) {
+        rateByTutorId[row.tutor_id] = {
+          hourly_rate: Number(row.hourly_rate),
+          effective_from: row.effective_from,
+        };
+      }
+    }
+
     return {
       staff: (staff ?? []) as Staff[],
       requests: requests ?? [],
       tutors: tutors ?? [],
+      rateByTutorId,
       canManage: context.staff.role === "owner",
     };
+  });
+
+/**
+ * Change an account's name, email address or password.
+ *
+ * Owner-only, and deliberately narrow: an owner resets a forgotten password or
+ * fixes a misspelled name, and nothing here touches roles, the tutor link or
+ * access. The credential change goes through the Auth admin API, which is
+ * loaded inside the handler so the server-only module never reaches the browser.
+ * `staff` keeps its own copy of the name and email for display, so both are
+ * written together.
+ */
+export const updateStaffAccount = createServerFn({ method: "POST" })
+  .middleware([requireOwner])
+  .inputValidator((data) =>
+    z
+      .object({
+        user_id: z.string().uuid(),
+        full_name: z.string().min(1, "A name is required.").optional(),
+        email: z.string().email("That does not look like an email address.").optional(),
+        password: z
+          .string()
+          .min(8, "A password needs at least 8 characters.")
+          .optional()
+          .or(z.literal("")),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const credentials: { email?: string; password?: string; email_confirm?: boolean } = {};
+    if (data.email) {
+      credentials.email = data.email;
+      credentials.email_confirm = true;
+    }
+    if (data.password) credentials.password = data.password;
+
+    if (Object.keys(credentials).length > 0) {
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(data.user_id, credentials);
+      if (error) {
+        throw new Error(
+          error.message.toLowerCase().includes("pwned") || error.message.includes("weak_password")
+            ? "That password has appeared in a known breach. Choose a different one."
+            : error.message,
+        );
+      }
+    }
+
+    const patch: Record<string, unknown> = {};
+    if (data.full_name) patch["full_name"] = data.full_name;
+    if (data.email) patch["email"] = data.email;
+    if (Object.keys(patch).length > 0) {
+      const { error } = await db(context.supabase)
+        .from("staff")
+        .update(patch)
+        .eq("user_id", data.user_id);
+      if (error) throw error;
+    }
+
+    return { success: true };
   });
 
 export const approveAccessRequest = createServerFn({ method: "POST" })
