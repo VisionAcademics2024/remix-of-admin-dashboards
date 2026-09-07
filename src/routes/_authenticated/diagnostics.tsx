@@ -93,7 +93,7 @@ export function DiagnosticsBody({ data }: { data: Row }) {
         {data.attention.byIssue.length === 0 ? (
           <EmptyState icon={Stethoscope} title="Nothing outstanding" hint="Every check passes." />
         ) : (
-          <TableShell>
+          <TableShell narrow>
             <thead>
               <tr>
                 <Th>Problem</Th>
@@ -116,7 +116,7 @@ export function DiagnosticsBody({ data }: { data: Row }) {
         title="Tutor cover"
         description="Whether the timetable knows who is teaching. A lesson with no tutor is the block that would sit at the top of Today."
       >
-        <TableShell>
+        <TableShell narrow>
           <thead>
             <tr>
               <Th>When</Th>

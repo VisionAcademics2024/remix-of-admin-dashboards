@@ -80,6 +80,16 @@ export function Glass({
       onClick={onClick}
       className={cn(
         "glass",
+        // A card is almost always a grid or flex item, and both give their
+        // children `min-width: auto` - which means the column is sized by the
+        // card's widest indivisible content rather than by the screen. One long
+        // row inside a card therefore pushes the whole card past the viewport,
+        // where `overflow-x: clip` on the document quietly amputates it: the
+        // status pill, the right-hand figure and the last table column are
+        // simply gone, with nothing to scroll to reach them. That is what was
+        // happening on a phone. Letting a card shrink to its column is the fix,
+        // and it belongs here rather than in every grid that holds one.
+        "min-w-0",
         MATERIAL_CLASS[material],
         wantsSpecular && "glass--specular",
         interactive && "lift focus-spatial cursor-pointer",

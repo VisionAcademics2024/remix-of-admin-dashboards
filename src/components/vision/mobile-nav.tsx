@@ -89,12 +89,17 @@ export function MobileNav({ role, name }: { role: StaffRole; name: string }) {
             aria-hidden
             tabIndex={-1}
             onClick={() => setOpen(false)}
-            className="fixed inset-0 z-40 cursor-default bg-black/45 backdrop-blur-[2px] lg:hidden"
+            className="fixed inset-0 z-40 cursor-default bg-black/50 backdrop-blur-[3px] lg:hidden"
           />
 
           <nav
             aria-label="Sections"
-            className="ornament ornament--panel animate-materialize fixed inset-x-3 top-[4.75rem] z-50 max-h-[calc(100dvh-6rem)] overflow-y-auto overscroll-contain rounded-[1.75rem] p-3 lg:hidden"
+            // Hung off the header: it is sticky at 0.75rem and 3.5rem tall, so
+            // its underside is 4.25rem down and the panel begins half a step
+            // below that. The gap is deliberate - the two are separate
+            // surfaces - and it only reads as one now the header sits above
+            // the scrim rather than being dimmed by it.
+            className="ornament ornament--panel animate-materialize fixed inset-x-3 top-[4.75rem] z-50 max-h-[calc(100dvh-5.75rem)] overflow-y-auto overscroll-contain rounded-[1.75rem] p-3 lg:hidden"
           >
             <div className="mb-2 flex items-center gap-2.5 px-1.5 pb-2">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-white via-[#FBF7F0] to-[#EDE6DA] shadow-[inset_0_1px_0_0_var(--edge-top)]">

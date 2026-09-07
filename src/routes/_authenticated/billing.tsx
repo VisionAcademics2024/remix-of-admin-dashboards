@@ -88,9 +88,7 @@ export const Route = createFileRoute("/_authenticated/billing")({
   component: BillingPage,
 });
 
-type ChargePayload =
-  | { kind: "hours"; row: Row }
-  | { kind: "firm"; row: Row };
+type ChargePayload = { kind: "hours"; row: Row } | { kind: "firm"; row: Row };
 
 function BillingPage() {
   const { data } = useSuspenseQuery(billingQueryOptions());
@@ -131,15 +129,22 @@ function BillingPage() {
 
       {/* The audit sits above the pipeline on purpose. Everything below is work
           the app already knows about; this is the work it did not. */}
-      <UnbilledSection
-        audit={audit}
-        onRefresh={refresh}
-        onNewBill={() => setNewBill(true)}
-      />
+      <UnbilledSection audit={audit} onRefresh={refresh} onNewBill={() => setNewBill(true)} />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <StatCard label="To set up" value={data.newEnrolments.length} tone="warning" icon={Sparkles} />
-        <StatCard label="Waiting to charge" value={data.toCharge.length + data.packagesToCharge.length} />
+      {/* Two across on a phone. A stat row stacked full-width pushes the page's
+          actual content below the fold, and these figures are sized for a
+          half-width card already. */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-5">
+        <StatCard
+          label="To set up"
+          value={data.newEnrolments.length}
+          tone="warning"
+          icon={Sparkles}
+        />
+        <StatCard
+          label="Waiting to charge"
+          value={data.toCharge.length + data.packagesToCharge.length}
+        />
         <StatCard
           label="To invoice"
           value={formatMoney(total(data.toInvoice))}
@@ -662,14 +667,17 @@ function ToChargeBody({ data, onRefresh }: { data: Row; onRefresh: () => Promise
                     </div>
                   </Td>
                   <Td>
-                    {e.class_offerings?.programs?.name ?? "-"} <Code>{e.class_offerings?.code}</Code>
+                    {e.class_offerings?.programs?.name ?? "-"}{" "}
+                    <Code>{e.class_offerings?.code}</Code>
                   </Td>
                   <Td className="text-muted-foreground">
                     {e.method
                       ? LABELS.billingMethod[e.method as keyof typeof LABELS.billingMethod]
                       : "Not set"}
                   </Td>
-                  <Td className="whitespace-nowrap">{e.starts_on ? formatDate(e.starts_on) : "-"}</Td>
+                  <Td className="whitespace-nowrap">
+                    {e.starts_on ? formatDate(e.starts_on) : "-"}
+                  </Td>
                   <Td className="text-right">
                     <Button size="sm" onClick={() => setPayload({ kind: "firm", row: e })}>
                       Set plan &amp; price
@@ -746,7 +754,11 @@ function ToChargeBody({ data, onRefresh }: { data: Row; onRefresh: () => Promise
                     )}
                   </Td>
                   <Td className="text-right">
-                    <Button size="sm" variant="outline" onClick={() => setPayload({ kind: "hours", row: p })}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setPayload({ kind: "hours", row: p })}
+                    >
                       {Number(p.price) > 0 ? "Raise invoice" : "Price & invoice"}
                     </Button>
                   </Td>
@@ -758,7 +770,11 @@ function ToChargeBody({ data, onRefresh }: { data: Row; onRefresh: () => Promise
       </div>
 
       {payload?.kind === "firm" && (
-        <FirmPlanDialog enrolment={payload.row} onClose={() => setPayload(null)} onDone={onRefresh} />
+        <FirmPlanDialog
+          enrolment={payload.row}
+          onClose={() => setPayload(null)}
+          onDone={onRefresh}
+        />
       )}
       {payload?.kind === "hours" && (
         <RaiseChargeDialog payload={payload} onClose={() => setPayload(null)} onDone={onRefresh} />
@@ -797,7 +813,9 @@ function PaygQueue({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Promise<
   function toggleStudent(group: PaygGroup) {
     const ids = group.lessons.map((l) => l.id);
     const allOn = ids.every((id) => selected.includes(id));
-    setSelected((s) => (allOn ? s.filter((id) => !ids.includes(id)) : [...new Set([...s, ...ids])]));
+    setSelected((s) =>
+      allOn ? s.filter((id) => !ids.includes(id)) : [...new Set([...s, ...ids])],
+    );
   }
 
   // What is ticked, still grouped by student, so the raise dialog can price
@@ -886,9 +904,7 @@ function PaygQueue({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Promise<
                   <Td className="text-right tabular-nums">
                     {formatHours(group.hours)}
                     {group.zeroHourLessons > 0 && (
-                      <div className="text-xs text-warning">
-                        {group.zeroHourLessons} at 0 h
-                      </div>
+                      <div className="text-xs text-warning">{group.zeroHourLessons} at 0 h</div>
                     )}
                   </Td>
                   <Td className="text-right tabular-nums">
@@ -1030,9 +1046,7 @@ function RaisePaygDialog({
                   step="0.01"
                   placeholder="Price per lesson"
                   value={rates[group.studentId] ?? ""}
-                  onChange={(e) =>
-                    setRates((r) => ({ ...r, [group.studentId]: e.target.value }))
-                  }
+                  onChange={(e) => setRates((r) => ({ ...r, [group.studentId]: e.target.value }))}
                 />
                 <span className="w-24 shrink-0 text-right text-sm tabular-nums text-muted-foreground">
                   {formatMoney(Number(rates[group.studentId] || 0) * group.lessons.length)}
@@ -1205,7 +1219,11 @@ function ToInvoiceBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Prom
 
   if (rows.length === 0) {
     return (
-      <EmptyState icon={Receipt} title="Nothing waiting to invoice" hint="Charges land here as soon as they're raised." />
+      <EmptyState
+        icon={Receipt}
+        title="Nothing waiting to invoice"
+        hint="Charges land here as soon as they're raised."
+      />
     );
   }
 
@@ -1247,7 +1265,9 @@ function ToInvoiceBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Prom
   function toggleFamily(family: FamilyGroup) {
     const ids = family.charges.map((c) => c.id);
     const allOn = ids.every((id) => selected.includes(id));
-    setSelected((s) => (allOn ? s.filter((id) => !ids.includes(id)) : [...new Set([...s, ...ids])]));
+    setSelected((s) =>
+      allOn ? s.filter((id) => !ids.includes(id)) : [...new Set([...s, ...ids])],
+    );
   }
 
   return (
@@ -1276,11 +1296,7 @@ function ToInvoiceBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Prom
                 {formatMoney(runTotal)} selected
               </span>
             )}
-            <Button
-              size="sm"
-              disabled={chosen.length === 0}
-              onClick={() => setInvoicing(tab)}
-            >
+            <Button size="sm" disabled={chosen.length === 0} onClick={() => setInvoicing(tab)}>
               Invoice {chosenFamilies.length || ""}{" "}
               {chosenFamilies.length === 1 ? "family" : "families"}
             </Button>
@@ -1437,7 +1453,13 @@ function UnpaidBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Promise
   const [adjusting, setAdjusting] = useState<Row | null>(null);
 
   if (rows.length === 0) {
-    return <EmptyState icon={Wallet} title="Nothing outstanding" hint="Everything invoiced has been paid." />;
+    return (
+      <EmptyState
+        icon={Wallet}
+        title="Nothing outstanding"
+        hint="Everything invoiced has been paid."
+      />
+    );
   }
 
   const keyOf = (i: InvoiceGroup) => i.invoiceId ?? i.label;
@@ -1576,7 +1598,13 @@ function ReceivedTable({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Prom
   const [open, setOpen] = useState<string[]>([]);
 
   if (rows.length === 0) {
-    return <EmptyState icon={Wallet} title="No payments recorded yet" hint="Paid charges collect here." />;
+    return (
+      <EmptyState
+        icon={Wallet}
+        title="No payments recorded yet"
+        hint="Paid charges collect here."
+      />
+    );
   }
 
   const keyOf = (i: InvoiceGroup) => i.invoiceId ?? i.label;
@@ -1619,7 +1647,9 @@ function ReceivedTable({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Prom
                     <span>
                       <Code>{invoice.label}</Code>
                       <span className="block text-xs text-muted-foreground">
-                        {invoice.charges.length === 1 ? "1 line" : `${invoice.charges.length} lines`}
+                        {invoice.charges.length === 1
+                          ? "1 line"
+                          : `${invoice.charges.length} lines`}
                         {invoice.xeroNo && ` · ${invoice.xeroNo}`}
                       </span>
                     </span>
@@ -1680,7 +1710,13 @@ function ReceivedTable({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Prom
 function CancelledTable({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Promise<void> }) {
   const restore = useServerFn(restoreCharge);
   if (rows.length === 0) {
-    return <EmptyState icon={Receipt} title="Nothing cancelled" hint="Charges are cancelled, never deleted." />;
+    return (
+      <EmptyState
+        icon={Receipt}
+        title="Nothing cancelled"
+        hint="Charges are cancelled, never deleted."
+      />
+    );
   }
   return (
     <TableShell>
@@ -1856,8 +1892,9 @@ function FirmPlanDialog({
         <DialogHeader>
           <DialogTitle>Set up {enrolment.students?.full_name}</DialogTitle>
           <DialogDescription>
-            {enrolment.class_offerings?.programs?.name ?? "This class"} — choose how they pay and what
-            they pay. PAYG prices each lesson as it's taught; Hours opens a paid block ready to invoice.
+            {enrolment.class_offerings?.programs?.name ?? "This class"} — choose how they pay and
+            what they pay. PAYG prices each lesson as it's taught; Hours opens a paid block ready to
+            invoice.
           </DialogDescription>
         </DialogHeader>
 
@@ -1877,12 +1914,22 @@ function FirmPlanDialog({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>{isHours ? "Price per hour" : "Price per lesson"}</Label>
-              <Input type="number" step="0.01" value={rate} onChange={(e) => setRate(e.target.value)} />
+              <Input
+                type="number"
+                step="0.01"
+                value={rate}
+                onChange={(e) => setRate(e.target.value)}
+              />
             </div>
             {isHours && (
               <div className="space-y-1.5">
                 <Label>Hours paid for</Label>
-                <Input type="number" step="0.5" value={hours} onChange={(e) => setHours(e.target.value)} />
+                <Input
+                  type="number"
+                  step="0.5"
+                  value={hours}
+                  onChange={(e) => setHours(e.target.value)}
+                />
               </div>
             )}
           </div>
@@ -1977,7 +2024,12 @@ function RaiseChargeDialog({
         <div className="grid gap-3">
           <div className="space-y-1.5">
             <Label>Standard amount</Label>
-            <Input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <Input
+              type="number"
+              step="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Adjustment (negative for a discount)</Label>
@@ -2001,7 +2053,8 @@ function RaiseChargeDialog({
             </Select>
           </div>
           <p className="rounded-md bg-muted/50 px-3 py-2 text-sm">
-            Final amount: <strong>{formatMoney(Number(amount || 0) + Number(adjustment || 0))}</strong>
+            Final amount:{" "}
+            <strong>{formatMoney(Number(amount || 0) + Number(adjustment || 0))}</strong>
           </p>
         </div>
 
@@ -2077,7 +2130,11 @@ function AdjustDialog({
           </div>
           <div className="space-y-1.5">
             <Label>Reason (optional)</Label>
-            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Sibling discount…" />
+            <Input
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Sibling discount…"
+            />
           </div>
           <p className="rounded-md bg-muted/50 px-3 py-2 text-sm">
             Final amount: <strong>{formatMoney(final)}</strong>
@@ -2093,7 +2150,9 @@ function AdjustDialog({
             onClick={async () => {
               setBusy(true);
               try {
-                await adjust({ data: { id: charge.id, adjustment: Number(adjustment || 0), notes } });
+                await adjust({
+                  data: { id: charge.id, adjustment: Number(adjustment || 0), notes },
+                });
                 toast.success("Charge adjusted.");
                 await onDone();
                 onClose();
@@ -2173,9 +2232,7 @@ function InvoiceDialog({
               </Label>
               <Input
                 value={numbers[keyOf(family)] ?? ""}
-                onChange={(e) =>
-                  setNumbers((n) => ({ ...n, [keyOf(family)]: e.target.value }))
-                }
+                onChange={(e) => setNumbers((n) => ({ ...n, [keyOf(family)]: e.target.value }))}
                 placeholder="Invoice number (optional)"
               />
               <p className="text-xs text-muted-foreground">
@@ -2290,7 +2347,11 @@ function PaymentDialog({
           </div>
           <div className="space-y-1.5">
             <Label>Reference</Label>
-            <Input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="Receipt no, cash tin…" />
+            <Input
+              value={ref}
+              onChange={(e) => setRef(e.target.value)}
+              placeholder="Receipt no, cash tin…"
+            />
           </div>
 
           {lines > 1 && (

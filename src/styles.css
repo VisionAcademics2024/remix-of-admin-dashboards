@@ -296,8 +296,13 @@
     text-rendering: optimizeLegibility;
     /* A phone must never scroll sideways to reach the edge of a page. Wide
      * content earns its own scroller (see .scroll-x and TableShell) rather
-     * than dragging the whole document with it. */
-    overflow-x: hidden;
+     * than dragging the whole document with it.
+     *
+     * `clip` rather than `hidden`: hidden makes the root a scroll container,
+     * which changes how `position: sticky` resolves against it and is the
+     * reason the floating header behaved differently from the pages under it.
+     * clip refuses the scroll without creating the container. */
+    overflow-x: clip;
   }
 
   body {

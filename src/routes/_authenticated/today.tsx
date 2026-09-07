@@ -80,7 +80,6 @@ function TodayError({ message }: { message: string }) {
   );
 }
 
-
 function TodayPage() {
   const today = sydToday();
   const { data } = useSuspenseQuery(todayQueryOptions(today));
@@ -195,7 +194,14 @@ function TodayPage() {
 
       {/* The day first, then what it costs. Ordered the way the page is used:
           you are here to run this afternoon, not to read a ledger. */}
-      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
+      {/* Two across on a phone, not one. Stacked full-width these three ran to
+          most of a screen on their own, so the timetable - the thing the page
+          is opened for - began below the fold and the day was something you
+          scrolled to find. StatCard's figures are already sized for a
+          half-width card; the grid was the only thing saying otherwise. A lone
+          third card takes the full row rather than sitting in a half-width
+          column against nothing. */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3 [&>*:last-child:nth-child(odd)]:col-span-2 xl:[&>*:last-child:nth-child(odd)]:col-span-1">
         <StatCard
           label="Lessons today"
           value={data.sessions.length}
@@ -392,7 +398,10 @@ function TodayPage() {
                       style={{ backgroundColor: colour }}
                     />
 
-                    <div className="w-[5.5rem] shrink-0 text-sm tabular-nums">
+                    {/* Narrower on a phone: "4:00 pm" needs about four rem, and
+                        the rest was being taken from the lesson's name, which
+                        is the part you are actually reading down the list. */}
+                    <div className="w-16 shrink-0 text-sm tabular-nums sm:w-[5.5rem]">
                       {formatTime(s.starts_at)}
                       <div className="text-[0.72rem] tracking-[0.004em] text-muted-foreground">
                         {formatHours(s.duration_hours)}

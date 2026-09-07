@@ -202,7 +202,10 @@ function TutorPayPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      {/* Two across on a phone. A stat row stacked full-width pushes the page's
+          actual content below the fold, and these figures are sized for a
+          half-width card already. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         {canEdit ? (
           <StatCard
             label="Tutors with lessons"
