@@ -197,8 +197,8 @@ export const updateStaffAccount = createServerFn({ method: "POST" })
     }
 
     const patch: Record<string, unknown> = {};
-    if (data.full_name) patch.full_name = data.full_name;
-    if (data.email) patch.email = data.email;
+    if (data.full_name) patch['full_name'] = data.full_name;
+    if (data.email) patch['email'] = data.email;
     if (Object.keys(patch).length > 0) {
       const { error } = await db(context.supabase)
         .from("staff")
