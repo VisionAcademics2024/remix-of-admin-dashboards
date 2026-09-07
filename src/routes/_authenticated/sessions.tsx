@@ -1,8 +1,19 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { keepPreviousData, queryOptions, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
-import { History, Search } from "lucide-react";
+import { History, Search, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -29,6 +40,9 @@ import {
 } from "@/components/vision/ui";
 import { addDays, formatDay, formatHours, formatTime, sydToday } from "@/lib/format";
 import { listSessionHistory } from "@/lib/vision/schedule.functions";
+import { getRollEntryRemoval, removeFromLesson } from "@/lib/vision/roll.functions";
+import { meQueryOptions } from "@/lib/vision/me";
+import { lessonPermissions } from "@/lib/vision/tutor-access";
 import { LABELS, type Row } from "@/lib/vision/types";
 
 /**
@@ -88,6 +102,12 @@ function SessionsPage() {
   const [offeringId, setOfferingId] = useState("all");
   const [status, setStatus] = useState("all");
   const [search, setSearch] = useState("");
+  const [removing, setRemoving] = useState<Row | null>(null);
+
+  // Taking a student off a roll is a scheduling decision, so it follows the
+  // same line as everything else a tutor may not do.
+  const { data: me } = useQuery(meQueryOptions());
+  const may = lessonPermissions(me?.staff?.role);
 
   const { from, to } = spanFor(window, today, includeUpcoming);
   const { data, isFetching } = useQuery(historyQueryOptions(from, to));
@@ -318,6 +338,7 @@ function SessionsPage() {
                   Roll
                 </SortableTh>
                 <Th>Make-up</Th>
+                {may.manage && <Th className="text-right">Remove</Th>}
               </tr>
             </thead>
             <tbody>
@@ -376,6 +397,20 @@ function SessionsPage() {
                       <span className="text-muted-foreground">-</span>
                     )}
                   </Td>
+                  {may.manage && (
+                    <Td className="text-right">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-muted-foreground hover:text-destructive"
+                        title="Take this student off this lesson's roll"
+                        aria-label="Take this student off this lesson's roll"
+                        onClick={() => setRemoving(r)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </Td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -385,9 +420,99 @@ function SessionsPage() {
             Hours are the ones actually drawn - only a present, non-trial mark on a lesson that ran
             spends any. Tap a column heading to sort by it; tap again to reverse, once more to
             clear.
+            {may.manage &&
+              " Removing an entry takes that student off that lesson's roll - the lesson and the class keep running, and the gap is reported against their enrolment."}
           </p>
         </>
       )}
+
+      {removing && <RemoveFromLessonDialog entry={removing} onClose={() => setRemoving(null)} />}
     </div>
+  );
+}
+
+/**
+ * Confirming the removal of one roll entry.
+ *
+ * It asks the server what this particular removal costs rather than reciting a
+ * generic warning, because the two cases people actually hesitate over -
+ * "does this give the hours back?" and "is this lesson already billed?" - have
+ * different answers per row, and a warning that is the same every time is one
+ * nobody reads by the third go.
+ */
+function RemoveFromLessonDialog({ entry, onClose }: { entry: Row; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const remove = useServerFn(removeFromLesson);
+  const [busy, setBusy] = useState(false);
+
+  const { data, isPending } = useQuery({
+    queryKey: ["roll-entry-removal", entry.id],
+    queryFn: () => getRollEntryRemoval({ data: { id: entry.id } }),
+  });
+
+  const student = entry.enrolments?.students?.full_name ?? "This student";
+  const className = entry.sessions?.class_offerings?.programs?.name ?? "the class";
+  const when = formatDay(entry.lesson_starts_at ?? entry.session_date);
+
+  async function confirm() {
+    setBusy(true);
+    try {
+      await remove({ data: { id: entry.id } });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["session-history"] }),
+        queryClient.invalidateQueries({ queryKey: ["roll"] }),
+        queryClient.invalidateQueries({ queryKey: ["timetable"] }),
+        queryClient.invalidateQueries({ queryKey: ["today"] }),
+        queryClient.invalidateQueries({ queryKey: ["billing"] }),
+        queryClient.invalidateQueries({ queryKey: ["billing-audit"] }),
+        queryClient.invalidateQueries({ queryKey: ["needs-attention"] }),
+        queryClient.invalidateQueries({ queryKey: ["needs-attention-count"] }),
+      ]);
+      toast.success(`${student} is off the roll for ${when}.`);
+      onClose();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Take {student} off this lesson?</DialogTitle>
+          <DialogDescription>
+            {className} · {when} · <Code>{entry.sessions?.code}</Code>
+          </DialogDescription>
+        </DialogHeader>
+
+        {isPending ? (
+          <p className="text-sm text-muted-foreground">Checking what this affects…</p>
+        ) : data?.refusal ? (
+          <WarningNote>{data.refusal}</WarningNote>
+        ) : (
+          <ul className="space-y-1.5 text-sm text-muted-foreground">
+            {(data?.consequences ?? []).map((line: string) => (
+              <li key={line} className="flex gap-2">
+                <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-current" />
+                <span>{line}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            {data?.refusal ? "Close" : "Keep them on it"}
+          </Button>
+          {!data?.refusal && (
+            <Button variant="destructive" disabled={busy || isPending} onClick={confirm}>
+              {busy ? "Removing…" : "Remove from this lesson"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
