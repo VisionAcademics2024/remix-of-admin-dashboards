@@ -53,6 +53,7 @@ import {
   savePayout,
 } from "@/lib/vision/pay.functions";
 import { rateIsMissing, rateOf } from "@/lib/vision/pay-rate";
+import { linkedTutorMismatch } from "@/lib/vision/tutor-access";
 import { meQueryOptions } from "./route";
 import { LABELS, Row } from "@/lib/vision/types";
 
@@ -112,11 +113,14 @@ function TutorPayPage() {
 
   // A tutor is looking at one person's pay - their own - so the page says whose
   // it is rather than counting how many tutors are on it.
-  const myName = canEdit
-    ? null
-    : (data.tutors.find((t: Row) => t.id === me.staff?.tutor_id)?.full_name ??
-      me.staff?.full_name ??
-      null);
+  const linkedName = data.tutors.find((t: Row) => t.id === me.staff?.tutor_id)?.full_name ?? null;
+  const myName = canEdit ? null : (linkedName ?? me.staff?.full_name ?? null);
+
+  // Signed in as one person, being shown another's fortnight. The scoping is
+  // by tutor_id and the heading follows the link, so without this line the page
+  // simply retitles itself and looks like your own pay. It is not, and the only
+  // person who can put it right is an owner.
+  const wrongPerson = !canEdit && linkedTutorMismatch(me.staff?.full_name, linkedName);
 
   return (
     <div className="stagger space-y-5">
@@ -128,6 +132,19 @@ function TutorPayPage() {
             : "Your pay, computed from the lessons you taught at the rate in force on each lesson's own date."
         }
       />
+
+      {wrongPerson && (
+        <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm">
+          <p className="font-medium">
+            You are signed in as {me.staff?.full_name}, and this is {linkedName}&apos;s pay.
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            Your staff account is linked to the tutor <strong>{linkedName}</strong>, so every lesson
+            and every figure on this page is theirs. If that is wrong, an owner can relink the
+            account on the Staff page - nothing here needs correcting.
+          </p>
+        </div>
+      )}
 
       {/* The fortnight, stated plainly. Two are always one tap away; the arrows
           reach any other. */}

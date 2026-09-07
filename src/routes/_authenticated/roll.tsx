@@ -47,6 +47,8 @@ import {
 import { cn } from "@/lib/utils";
 import { getCatalogue } from "@/lib/vision/catalogue.functions";
 import { listTrialRoll, saveTrial } from "@/lib/vision/leads.functions";
+import { meQueryOptions } from "@/lib/vision/me";
+import { lessonPermissions, type LessonPermissions } from "@/lib/vision/tutor-access";
 import { LABELS, type Row } from "@/lib/vision/types";
 import {
   bookMakeUp,
@@ -117,6 +119,12 @@ function RollPage() {
   const queryClient = useQueryClient();
   const mark = useServerFn(markAttendance);
   const bulk = useServerFn(markRollBulk);
+
+  // Marking is a tutor's job; reassigning a lesson's tutor and booking a
+  // make-up onto a new day are scheduling, and the API refuses those now. The
+  // screen stops offering them rather than letting the refusal be the answer.
+  const { data: me } = useQuery(meQueryOptions());
+  const may = lessonPermissions(me?.staff?.role);
 
   const active = FILTERS[index]!;
   const term = search.trim().toLowerCase();
@@ -229,6 +237,7 @@ function RollPage() {
                   showColumns={i === 0}
                   tutors={catalogue?.tutors ?? []}
                   onSetStatus={setStatus}
+                  may={may}
                   onMakeUp={setMakingUp}
                   onBulk={async (ids, status) => {
                     try {
@@ -255,6 +264,7 @@ function RollPage() {
 
       {makingUp && (
         <MakeUpDialog
+          may={may}
           rows={makingUp}
           tutors={catalogue?.tutors ?? []}
           onClose={() => setMakingUp(null)}
@@ -464,6 +474,7 @@ function LessonGroup({
   showColumns,
   tutors,
   onSetStatus,
+  may,
   onMakeUp,
   onBulk,
   onChanged,
@@ -473,6 +484,7 @@ function LessonGroup({
   showColumns: boolean;
   tutors: Row[];
   onSetStatus: (id: string, status: "present" | "absent" | "not_marked") => Promise<void>;
+  may: LessonPermissions;
   onMakeUp: (rows: Row[]) => void;
   onBulk: (ids: string[], status: "present" | "absent" | "not_marked") => Promise<void>;
   onChanged: () => Promise<void>;
@@ -500,7 +512,7 @@ function LessonGroup({
         </div>
 
         <div className="flex items-center gap-2">
-          <TutorCell row={lesson} tutors={tutors} onChanged={onChanged} />
+          <TutorCell row={lesson} tutors={tutors} may={may} onChanged={onChanged} />
         </div>
 
         <StatusPill tone={complete ? "success" : marked > 0 ? "warning" : "neutral"}>
@@ -658,14 +670,26 @@ function LessonGroup({
 function TutorCell({
   row,
   tutors,
+  may,
   onChanged,
 }: {
   row: Row;
   tutors: Row[];
+  may: LessonPermissions;
   onChanged: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const setTutor = useServerFn(setLessonTutor);
+
+  // Who teaches a lesson decides who is paid for it, so it is the office's to
+  // set. A tutor sees the name and cannot pick at it.
+  if (!may.manage) {
+    return row.sessions?.tutors?.full_name ? (
+      <TutorDot colour={row.sessions?.tutors?.colour} name={row.sessions.tutors.full_name} />
+    ) : (
+      <span className="text-muted-foreground">Unassigned</span>
+    );
+  }
 
   if (!open) {
     return row.sessions?.tutors?.full_name ? (
@@ -729,6 +753,7 @@ function TutorCell({
  * recording that the student was away.
  */
 function MakeUpDialog({
+  may,
   rows,
   tutors,
   onClose,
@@ -736,6 +761,7 @@ function MakeUpDialog({
 }: {
   rows: Row[];
   tutors: Row[];
+  may: LessonPermissions;
   onClose: () => void;
   onDone: () => Promise<void>;
 }) {
@@ -846,16 +872,18 @@ function MakeUpDialog({
               title="Hold for now"
               hint="No day or tutor decided. It stays on the Make-ups list until you book it."
             />
-            <ModeCard
-              active={mode === "day"}
-              onClick={() => setMode("day")}
-              title="Pick a day"
-              hint={
-                many
-                  ? "Creates one lesson and puts the whole class on it. A tutor is optional."
-                  : "Books the make-up. A tutor is optional - decide that later if you need to."
-              }
-            />
+            {may.reschedule && (
+              <ModeCard
+                active={mode === "day"}
+                onClick={() => setMode("day")}
+                title="Pick a day"
+                hint={
+                  many
+                    ? "Creates one lesson and puts the whole class on it. A tutor is optional."
+                    : "Books the make-up. A tutor is optional - decide that later if you need to."
+                }
+              />
+            )}
           </div>
 
           {mode === "hold" ? (

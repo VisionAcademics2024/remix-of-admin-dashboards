@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { sydneyLocalToInstant } from "@/lib/format";
 
-import { db, requireStaff } from "./guard";
+import { db, requireManager, requireStaff } from "./guard";
 import type { Row } from "./types";
 
 const ROLL_SELECT =
@@ -140,7 +140,7 @@ export const markRollBulk = createServerFn({ method: "POST" })
  * student or one this enrolment is not eligible for; this surfaces why.
  */
 export const setAttendancePackage = createServerFn({ method: "POST" })
-  .middleware([requireStaff])
+  .middleware([requireManager])
   .inputValidator((data) =>
     z.object({ id: z.string().uuid(), package_id: z.string().uuid().nullable() }).parse(data),
   )
@@ -231,7 +231,7 @@ export const listLessonsOnDate = createServerFn({ method: "GET" })
  * the old flow unusable.
  */
 export const bookMakeUp = createServerFn({ method: "POST" })
-  .middleware([requireStaff])
+  .middleware([requireManager])
   .inputValidator((data) =>
     z
       .object({
@@ -336,7 +336,7 @@ export const bookMakeUp = createServerFn({ method: "POST" })
  * anyone knows, and this is where you find out.
  */
 export const setLessonTutor = createServerFn({ method: "POST" })
-  .middleware([requireStaff])
+  .middleware([requireManager])
   .inputValidator((data) =>
     z.object({ session_id: z.string().uuid(), tutor_id: z.string().uuid().nullable() }).parse(data),
   )

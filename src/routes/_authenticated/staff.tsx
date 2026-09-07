@@ -24,6 +24,7 @@ import {
   Th,
 } from "@/components/vision/ui";
 import { formatDate } from "@/lib/format";
+import { linkedTutorMismatch, sharedTutorLinks } from "@/lib/vision/tutor-access";
 import type { Row } from "@/lib/vision/types";
 import {
   approveAccessRequest,
@@ -51,6 +52,14 @@ function StaffPage() {
   const decline = useServerFn(declineAccessRequest);
   const update = useServerFn(updateStaffMember);
   const [pendingRole, setPendingRole] = useState<Record<string, "owner" | "admin">>({});
+
+  // Which tutor each account actually teaches as, by name, and the tutors two
+  // accounts are both pointed at - the two things that decide whether a person
+  // is looking at their own lessons and pay or somebody else's.
+  const tutorNameById = new Map(
+    (data.tutors as Row[]).map((t: Row) => [t.id as string, t.full_name as string]),
+  );
+  const sharedLinks = sharedTutorLinks(data.staff as Row[]);
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: ["staff"] });
@@ -226,6 +235,24 @@ function StaffPage() {
                     {s.role === "tutor" && !s.tutor_id && (
                       <StatusPill tone="warning" className="normal-case">
                         Pick a tutor
+                      </StatusPill>
+                    )}
+
+                    {/* The link decides whose lessons and whose pay this
+                        account sees, and nothing makes it agree with the name
+                        on the account. An account called one thing pointed at
+                        another tutor shows that tutor's money under this
+                        person's name, silently - so it is named here. */}
+                    {s.role === "tutor" &&
+                      linkedTutorMismatch(s.full_name, tutorNameById.get(s.tutor_id ?? "")) && (
+                        <StatusPill tone="warning" className="normal-case">
+                          Sees {tutorNameById.get(s.tutor_id ?? "")}&apos;s lessons &amp; pay
+                        </StatusPill>
+                      )}
+
+                    {s.role === "tutor" && s.tutor_id && sharedLinks.has(s.tutor_id) && (
+                      <StatusPill tone="warning" className="normal-case">
+                        Shared with another account
                       </StatusPill>
                     )}
                   </div>

@@ -6,6 +6,8 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+import { StretchHorizontal } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import {
   addDays,
@@ -283,6 +285,24 @@ function layout(events: CalendarEvent[]): Array<CalendarEvent & { col: number; c
 
 type DragMode = "move" | "resize-start" | "resize-end";
 
+/**
+ * How long a finger must rest on a lesson before the grid will let it move.
+ *
+ * On a phone the grid is a scrolling surface first and an editor second. A
+ * pointerdown that armed a drag straight away meant every scroll that began on
+ * top of a lesson picked it up and carried it to another time - the page did
+ * not move, the class did, and the reschedule was real.
+ *
+ * So touch has to ask. Hold a lesson still for this long and the grid enters
+ * rearrange mode: the blocks wobble, dragging works, and it stays on until it
+ * is dismissed - the iOS home-screen gesture, which people already know. A
+ * mouse keeps its instant drag, because a mouse cannot scroll by pressing.
+ */
+const LONG_PRESS_MS = 2000;
+
+/** How far a finger may wander during the hold before it counts as a scroll. */
+const TOUCH_SLOP = 10;
+
 function EventBlock({
   event,
   col,
@@ -292,6 +312,7 @@ function EventBlock({
   onSelect,
   editable,
   dimmed,
+  armed,
   onDragStart,
 }: {
   event: CalendarEvent;
@@ -305,6 +326,8 @@ function EventBlock({
   editable: boolean;
   /** The block being dragged shows where it was, faded, while the ghost leads. */
   dimmed: boolean;
+  /** Rearrange mode is on: the blocks wobble and a touch drags immediately. */
+  armed: boolean;
   onDragStart: (e: ReactPointerEvent, event: CalendarEvent, mode: DragMode) => void;
 }) {
   const colour = event.colour || PALETTE[0]!;
@@ -325,7 +348,8 @@ function EventBlock({
         }
       }}
       // A plain click still opens the lesson; a click that moves becomes a drag.
-      // The distinction is made in the grid, which owns the pointer maths.
+      // The distinction is made in the grid, which owns the pointer maths - and
+      // on touch, so is the hold that has to come first.
       onPointerDown={(e) => {
         if (editable && e.button === 0) onDragStart(e, event, "move");
       }}
@@ -347,7 +371,12 @@ function EventBlock({
         borderColor: event.cancelled ? colour : "rgba(0,0,0,0.22)",
         color: event.cancelled ? colour : readableOn(colour),
         opacity: dimmed ? 0.4 : 1,
-        touchAction: editable ? "none" : undefined,
+        // Only rearrange mode takes the gesture away from the browser. This
+        // used to read `editable ? "none"`, which meant every lesson block on
+        // an editable grid refused to scroll: a finger that landed on a class
+        // and swiped could only ever drag it. That is the accidental
+        // reschedule, and it is a one-word fix.
+        touchAction: editable && armed ? "none" : undefined,
         // An outline rather than a border, so the red sits on top of the block's
         // own edge without moving anything, and hover's shadow still lands.
         ...(roll === "overdue"
@@ -360,6 +389,9 @@ function EventBlock({
         "hover:z-20 hover:shadow-lg hover:brightness-95",
         "focus-visible:z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
         editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
+        // The wobble that says "these can be moved now", and the only signal a
+        // phone gets that the hold worked besides the buzz.
+        editable && armed && "calendar-armed",
         event.cancelled && "border-dashed",
         // The dot sits in the top-right corner, so the text stops short of it.
         roll === "marked" && "pr-3",
@@ -475,6 +507,8 @@ type Draft = {
   originX: number;
   originY: number;
   moved: boolean;
+  /** Started by a long press, so lifting without moving is not a click. */
+  viaHold: boolean;
 };
 
 export function TimeGrid({
@@ -501,6 +535,14 @@ export function TimeGrid({
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const draftRef = useRef<Draft | null>(null);
+  // Rearrange mode: off until a long press turns it on, then on until it is
+  // dismissed, so a run of edits needs one hold rather than one hold each.
+  const [armed, setArmed] = useState(false);
+  const hold = useRef<{
+    timer: number;
+    onMove: (e: PointerEvent) => void;
+    onUp: () => void;
+  } | null>(null);
   const setDrag = (d: Draft | null) => {
     draftRef.current = d;
     setDraft(d);
@@ -510,6 +552,29 @@ export function TimeGrid({
     if (scroller.current) scroller.current.scrollTop = DEFAULT_SCROLL_HOUR * hourHeight - 10;
     // Re-anchor when the rows get taller or shorter so the morning stays put.
   }, [hourHeight]);
+
+  // A press still counting down when the grid unmounts (the week is stepped,
+  // the view is switched) must not fire into a component that has gone.
+  useEffect(() => {
+    return () => {
+      if (hold.current) {
+        window.clearTimeout(hold.current.timer);
+        window.removeEventListener("pointermove", hold.current.onMove);
+        window.removeEventListener("pointerup", hold.current.onUp);
+        window.removeEventListener("pointercancel", hold.current.onUp);
+        hold.current = null;
+      }
+    };
+  }, []);
+
+  // Rearrange mode belongs to the days on screen. Stepping to another week is
+  // leaving the thing you were rearranging, so it lapses. Keyed on the dates
+  // themselves rather than the array, which is rebuilt on every render and
+  // would switch the mode off again the instant it came on.
+  const dayKey = days.join(",");
+  useEffect(() => {
+    setArmed(false);
+  }, [dayKey]);
 
   /** Pointer position → the minute-of-day and day column it falls on. */
   function locate(clientX: number, clientY: number) {
@@ -561,9 +626,12 @@ export function TimeGrid({
     setDrag(null);
     if (!d) return;
 
-    // A press that never travelled is a click: open the lesson.
+    // A press that never travelled is a click: open the lesson. Unless it was
+    // the two-second hold that turned rearrange mode on - that press has
+    // already been spent, and opening the lesson over the wobbling grid is not
+    // what anybody held it down for.
     if (!d.moved) {
-      onSelect(d.row);
+      if (!d.viaHold) onSelect(d.row);
       return;
     }
     const same =
@@ -579,10 +647,16 @@ export function TimeGrid({
     );
   }
 
-  function beginDrag(e: ReactPointerEvent, ev: CalendarEvent, mode: DragMode) {
+  /** Take hold of a lesson at a point, and follow the pointer from there. */
+  function beginDrag(
+    clientX: number,
+    clientY: number,
+    ev: CalendarEvent,
+    mode: DragMode,
+    viaHold = false,
+  ) {
     if (!editable) return;
-    e.preventDefault();
-    const { minutes } = locate(e.clientX, e.clientY);
+    const { minutes } = locate(clientX, clientY);
     setDrag({
       row: ev.row,
       originId: ev.id,
@@ -592,12 +666,82 @@ export function TimeGrid({
       endMinutes: ev.endMinutes,
       grab: minutes - ev.startMinutes,
       duration: ev.endMinutes - ev.startMinutes,
-      originX: e.clientX,
-      originY: e.clientY,
+      originX: clientX,
+      originY: clientY,
       moved: false,
+      viaHold,
     });
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
+  }
+
+  /** Stop watching a hold that never became one. */
+  function cancelHold() {
+    if (hold.current) {
+      window.clearTimeout(hold.current.timer);
+      window.removeEventListener("pointermove", hold.current.onMove);
+      window.removeEventListener("pointerup", hold.current.onUp);
+      window.removeEventListener("pointercancel", hold.current.onUp);
+      hold.current = null;
+    }
+  }
+
+  /**
+   * A press on a lesson, and what it is allowed to become.
+   *
+   * With a mouse, or once rearrange mode is on, it is a drag straight away -
+   * the behaviour this grid has always had. A first touch is different: it is
+   * far more likely to be a scroll than an edit, so nothing is grabbed and
+   * nothing is preventDefault-ed. The finger has to stay put for two seconds.
+   *
+   * Three ways out, and only one of them moves a lesson:
+   *   the finger travels  -> it was a scroll; let the page have it;
+   *   the finger lifts    -> it was a tap; open the lesson;
+   *   the clock runs out  -> rearrange mode, and this same finger keeps going
+   *                          into the drag it just earned.
+   */
+  function pressLesson(e: ReactPointerEvent, ev: CalendarEvent, mode: DragMode) {
+    if (!editable) return;
+
+    if (e.pointerType === "mouse" || armed) {
+      e.preventDefault();
+      beginDrag(e.clientX, e.clientY, ev, mode);
+      return;
+    }
+
+    cancelHold();
+    const originX = e.clientX;
+    const originY = e.clientY;
+    let x = originX;
+    let y = originY;
+
+    const onMove = (m: PointerEvent) => {
+      x = m.clientX;
+      y = m.clientY;
+      if (Math.abs(x - originX) + Math.abs(y - originY) > TOUCH_SLOP) cancelHold();
+    };
+    const onUp = () => {
+      const wasWaiting = hold.current !== null;
+      cancelHold();
+      // A tap that never became a hold is how a lesson is opened on a phone.
+      if (wasWaiting) onSelect(ev.row);
+    };
+    const timer = window.setTimeout(() => {
+      cancelHold();
+      setArmed(true);
+      // The only unambiguous "it worked" a phone can give before anything moves.
+      try {
+        navigator.vibrate?.(12);
+      } catch {
+        /* not supported, or blocked - the wobble says it too. */
+      }
+      beginDrag(x, y, ev, mode, true);
+    }, LONG_PRESS_MS);
+
+    hold.current = { timer, onMove, onUp };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
   }
 
   const byDay = useMemo(() => {
@@ -615,6 +759,24 @@ export function TimeGrid({
 
   return (
     <div className="glass--solid overflow-hidden rounded-xl border">
+      {/* Rearrange mode is modal, so it says so. Without this the wobble is the
+          only clue the grid is now taking drags, and the way out is a guess. */}
+      {armed && (
+        <div className="flex items-center gap-2 border-b bg-[var(--mat-thin)] px-3 py-1.5 text-xs">
+          <StretchHorizontal className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <span className="text-foreground/80">
+            Rearranging — drag a lesson to move it, or its edge to stretch it.
+          </span>
+          <button
+            type="button"
+            onClick={() => setArmed(false)}
+            className="ml-auto rounded-full bg-primary px-2.5 py-0.5 font-medium text-primary-foreground"
+          >
+            Done
+          </button>
+        </div>
+      )}
+
       {/* Header and grid share one scroll container, so a scrollbar narrows
           both by the same amount and the day columns never drift out from
           under their headings. The header stays pinned as the hours scroll. */}
@@ -723,7 +885,8 @@ export function TimeGrid({
                       onSelect={onSelect}
                       editable={editable}
                       dimmed={ghostShown?.originId === e.id}
-                      onDragStart={beginDrag}
+                      armed={armed}
+                      onDragStart={pressLesson}
                     />
                   ))}
                 </div>
