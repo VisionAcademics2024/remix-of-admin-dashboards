@@ -4,6 +4,7 @@ import { z } from "zod";
 import { sydneyLocalToInstant } from "@/lib/format";
 
 import { db, requireManager, requireStaff } from "./guard";
+import { removalConsequences, removalRefusal, type RollEntryFacts } from "./roll-removal";
 import type { Row } from "./types";
 
 const ROLL_SELECT =
@@ -347,4 +348,105 @@ export const setLessonTutor = createServerFn({ method: "POST" })
       .eq("id", data.session_id);
     if (error) throw error;
     return { success: true };
+  });
+
+/**
+ * What removing this roll entry would cost, before anyone commits to it.
+ *
+ * Read separately from the delete so the confirmation can state the truth
+ * rather than a generic warning: this many hours going back to that package,
+ * this charge in the way, this make-up depending on it.
+ */
+export const getRollEntryRemoval = createServerFn({ method: "GET" })
+  .middleware([requireManager])
+  .inputValidator((data) => z.object({ id: z.string().uuid() }).parse(data))
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+
+    const { data: entry, error } = await client
+      .from("v_attendance")
+      .select(
+        "id, code, status, att_type, hours_consumed, package_id, session_date, " +
+          "sessions(code, class_offerings(code, programs(name))), " +
+          "enrolments(id, code, students(full_name))",
+      )
+      .eq("id", data.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!entry) throw new Error("That roll entry no longer exists.");
+
+    const [charges, makeUps] = await Promise.all([
+      client.from("charges").select("id").eq("attendance_id", data.id).neq("status", "cancelled"),
+      client.from("attendance").select("id").eq("source_attendance_id", data.id),
+    ]);
+    if (charges.error) throw charges.error;
+    if (makeUps.error) throw makeUps.error;
+
+    const facts: RollEntryFacts = {
+      charges: (charges.data ?? []).length,
+      makeUpsSettlingIt: (makeUps.data ?? []).length,
+      hoursConsumed: Number((entry as Row).hours_consumed ?? 0),
+      packageId: ((entry as Row).package_id as string | null) ?? null,
+      status: ((entry as Row).status as string | null) ?? null,
+    };
+
+    return {
+      entry: entry as Row,
+      refusal: removalRefusal(facts),
+      consequences: removalConsequences(facts),
+    };
+  });
+
+/**
+ * Take one student off one lesson's roll.
+ *
+ * The entry goes; the lesson does not. The class keeps running, the lesson
+ * keeps its time and its tutor, and every other student on it is untouched -
+ * which is the whole difference between this and cancelling a lesson, and the
+ * reason it is a delete on attendance and never on sessions.
+ *
+ * The enrolment stays too, on purpose. It is what says the student belongs to
+ * this class, and the gap this leaves behind is then reported against it as
+ * "This session is missing" - so a removal is visible rather than silent, and
+ * the way to make it permanent is to end the enrolment rather than to delete
+ * rows until the noise stops.
+ *
+ * The same two refusals as the dialog, checked again here: a screen can be out
+ * of date by the time the button is pressed, and the answer must not depend on
+ * how fresh it was.
+ */
+export const removeFromLesson = createServerFn({ method: "POST" })
+  .middleware([requireManager])
+  .inputValidator((data) => z.object({ id: z.string().uuid() }).parse(data))
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+
+    const { data: entry, error: readError } = await client
+      .from("v_attendance")
+      .select("id, code, status, hours_consumed, package_id")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (readError) throw readError;
+    if (!entry) throw new Error("That roll entry no longer exists.");
+
+    const [charges, makeUps] = await Promise.all([
+      client.from("charges").select("id").eq("attendance_id", data.id).neq("status", "cancelled"),
+      client.from("attendance").select("id").eq("source_attendance_id", data.id),
+    ]);
+    if (charges.error) throw charges.error;
+    if (makeUps.error) throw makeUps.error;
+
+    const refusal = removalRefusal({
+      charges: (charges.data ?? []).length,
+      makeUpsSettlingIt: (makeUps.data ?? []).length,
+      hoursConsumed: Number((entry as Row).hours_consumed ?? 0),
+      packageId: ((entry as Row).package_id as string | null) ?? null,
+      status: ((entry as Row).status as string | null) ?? null,
+    });
+    if (refusal) throw new Error(refusal);
+
+    const { error } = await client.from("attendance").delete().eq("id", data.id);
+    if (error) throw error;
+
+    return { removed: (entry as Row).code as string | null };
   });
