@@ -61,6 +61,7 @@ import { addMidTermStudent, listCommerce, saveEnrolment } from "@/lib/vision/com
 import { listStudents } from "@/lib/vision/people.functions";
 import {
   buildMidTermClasses,
+  isBacklog,
   splitLessons,
   suggestedHours,
   tallyAll,
@@ -281,19 +282,49 @@ function ClassFlow({ catalogue }: { catalogue: Row }) {
 
 /* ========================================================== Session flow */
 
+/**
+ * One extra lesson, and the people who are coming to it.
+ *
+ * Making the lesson was the whole of this flow, which left the half that costs
+ * money undone. `createSession` seeds the roll from the class's existing
+ * enrolments, so a student already in the class turns up on it - but a student
+ * who is not, and the hours anyone is paying with, had to be arranged
+ * afterwards on other screens, and usually were not. The lesson ran, the roll
+ * was marked, and nothing was ever billed for it.
+ *
+ * So step 2 is the same process "Add a student" goes through, pointed at this
+ * one lesson: an active unpriced enrolment on the class, an hours package
+ * bought and attached before the roll is written, and a roll entry on this
+ * lesson alone. It calls addMidTermStudent, rather than reimplementing it, so
+ * the ordering that keeps a student out of Billing's "no package was ever
+ * bought" holds here too.
+ */
 function SessionFlow({ catalogue }: { catalogue: Row }) {
-  const [created, setCreated] = useState(false);
+  const [made, setMade] = useState<MadeSession | null>(null);
 
   return (
     <>
-      <StepCard step={1} title="The session" done={created}>
-        <SessionBuilder catalogue={catalogue} onCreated={() => setCreated(true)} />
+      <StepCard step={1} title="The session" done={!!made}>
+        <SessionBuilder catalogue={catalogue} onCreated={setMade} />
       </StepCard>
 
-      {created && (
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => setCreated(false)}>
+      <StepCard
+        step={2}
+        title="Who's coming, and how they're billed"
+        done={false}
+        locked={!made}
+        optional
+      >
+        {made && <SessionStudents session={made} onDone={() => setMade(null)} />}
+      </StepCard>
+
+      {made && (
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="outline" onClick={() => setMade(null)}>
             Add another session
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/billing">Open Billing</Link>
           </Button>
           <Button asChild>
             <Link to="/timetable">See it on the timetable</Link>
@@ -304,7 +335,214 @@ function SessionFlow({ catalogue }: { catalogue: Row }) {
   );
 }
 
-function SessionBuilder({ catalogue, onCreated }: { catalogue: Row; onCreated: () => void }) {
+/** The lesson step 2 attaches people to. */
+interface MadeSession {
+  id: string;
+  code: string | null;
+  class_offering_id: string;
+  /** Sydney date, which decides whether attending it is already history. */
+  session_date: string;
+  duration_hours: number;
+  className: string;
+}
+
+/**
+ * Put students on this one lesson, with the hours they are paying with.
+ *
+ * Everyone added in one pass shares a plan, because that is what is being
+ * agreed in the moment - and on Hours each student still gets their own
+ * package, since hours belong to a family rather than to a lesson. The
+ * suggestion is the lesson's own length, which is what one student sitting in
+ * it actually consumes.
+ */
+function SessionStudents({ session, onDone }: { session: MadeSession; onDone: () => void }) {
+  const add = useServerFn(addMidTermStudent);
+  const queryClient = useQueryClient();
+  const { data: students } = useQuery({ queryKey: ["students"], queryFn: () => listStudents() });
+
+  const [picked, setPicked] = useState<string[]>([]);
+  const [plan, setPlan] = useState<"hours" | "payg">("hours");
+  const [hours, setHours] = useState(() => String(Math.ceil(session.duration_hours * 2) / 2 || 1));
+  const [busy, setBusy] = useState(false);
+  const [added, setAdded] = useState<string[]>([]);
+
+  const today = sydToday();
+  // A lesson put in for a date already gone is one that has been taught, so the
+  // roll goes on marked and bills - the same rule the class builder's backlog
+  // uses, read from the same function rather than restated here.
+  const alreadyTaught = isBacklog({ session_date: session.session_date }, today);
+
+  const roster = (students ?? []).filter((s: Row) => !added.includes(s.id));
+  const chosen = (students ?? []).filter((s: Row) => picked.includes(s.id));
+
+  async function submit() {
+    if (!picked.length) return;
+    setBusy(true);
+    try {
+      for (const id of picked) {
+        await add({
+          data: {
+            student_id: id,
+            method: plan,
+            hours: plan === "hours" ? Number(hours) || 0 : 0,
+            classes: [
+              {
+                class_offering_id: session.class_offering_id,
+                session_ids: alreadyTaught ? [] : [session.id],
+                attended_session_ids: alreadyTaught ? [session.id] : [],
+                new_sessions: [],
+              },
+            ],
+          },
+        });
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["roll"] }),
+        queryClient.invalidateQueries({ queryKey: ["timetable"] }),
+        queryClient.invalidateQueries({ queryKey: ["today"] }),
+        queryClient.invalidateQueries({ queryKey: ["billing"] }),
+        queryClient.invalidateQueries({ queryKey: ["billing-audit"] }),
+        queryClient.invalidateQueries({ queryKey: ["enrolments"] }),
+      ]);
+      setAdded((a) => [...a, ...picked]);
+      setPicked([]);
+      toast.success(
+        `${chosen.length} ${chosen.length === 1 ? "student is" : "students are"} on this lesson and in Billing.`,
+      );
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Students already enrolled in{" "}
+        <span className="font-medium text-foreground">{session.className}</span> are on this roll
+        already. Add anyone else here and they get an enrolment, their hours, and a place in Billing
+        - the same as the class builder&apos;s Add a student.
+      </p>
+
+      <div className="space-y-1.5">
+        <Label>Who&apos;s coming</Label>
+        <Select value="none" onValueChange={(v) => v !== "none" && setPicked((p) => [...p, v])}>
+          <SelectTrigger>
+            <SelectValue placeholder="Add a student to this lesson…" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Add a student to this lesson…</SelectItem>
+            {roster
+              .filter((s: Row) => !picked.includes(s.id))
+              .map((s: Row) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.full_name}
+                  {s.year_level ? ` · ${s.year_level}` : ""}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {chosen.length > 0 && (
+        <ul className="space-y-1">
+          {chosen.map((s: Row) => (
+            <li
+              key={s.id}
+              className="flex items-center gap-2 rounded-lg border border-[var(--edge)] bg-[var(--mat-thin)] px-3 py-2 text-sm"
+            >
+              <span className="min-w-0 flex-1 truncate font-medium">{s.full_name}</span>
+              {alreadyTaught && (
+                <span className="shrink-0 rounded-full bg-warning/15 px-2 py-0.5 text-[0.7rem] font-medium text-warning-foreground">
+                  marked as taught
+                </span>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2"
+                onClick={() => setPicked((p) => p.filter((x) => x !== s.id))}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label>Plan</Label>
+          <Select value={plan} onValueChange={(v: "hours" | "payg") => setPlan(v)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="hours">Hours — a prepaid block</SelectItem>
+              <SelectItem value="payg">PAYG — pay per lesson</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {plan === "hours" && (
+          <div className="space-y-1.5">
+            <Label>Hours each of them is paying for</Label>
+            <Input
+              type="number"
+              min="0"
+              step="0.5"
+              value={hours}
+              onChange={(e) => setHours(e.target.value)}
+            />
+          </div>
+        )}
+      </div>
+
+      <p className="rounded-md bg-[var(--mat-thin)] px-3 py-2 text-sm text-muted-foreground">
+        {plan === "hours" ? (
+          <>
+            Each of them gets a package of{" "}
+            <span className="font-medium text-foreground">{formatHours(Number(hours) || 0)}</span>,
+            attached to this class before the roll is written, so the lesson draws from it. Billing
+            shows the package with the price left empty for you to set.
+          </>
+        ) : (
+          <>Each attended lesson lands in Billing to charge, with no price set until you firm it.</>
+        )}
+        {alreadyTaught && " This lesson is in the past, so they go on marked as having attended."}
+      </p>
+
+      {added.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {added.length} {added.length === 1 ? "student" : "students"} added to this lesson so far.
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Button variant="ghost" onClick={onDone}>
+          Skip - nobody new
+        </Button>
+        <Button
+          disabled={busy || !picked.length || (plan === "hours" && Number(hours) <= 0)}
+          onClick={submit}
+        >
+          {busy
+            ? "Adding…"
+            : `Add ${picked.length || ""} ${picked.length === 1 ? "student" : "students"}`.trim()}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function SessionBuilder({
+  catalogue,
+  onCreated,
+}: {
+  catalogue: Row;
+  /** The lesson just made, so step 2 can put people on that one lesson. */
+  onCreated: (session: MadeSession) => void;
+}) {
   const addSession = useServerFn(createSession);
   const queryClient = useQueryClient();
   const { data: classes } = useQuery({
@@ -339,7 +577,7 @@ function SessionBuilder({ catalogue, onCreated }: { catalogue: Row; onCreated: (
       const endsAt = new Date(
         Date.parse(startsAt) + (Number(length) || 1.5) * 3_600_000,
       ).toISOString();
-      await addSession({
+      const row = await addSession({
         data: {
           class_offering_id: classId,
           tutor_id: tutorId || null,
@@ -352,9 +590,16 @@ function SessionBuilder({ catalogue, onCreated }: { catalogue: Row; onCreated: (
       await queryClient.invalidateQueries({ queryKey: ["timetable"] });
       await queryClient.invalidateQueries({ queryKey: ["roll"] });
       await queryClient.invalidateQueries({ queryKey: ["today"] });
-      toast.success("One-off session created - it is on the timetable.");
+      toast.success("Lesson created - it is on the timetable. Now say who's coming.");
       setWhenLocal("");
-      onCreated();
+      onCreated({
+        id: row.id as string,
+        code: (row.code as string | null) ?? null,
+        class_offering_id: classId,
+        session_date: sydDate(startsAt),
+        duration_hours: Number(length) || 1.5,
+        className: chosen?.programs?.name ?? chosen?.code ?? "this class",
+      });
     } catch (error) {
       toast.error((error as Error).message);
     } finally {

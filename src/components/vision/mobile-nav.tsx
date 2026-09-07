@@ -1,6 +1,6 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LogOut, Menu, X } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -23,8 +23,17 @@ import visionLogo from "@/assets/vision-logo.png.asset.json";
  * hang off the header button, carry the account row and sign-out, and stay in
  * the app's own material.
  */
+/** Matches --dur-base, the exit both `.scrim` and `.materialize-surface` use. */
+const EXIT_MS = 220;
+
 export function MobileNav({ role, name }: { role: StaffRole; name: string }) {
   const [open, setOpen] = useState(false);
+  // Kept mounted through the exit so the panel blurs back out the way a dialog
+  // does. Without it the menu simply stopped existing mid-tap - the one motion
+  // on a phone nobody could miss, since every other surface in the app
+  // materialises in and dissolves out.
+  const [closing, setClosing] = useState(false);
+  const exitTimer = useRef<number | null>(null);
   const navigate = useNavigate();
   const currentPath = useRouterState({ select: (r) => r.location.pathname });
 
@@ -34,17 +43,43 @@ export function MobileNav({ role, name }: { role: StaffRole; name: string }) {
     refetchInterval: 120_000,
   });
 
+  /**
+   * Dismiss with the exit animation, then unmount.
+   *
+   * The delay matches --dur-base, which is what `.scrim` and
+   * `.materialize-surface` use for their closed state. The timer is held so a
+   * second tap during the exit cannot strand a panel mid-dissolve.
+   */
+  const close = useCallback(() => {
+    setClosing(true);
+    if (exitTimer.current) window.clearTimeout(exitTimer.current);
+    exitTimer.current = window.setTimeout(() => {
+      setOpen(false);
+      setClosing(false);
+      exitTimer.current = null;
+    }, EXIT_MS);
+  }, []);
+
   // Navigating closes the menu - tapping a section should land you on it, not
-  // leave the panel sitting over the page you asked for.
+  // leave the panel sitting over the page you asked for. Straight to closed
+  // rather than through the exit: the page underneath is already changing, and
+  // a panel dissolving over it reads as lag rather than as grace.
   useEffect(() => {
     setOpen(false);
+    setClosing(false);
   }, [currentPath]);
+
+  useEffect(() => {
+    return () => {
+      if (exitTimer.current) window.clearTimeout(exitTimer.current);
+    };
+  }, []);
 
   // Escape closes it, and the page behind it does not scroll while it is open.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") close();
     };
     window.addEventListener("keydown", onKey);
     const previous = document.body.style.overflow;
@@ -66,7 +101,7 @@ export function MobileNav({ role, name }: { role: StaffRole; name: string }) {
     <>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => (open ? close() : setOpen(true))}
         aria-expanded={open}
         aria-label={open ? "Close menu" : "Open menu"}
         className="focus-spatial press relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--mat-thick)] shadow-[inset_0_1px_0_0_var(--edge-top)] lg:hidden"
@@ -88,8 +123,9 @@ export function MobileNav({ role, name }: { role: StaffRole; name: string }) {
             type="button"
             aria-hidden
             tabIndex={-1}
-            onClick={() => setOpen(false)}
-            className="fixed inset-0 z-40 cursor-default bg-black/50 backdrop-blur-[3px] lg:hidden"
+            onClick={close}
+            data-state={closing ? "closed" : "open"}
+            className="scrim fixed inset-0 z-40 cursor-default bg-black/50 backdrop-blur-[3px] lg:hidden"
           />
 
           <nav
@@ -99,7 +135,8 @@ export function MobileNav({ role, name }: { role: StaffRole; name: string }) {
             // below that. The gap is deliberate - the two are separate
             // surfaces - and it only reads as one now the header sits above
             // the scrim rather than being dimmed by it.
-            className="ornament ornament--panel animate-materialize fixed inset-x-3 top-[4.75rem] z-50 max-h-[calc(100dvh-5.75rem)] overflow-y-auto overscroll-contain rounded-[1.75rem] p-3 lg:hidden"
+            data-state={closing ? "closed" : "open"}
+            className="ornament ornament--panel materialize-surface fixed inset-x-3.5 top-[4.75rem] z-50 max-h-[calc(100dvh-5.75rem)] overflow-y-auto overscroll-contain rounded-[1.75rem] p-3 lg:hidden"
           >
             <div className="mb-2 flex items-center gap-2.5 px-1.5 pb-2">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-white via-[#FBF7F0] to-[#EDE6DA] shadow-[inset_0_1px_0_0_var(--edge-top)]">
@@ -136,8 +173,8 @@ export function MobileNav({ role, name }: { role: StaffRole; name: string }) {
                         <Link
                           to={item.url}
                           data-active={active}
-                          onClick={() => setOpen(false)}
-                          className="ornament-item focus-spatial flex min-h-12 items-center gap-3 px-3 py-2"
+                          onClick={close}
+                          className="ornament-item focus-spatial press flex min-h-12 items-center gap-3 px-3 py-2"
                         >
                           <item.icon
                             className={cn(
@@ -170,7 +207,7 @@ export function MobileNav({ role, name }: { role: StaffRole; name: string }) {
             <button
               type="button"
               onClick={handleSignOut}
-              className="ornament-item focus-spatial mt-1 flex min-h-12 w-full items-center gap-3 px-3 py-2"
+              className="ornament-item focus-spatial press mt-1 flex min-h-12 w-full items-center gap-3 px-3 py-2"
             >
               <LogOut className="h-5 w-5 shrink-0 text-foreground/70" strokeWidth={1.7} />
               <span className="text-[0.92rem] text-foreground/85">Sign out</span>

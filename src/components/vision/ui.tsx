@@ -73,7 +73,11 @@ export function Section({
     <Glass
       material="regular"
       className={cn(
-        "p-4 sm:p-6",
+        // p-5 rather than p-4: it widens the margin text is read against on a
+        // phone, and it matches StatCard, which was already p-5 - two cards
+        // side by side with different insets is the kind of half-millimetre
+        // that reads as untidy without anyone being able to say why.
+        "p-5 sm:p-6",
         // A tone is a hint, not an alarm. A full-strength amber outline around
         // a whole card reads as an error state; a soft edge with a trace of
         // warmth in the surface says "worth a look" without shouting.

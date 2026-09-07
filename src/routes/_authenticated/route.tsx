@@ -117,7 +117,11 @@ function AuthenticatedLayout() {
         // From lg up the page makes room for the rail rather than being covered
         // by it. Below that there is no rail at all, so the pane keeps only the
         // small gutter every phone layout wants.
-        "min-h-screen px-3 transition-[padding] duration-[320ms] lg:pr-5",
+        // The gutter, and with the card padding below it the left margin every
+        // line of text on a phone is read against: 0.875rem here plus 1.25rem
+        // inside a card is 34px, where it was 28. Text set hard against a
+        // phone's edge reads as cramped however good the type is.
+        "min-h-screen px-3.5 transition-[padding] duration-[320ms] lg:pr-5",
         navExpanded ? "lg:pl-[17.25rem]" : "lg:pl-[6.25rem]",
       )}
     >
