@@ -449,15 +449,3 @@ function EditAccountDialog({
     </Dialog>
   );
 }
-
-function Unused() {
-  return (
-    <div>
-      <p>
-          Deactivating is a switch, never a delete - deleting the row would lose the audit trail on
-          per-lesson pay adjustments. A role change takes effect on the person's next request.
-        </p>
-      </Section>
-    </div>
-  );
-}
