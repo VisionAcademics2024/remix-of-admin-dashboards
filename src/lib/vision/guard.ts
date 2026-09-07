@@ -43,6 +43,31 @@ export const requireStaff = createMiddleware({ type: "function" })
   });
 
 /**
+ * The two roles that run the schedule: owner and admin.
+ *
+ * `requireStaff` asks only for an active staff row, so a tutor passes it. That
+ * was enough while every role could write, and stopped being enough when the
+ * tutor access migration narrowed `is_staff()` to owner-or-admin: a tutor's
+ * update now matches no rows under RLS and comes back as a success that
+ * changed nothing. Silence is the worst possible answer, so the API refuses
+ * here instead and says why.
+ *
+ * The same line is drawn in `lessonPermissions` for the screen, so a tutor is
+ * never shown the button in the first place.
+ */
+export const requireManager = createMiddleware({ type: "function" })
+  .middleware([requireStaff])
+  .server(async ({ next, context }) => {
+    if (context.staff.role !== "owner" && context.staff.role !== "admin") {
+      throw new Error(
+        "Forbidden: moving, rescheduling and cancelling lessons is for owners and admins. " +
+          "A tutor can mark the roll and write the lesson notes.",
+      );
+    }
+    return next();
+  });
+
+/**
  * Pay, for the person it belongs to.
  *
  * An owner sees everyone's; a tutor sees their own and nobody else's. An admin

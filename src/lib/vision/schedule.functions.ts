@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { withPendingSync } from "./gcal";
-import { db, requireStaff } from "./guard";
+import { db, requireManager, requireStaff } from "./guard";
 
 import {
   assertReschedulable,
@@ -297,7 +297,7 @@ const sessionPatch = z.object({
  * unmarked, same row, same id) cannot be bypassed by sending starts_at here.
  */
 export const updateSession = createServerFn({ method: "POST" })
-  .middleware([requireStaff])
+  .middleware([requireManager])
   .inputValidator((data) => sessionPatch.parse(data))
   .handler(async ({ context, data }) => {
     const { id, ...patch } = data;
@@ -307,6 +307,35 @@ export const updateSession = createServerFn({ method: "POST" })
         .map(([k, v]) => [k, v === "" ? null : v]),
     );
     const { error } = await db(context.supabase).from("sessions").update(payload).eq("id", id);
+    if (error) throw error;
+    return { success: true };
+  });
+
+/**
+ * The lesson's notes, which a tutor may write and nobody else needs to approve.
+ *
+ * Separate from updateSession because the callers are different people with
+ * different rights: updateSession carries the tutor, the room and the status
+ * and is manager-only, while this carries one column and is open to the tutor
+ * teaching the lesson. It goes through set_session_notes rather than a plain
+ * update, because a tutor has no UPDATE on sessions at all - the function is
+ * SECURITY DEFINER and asks the same two questions RLS would.
+ */
+export const saveSessionNotes = createServerFn({ method: "POST" })
+  .middleware([requireStaff])
+  .inputValidator((data) =>
+    z
+      .object({
+        id: z.string().uuid(),
+        notes: z.string().max(4000, "That is longer than a lesson note needs to be.").default(""),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const { error } = await db(context.supabase).rpc("set_session_notes", {
+      p_session_id: data.id,
+      p_notes: data.notes,
+    });
     if (error) throw error;
     return { success: true };
   });
@@ -329,7 +358,7 @@ export const updateSession = createServerFn({ method: "POST" })
  * first memory. `session_date` is derived in the view from the new starts_at.
  */
 export const rescheduleSession = createServerFn({ method: "POST" })
-  .middleware([requireStaff])
+  .middleware([requireManager])
   .inputValidator((data) =>
     z
       .object({
@@ -395,7 +424,7 @@ export const rescheduleSession = createServerFn({ method: "POST" })
 
 /** Cancelling preserves the roll. Cancelled lessons pay nobody and consume nothing. */
 export const cancelSession = createServerFn({ method: "POST" })
-  .middleware([requireStaff])
+  .middleware([requireManager])
   .inputValidator((data) =>
     z.object({ id: z.string().uuid(), notes: z.string().optional().or(z.literal("")) }).parse(data),
   )
@@ -416,7 +445,7 @@ export const cancelSession = createServerFn({ method: "POST" })
  * keeps the history intact. There is no force option, by design.
  */
 export const deleteSession = createServerFn({ method: "POST" })
-  .middleware([requireStaff])
+  .middleware([requireManager])
   .inputValidator((data) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ context, data }) => {
     const client = db(context.supabase);
@@ -439,7 +468,7 @@ export const deleteSession = createServerFn({ method: "POST" })
 
 /** A one-off lesson added by hand, seeded straight away. */
 export const createSession = createServerFn({ method: "POST" })
-  .middleware([requireStaff])
+  .middleware([requireManager])
   .inputValidator((data) =>
     z
       .object({
@@ -510,7 +539,7 @@ export const getSessionRoll = createServerFn({ method: "GET" })
 
 /** Seeding is idempotent, so this is safe to offer as a button on every lesson. */
 export const seedRoll = createServerFn({ method: "POST" })
-  .middleware([requireStaff])
+  .middleware([requireManager])
   .inputValidator((data) => z.object({ session_id: z.string().uuid() }).parse(data))
   .handler(async ({ context, data }) => {
     const { data: created, error } = await db(context.supabase).rpc("seed_roll", {

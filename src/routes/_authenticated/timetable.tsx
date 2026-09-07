@@ -54,6 +54,8 @@ import {
   toCalendarEvent,
 } from "@/components/vision/calendar";
 import { cn } from "@/lib/utils";
+import { meQueryOptions } from "@/lib/vision/me";
+import { lessonPermissions, type LessonPermissions } from "@/lib/vision/tutor-access";
 import {
   addDays,
   formatDay,
@@ -72,6 +74,7 @@ import {
   getSessionRoll,
   listRange,
   rescheduleSession,
+  saveSessionNotes,
   seedRoll,
   updateSession,
 } from "@/lib/vision/schedule.functions";
@@ -174,6 +177,13 @@ const VIEWS: Array<{ key: View; label: string }> = [
 ];
 
 function TimetablePage() {
+  // Who is looking decides what this page offers. A tutor reads the calendar
+  // and marks their own roll; moving a class is the office's job, and the
+  // database refuses it anyway - so the grid is handed no onMove at all rather
+  // than letting a drag travel to the server and quietly change nothing.
+  const { data: me } = useQuery(meQueryOptions());
+  const may = lessonPermissions(me?.staff?.role);
+
   const [view, setView] = useState<View>("week");
   const [anchor, setAnchor] = useState(() => sydToday());
   const [tutorId, setTutorId] = useState<string | null>(null);
@@ -368,8 +378,10 @@ function TimetablePage() {
           `text-xs` all but disappeared against the backdrop. */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[0.8rem] leading-relaxed text-foreground/80">
         <span>
-          Coloured by tutor · all times Sydney · drag a lesson to move it, drag its edge to stretch
-          it, click it to open
+          Coloured by tutor · all times Sydney ·{" "}
+          {may.reschedule
+            ? "drag a lesson to move it, drag its edge to stretch it, click it to open · on a phone, hold a lesson for two seconds to start rearranging"
+            : "tap a lesson to open it, mark the roll and write up what happened"}
           {sessions.length > 0 &&
             ` · ${sessions.length} ${sessions.length === 1 ? "lesson" : "lessons"}`}
         </span>
@@ -418,7 +430,7 @@ function TimetablePage() {
           days={gridDays}
           events={events}
           onSelect={setEditing}
-          onMove={moveLesson}
+          {...(may.reschedule ? { onMove: moveLesson } : {})}
           hourHeight={hourHeight}
         />
       )}
@@ -427,6 +439,7 @@ function TimetablePage() {
         <SessionDialog
           session={editing}
           tutors={catalogue?.tutors ?? []}
+          may={may}
           onClose={() => setEditing(null)}
         />
       )}
@@ -437,14 +450,18 @@ function TimetablePage() {
 function SessionDialog({
   session,
   tutors,
+  may,
   onClose,
 }: {
   session: Row;
   tutors: Row[];
+  /** What this viewer's role lets them do to a lesson. */
+  may: LessonPermissions;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
   const update = useServerFn(updateSession);
+  const saveNotes = useServerFn(saveSessionNotes);
   const reschedule = useServerFn(rescheduleSession);
   const sync = useServerFn(syncSessionToGoogle);
   const cancel = useServerFn(cancelSession);
@@ -469,6 +486,28 @@ function SessionDialog({
       queryClient.invalidateQueries({ queryKey: ["session-roll", session.id] }),
       queryClient.invalidateQueries({ queryKey: ["needs-attention-count"] }),
     ]);
+  }
+
+  /**
+   * The write a tutor is allowed to make: what happened in the lesson.
+   *
+   * Its own path, not a narrowed saveDetails, because it goes somewhere else -
+   * a function that checks the tutor teaches this lesson - and because sharing
+   * the handler is how a "just hide the fields" version of this ends up
+   * sending a tutor_id of null the moment the form is edited.
+   */
+  async function saveNotesOnly() {
+    setBusy(true);
+    try {
+      await saveNotes({ data: { id: session.id, notes } });
+      toast.success("Notes saved.");
+      await invalidate();
+      onClose();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function saveDetails() {
@@ -535,57 +574,92 @@ function SessionDialog({
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as "details" | "roll")}>
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="details">Time, tutor & room</TabsTrigger>
+            <TabsTrigger value="details">
+              {may.manage ? "Time, tutor & room" : "Lesson & notes"}
+            </TabsTrigger>
             <TabsTrigger value="roll">Roll & make-up</TabsTrigger>
           </TabsList>
 
           <TabsContent value="details" className="space-y-3 pt-3">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="start">Starts (Sydney)</Label>
-                <Input
-                  id="start"
-                  type="datetime-local"
-                  value={start}
-                  onChange={(e) => setStart(e.target.value)}
-                />
+            {/* A tutor sees the lesson's facts and cannot change them. Read-only
+                text rather than disabled inputs: a greyed-out field still reads
+                as "you could edit this if something were different", and none
+                of these will ever be editable from this account. */}
+            {!may.reschedule && (
+              <div className="grid gap-2 rounded-lg border border-[var(--edge)] bg-[var(--mat-thin)] p-3 text-sm sm:grid-cols-2">
+                <div>
+                  <p className="text-xs text-muted-foreground">When</p>
+                  <p className="font-medium">
+                    {formatDay(session.starts_at)} · {formatTime(session.starts_at)}–
+                    {formatTime(session.ends_at)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Tutor &amp; room</p>
+                  <p className="font-medium">
+                    {tutors.find((t) => t.id === session.tutor_id)?.full_name ?? "Unassigned"}
+                    {session.room ? ` · ${session.room}` : ""}
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground sm:col-span-2">
+                  Times, tutor and room are set by the office. Mark the roll on the next tab, and
+                  write up the lesson below.
+                </p>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="end">Ends (Sydney)</Label>
-                <Input
-                  id="end"
-                  type="datetime-local"
-                  value={end}
-                  onChange={(e) => setEnd(e.target.value)}
-                />
+            )}
+
+            {may.reschedule && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="start">Starts (Sydney)</Label>
+                  <Input
+                    id="start"
+                    type="datetime-local"
+                    value={start}
+                    onChange={(e) => setStart(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="end">Ends (Sydney)</Label>
+                  <Input
+                    id="end"
+                    type="datetime-local"
+                    value={end}
+                    onChange={(e) => setEnd(e.target.value)}
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="space-y-1.5">
-              <Label>Tutor for this lesson</Label>
-              <Select value={tutor} onValueChange={setTutor}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Unassigned</SelectItem>
-                  {tutors.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.full_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                A lesson's tutor is its own - changing it here is how cover works, and it is what
-                tutor pay counts.
-              </p>
-            </div>
+            {may.manage && (
+              <div className="space-y-1.5">
+                <Label>Tutor for this lesson</Label>
+                <Select value={tutor} onValueChange={setTutor}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Unassigned</SelectItem>
+                    {tutors.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  A lesson's tutor is its own - changing it here is how cover works, and it is what
+                  tutor pay counts.
+                </p>
+              </div>
+            )}
 
-            <div className="space-y-1.5">
-              <Label htmlFor="room">Room</Label>
-              <Input id="room" value={room} onChange={(e) => setRoom(e.target.value)} />
-            </div>
+            {may.manage && (
+              <div className="space-y-1.5">
+                <Label htmlFor="room">Room</Label>
+                <Input id="room" value={room} onChange={(e) => setRoom(e.target.value)} />
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="notes">Notes</Label>
@@ -597,93 +671,97 @@ function SessionDialog({
               />
             </div>
 
-            <GoogleSyncRow session={session} onSynced={invalidate} />
+            {may.manage && <GoogleSyncRow session={session} onSynced={invalidate} />}
 
             <DialogFooter className="flex-col gap-2 pt-1 sm:flex-row sm:justify-between">
               <div className="flex gap-2">
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="outline" className="text-destructive">
-                      Cancel lesson
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Cancel this lesson?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Cancelling keeps the roll and the history. Nobody is paid for it and
-                        nobody's hours are consumed. This is almost always what you want.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Keep it</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={async () => {
-                          await cancel({ data: { id: session.id, notes } });
-                          toast.success("Lesson cancelled.");
-                          await invalidate();
-                          onClose();
-                        }}
-                      >
+                {may.manage && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" className="text-destructive">
                         Cancel lesson
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground"
-                      disabled={session.roll_total > 0}
-                      title={
-                        session.roll_total > 0
-                          ? "This lesson has a roll - cancel it instead, which keeps the record."
-                          : undefined
-                      }
-                    >
-                      Delete
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Delete this lesson permanently?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        The lesson is removed for good. It has no roll, so no attendance record is
-                        affected. A lesson with a roll can only be cancelled.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Keep it</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={async () => {
-                          try {
-                            await remove({ data: { id: session.id } });
-                            toast.success("Lesson deleted.");
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Cancel this lesson?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Cancelling keeps the roll and the history. Nobody is paid for it and
+                          nobody's hours are consumed. This is almost always what you want.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Keep it</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={async () => {
+                            await cancel({ data: { id: session.id, notes } });
+                            toast.success("Lesson cancelled.");
                             await invalidate();
                             onClose();
-                          } catch (error) {
-                            toast.error((error as Error).message);
-                          }
-                        }}
+                          }}
+                        >
+                          Cancel lesson
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+
+                {may.manage && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground"
+                        disabled={session.roll_total > 0}
+                        title={
+                          session.roll_total > 0
+                            ? "This lesson has a roll - cancel it instead, which keeps the record."
+                            : undefined
+                        }
                       >
-                        Delete lesson
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                        Delete
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete this lesson permanently?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          The lesson is removed for good. It has no roll, so no attendance record is
+                          affected. A lesson with a roll can only be cancelled.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Keep it</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={async () => {
+                            try {
+                              await remove({ data: { id: session.id } });
+                              toast.success("Lesson deleted.");
+                              await invalidate();
+                              onClose();
+                            } catch (error) {
+                              toast.error((error as Error).message);
+                            }
+                          }}
+                        >
+                          Delete lesson
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
               </div>
 
-              <Button onClick={saveDetails} disabled={busy}>
-                Save changes
+              <Button onClick={may.manage ? saveDetails : saveNotesOnly} disabled={busy}>
+                {may.manage ? "Save changes" : "Save notes"}
               </Button>
             </DialogFooter>
           </TabsContent>
 
           <TabsContent value="roll" className="pt-3">
-            <LessonRollPanel session={session} tutors={tutors} onChanged={invalidate} />
+            <LessonRollPanel session={session} tutors={tutors} may={may} onChanged={invalidate} />
           </TabsContent>
         </Tabs>
       </DialogContent>
@@ -700,10 +778,12 @@ function SessionDialog({
 function LessonRollPanel({
   session,
   tutors,
+  may,
   onChanged,
 }: {
   session: Row;
   tutors: Row[];
+  may: LessonPermissions;
   onChanged: () => Promise<void>;
 }) {
   const mark = useServerFn(markAttendance);
@@ -820,7 +900,9 @@ function LessonRollPanel({
         >
           Seed the roll
         </Button>
-        <AddStudentRow session={session} enrolledIds={new Set()} onChanged={onChanged} />
+        {may.manage && (
+          <AddStudentRow session={session} enrolledIds={new Set()} onChanged={onChanged} />
+        )}
       </div>
     );
   }
@@ -912,13 +994,17 @@ function LessonRollPanel({
 
       {trialBlock}
 
-      <AddStudentRow
-        session={session}
-        enrolledIds={new Set(roll.map((r) => r.enrolments?.students?.id).filter(Boolean))}
-        onChanged={onChanged}
-      />
+      {may.manage && (
+        <AddStudentRow
+          session={session}
+          enrolledIds={new Set(roll.map((r) => r.enrolments?.students?.id).filter(Boolean))}
+          onChanged={onChanged}
+        />
+      )}
 
-      <RescheduleClassForm session={session} tutors={tutors} onChanged={onChanged} />
+      {may.reschedule && (
+        <RescheduleClassForm session={session} tutors={tutors} onChanged={onChanged} />
+      )}
     </div>
   );
 }

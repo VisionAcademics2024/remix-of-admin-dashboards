@@ -947,3 +947,34 @@
     background-color: var(--mat-solid);
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Rearrange mode on the timetable.
+ *
+ * A phone gives no cursor and no hover, so when a long press unlocks dragging
+ * there is nothing to say so. The blocks wobble instead - the same signal the
+ * home screen has used for fifteen years, and one nobody needs taught.
+ *
+ * Small on purpose: a quarter of a degree either way reads as "loose" at a
+ * glance without turning a week of lessons into a disco.
+ * ------------------------------------------------------------------------ */
+@keyframes calendar-armed-wobble {
+  0%,
+  100% {
+    transform: rotate(-0.35deg);
+  }
+  50% {
+    transform: rotate(0.35deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .calendar-armed {
+    animation: calendar-armed-wobble 0.28s ease-in-out infinite;
+  }
+}
+
+/* Reduced motion still needs to know the mode is on; it gets the ring alone. */
+.calendar-armed {
+  box-shadow: 0 0 0 2px var(--color-primary);
+}
