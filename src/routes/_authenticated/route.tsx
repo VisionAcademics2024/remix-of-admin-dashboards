@@ -132,7 +132,13 @@ function AuthenticatedLayout() {
           dissolves into, instead of being sliced by the pill's border. */}
       <div className="scroll-edge" aria-hidden />
 
-      <header className="glass glass--thick animate-materialize sticky top-3 z-30 mt-3 flex h-14 items-center gap-2 rounded-full px-3 sm:gap-3 sm:px-4">
+      {/* Above the phone menu's scrim, not under it. At z-30 the scrim (z-40)
+          fell across the header while the menu was open, so the pill sat there
+          greyed out with the panel bright beneath it - two dimmed rectangles
+          and one lit one, which is what made that screen look broken. The
+          header carries the button that closes the menu, so it has to stay
+          legible and part of the same stack. */}
+      <header className="glass glass--thick animate-materialize sticky top-3 z-50 mt-3 flex h-14 items-center gap-2 rounded-full px-3 sm:gap-3 sm:px-4">
         {/* On a phone the header says where you are, since the rail that used to
             say so is behind the menu button. */}
         <span className="min-w-0 truncate text-[0.9rem] font-semibold tracking-[-0.01em] lg:hidden">

@@ -166,7 +166,10 @@ function StudentDetailPage() {
         </Section>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Two across on a phone. A stat row stacked full-width pushes the page's
+          actual content below the fold, and these figures are sized for a
+          half-width card already. */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
           label="Hours remaining"
           value={formatHours(hoursRemaining)}

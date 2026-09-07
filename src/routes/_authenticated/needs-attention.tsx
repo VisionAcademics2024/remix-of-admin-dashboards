@@ -70,7 +70,7 @@ function NeedsAttentionPage() {
             title={ENTITY_LABEL[entity as NeedsAttentionRow["entity"]] ?? entity}
             count={list.length}
           >
-            <TableShell>
+            <TableShell narrow>
               <thead>
                 <tr>
                   <Th>Code</Th>

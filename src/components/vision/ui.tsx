@@ -404,12 +404,32 @@ export function WarningNote({ children }: { children: ReactNode }) {
  * Tables sit on their own near-opaque surface. This is the deliberate
  * exception to the glass rule - see the note at the top of this file.
  */
-export function TableShell({ children }: { children: ReactNode }) {
+/**
+ * A table on glass, and how narrow it is allowed to get.
+ *
+ * The minimum is what decides whether a phone has to drag sideways to read the
+ * last column, so it is the caller's to state rather than one number for every
+ * table in the app. 36rem suits the eight-column histories it was written for
+ * and forces a drag on a three-column list that would have fitted the screen
+ * outright - which is the wrong trade on the page people read one-handed.
+ *
+ * `narrow` is for tables of three or four columns: they fit a phone, so they
+ * simply fit. Anything wider keeps the default and earns its own scroller,
+ * which is still better than columns squeezed past reading.
+ */
+export function TableShell({
+  children,
+  narrow,
+}: {
+  children: ReactNode;
+  /** Three or four columns that fit a phone without being dragged. */
+  narrow?: boolean | undefined;
+}) {
   return (
     <div className="glass glass--solid scroll-x rounded-2xl">
-      {/* min-w keeps the columns readable rather than letting them squeeze to
-          nothing; the shell scrolls sideways instead. */}
-      <table className="table-zebra w-full min-w-[36rem] text-sm">{children}</table>
+      <table className={cn("table-zebra w-full text-sm", narrow ? "min-w-0" : "min-w-[36rem]")}>
+        {children}
+      </table>
     </div>
   );
 }
