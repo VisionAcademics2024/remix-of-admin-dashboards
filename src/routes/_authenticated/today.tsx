@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { queryOptions, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
@@ -48,12 +48,38 @@ import { markAttendance } from "@/lib/vision/roll.functions";
 import type { Row } from "@/lib/vision/types";
 
 const todayQueryOptions = (date: string) =>
-  queryOptions({ queryKey: ["today", date], queryFn: () => getToday({ data: { date } }) });
+  queryOptions({
+    queryKey: ["today", date],
+    // A dropped or interrupted request can resolve with nothing at all. React
+    // Query treats an undefined result as a crash ("data is undefined") and the
+    // page blanks, so turn it into a plain, retryable failure instead.
+    queryFn: async () => {
+      const board = await getToday({ data: { date } });
+      if (!board) throw new Error("Today could not be loaded. Please try again.");
+      return board;
+    },
+    retry: 1,
+  });
 
 export const Route = createFileRoute("/_authenticated/today")({
   loader: ({ context }) => context.queryClient.ensureQueryData(todayQueryOptions(sydToday())),
   component: TodayPage,
+  errorComponent: ({ error }) => <TodayError message={error.message} />,
+  notFoundComponent: () => <TodayError message="Today could not be loaded." />,
 });
+
+function TodayError({ message }: { message: string }) {
+  const router = useRouter();
+  return (
+    <div className="p-6">
+      <PageHeader title="Today" description={message} />
+      <Button className="mt-4" onClick={() => router.invalidate()}>
+        Try again
+      </Button>
+    </div>
+  );
+}
+
 
 function TodayPage() {
   const today = sydToday();
