@@ -87,11 +87,30 @@ export function MobileNav({ role, name }: { role: StaffRole; name: string }) {
       if (e.key === "Escape") close();
     };
     window.addEventListener("keydown", onKey);
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+
+    /*
+     * Lock the element that actually scrolls, which is <html> and not <body>.
+     *
+     * This did the opposite of both things it was meant to do. `overflow` is
+     * propagated from the root to the viewport, and only from <body> when the
+     * root's own overflow is `visible` - ours is `clip`, so hiding <body>'s
+     * overflow never reached the viewport and the page went on scrolling
+     * behind the open menu.
+     *
+     * Worse, it made <body> a scroll container of its own, and a sticky
+     * element sticks to its nearest scrolling ancestor. The top bar's ancestor
+     * stopped being the viewport and became a box that does not scroll, so it
+     * stopped sticking: measured at 390x844, scrolling 800px put the header at
+     * -788 - gone off the top - while the menu stayed put. Locking the root
+     * instead holds the page still and leaves the header stuck at 12, beside
+     * the menu, which is where it belongs.
+     */
+    const root = document.documentElement;
+    const previous = root.style.overflow;
+    root.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = previous;
+      root.style.overflow = previous;
     };
   }, [open, close]);
 
