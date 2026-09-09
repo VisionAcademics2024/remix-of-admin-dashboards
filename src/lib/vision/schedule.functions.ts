@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { withPendingSync } from "./gcal";
 import { db, requireManager, requireStaff } from "./guard";
+import { mayWriteSessionNotes } from "./session-notes";
 
 import {
   assertReschedulable,
@@ -317,9 +318,20 @@ export const updateSession = createServerFn({ method: "POST" })
  * Separate from updateSession because the callers are different people with
  * different rights: updateSession carries the tutor, the room and the status
  * and is manager-only, while this carries one column and is open to the tutor
- * teaching the lesson. It goes through set_session_notes rather than a plain
- * update, because a tutor has no UPDATE on sessions at all - the function is
- * SECURITY DEFINER and asks the same two questions RLS would.
+ * teaching the lesson.
+ *
+ * It used to call a SECURITY DEFINER function, set_session_notes, because a
+ * tutor has no UPDATE on sessions under RLS. That function shipped in a
+ * migration, and until the migration was applied every tutor pressing Save got
+ * "Could not find the function public.set_session_notes in the schema cache" -
+ * a database error put in front of a person who cannot apply a database
+ * migration.
+ *
+ * The question it asked - is_staff() OR (is_tutor() AND teaches_session()) -
+ * now lives in `mayWriteSessionNotes`, where it ships with the app and has
+ * tests. The lesson is READ with the caller's own client, so RLS still decides
+ * what they may see; only the one-column write that follows uses the service
+ * role, and only once the check has passed.
  */
 export const saveSessionNotes = createServerFn({ method: "POST" })
   .middleware([requireStaff])
@@ -332,10 +344,31 @@ export const saveSessionNotes = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ context, data }) => {
-    const { error } = await db(context.supabase).rpc("set_session_notes", {
-      p_session_id: data.id,
-      p_notes: data.notes,
-    });
+    const client = db(context.supabase);
+
+    // Read as the caller: a tutor may select sessions, so a lesson they cannot
+    // see comes back empty here rather than being checked and refused.
+    const { data: session, error: readError } = await client
+      .from("sessions")
+      .select("id, tutor_id")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (readError) throw readError;
+    if (!session) throw new Error("That lesson no longer exists.");
+
+    if (!mayWriteSessionNotes(context.staff, session as Row)) {
+      throw new Error("Notes can be written by the office, or by the tutor teaching this lesson.");
+    }
+
+    // An empty box clears the field rather than storing an empty string, which
+    // is what updateSession already does for this same column.
+    const notes = data.notes.trim() || null;
+
+    // The elevated client, for one column of one row, after the check above.
+    // Imported here rather than at the top of the file: this module ships to
+    // the browser, and the service key must not.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.from("sessions").update({ notes }).eq("id", data.id);
     if (error) throw error;
     return { success: true };
   });
