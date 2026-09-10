@@ -493,7 +493,11 @@ function NewBillDialog({
         },
       });
       await onRefresh();
-      toast.success("Bill raised. It is in the to-invoice queue.");
+      // Where it went, by name: a manual bill carries no payment method, so it
+      // lands in Unassigned rather than in either run.
+      toast.success(
+        "Bill raised. It is in To invoice, under Unassigned - set it to cash or bank transfer to line it up for a run.",
+      );
       onClose();
     } catch (error) {
       toast.error((error as Error).message);
@@ -508,8 +512,8 @@ function NewBillDialog({
         <DialogHeader>
           <DialogTitle>New bill</DialogTitle>
           <DialogDescription>
-            A one-off charge for anything that is not a lesson or an hours package. It lands in the
-            to-invoice queue with everything else.
+            A one-off charge for anything that is not a lesson or an hours package. It lands in To
+            invoice under Unassigned, until you say whether it is cash or bank transfer.
           </DialogDescription>
         </DialogHeader>
 
@@ -1212,7 +1216,22 @@ function LessonHoursDialog({
 /* ---------------------------------------------------------- 2. To invoice (split) */
 
 function ToInvoiceBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Promise<void> }) {
-  const [tab, setTab] = useState<InvoiceRunMethod | "unassigned">("cash");
+  // A charge belongs to the run it will go out in. Anything without a method -
+  // or on one no longer offered, like an old card charge - has no run, so it
+  // waits in Unassigned until someone says how it is being paid.
+  const groups = {
+    cash: rows.filter((c) => c.method === "cash"),
+    bank_transfer: rows.filter((c) => c.method === "bank_transfer"),
+    unassigned: rows.filter((c) => !isInvoiceRunMethod(c.method)),
+  };
+
+  // Opening on Cash every time hid work: a new bill is raised with no method,
+  // so it lands in Unassigned, and the section showed "No cash charges" over a
+  // count of four. Unassigned leads when it has anything in it because those
+  // charges cannot go out at all until somebody says how they are being paid.
+  const [tab, setTab] = useState<InvoiceRunMethod | "unassigned">(() =>
+    groups.unassigned.length ? "unassigned" : groups.cash.length ? "cash" : "bank_transfer",
+  );
   const [selected, setSelected] = useState<string[]>([]);
   const [invoicing, setInvoicing] = useState<InvoiceRunMethod | null>(null);
   const [adjusting, setAdjusting] = useState<Row | null>(null);
@@ -1227,14 +1246,6 @@ function ToInvoiceBody({ rows, onRefresh }: { rows: Row[]; onRefresh: () => Prom
     );
   }
 
-  // A charge belongs to the run it will go out in. Anything without a method -
-  // or on one no longer offered, like an old card charge - has no run, so it
-  // waits in Unassigned until someone says how it is being paid.
-  const groups = {
-    cash: rows.filter((c) => c.method === "cash"),
-    bank_transfer: rows.filter((c) => c.method === "bank_transfer"),
-    unassigned: rows.filter((c) => !isInvoiceRunMethod(c.method)),
-  };
   const visible = groups[tab];
   const runLabel = tab === "unassigned" ? "unassigned" : paymentMethodLabel(tab).toLowerCase();
   const visibleIds = visible.map((c) => c.id);
