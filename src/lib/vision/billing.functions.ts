@@ -357,9 +357,17 @@ export const createManualCharge = createServerFn({ method: "POST" })
       notes: note,
     });
     if (error) {
+      // Both halves of the manual-charge migration fail right here, in order:
+      // first the enum has no 'manual' label, then the check constraint still
+      // demands a package or an attendance. One message covers both, and names
+      // the file that fixes it - "invalid input value for enum charge_source"
+      // is not something anyone can act on.
+      const migrationMissing =
+        error.message.includes("charge_one_source") ||
+        (error.message.includes("charge_source") && error.message.includes("manual"));
       throw new Error(
-        error.message.includes("charge_one_source")
-          ? "This database has not had the manual-charge migration applied yet."
+        migrationMissing
+          ? "This database cannot take a manual bill yet: it is missing the charge_source migration. Run steps 1 and 2 of supabase/apply-by-hand/2026-09-10-catch-up.sql in the Supabase SQL editor, then raise the bill again."
           : error.message,
       );
     }
