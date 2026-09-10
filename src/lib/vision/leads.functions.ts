@@ -3,7 +3,8 @@ import { z } from "zod";
 
 import { sydDate, sydToday } from "@/lib/format";
 import { db, requireStaff } from "./guard";
-import type { Row } from "./types";
+import { mayMarkRoll } from "./tutor-access";
+import type { Row, StaffRole } from "./types";
 
 const blank = z.string().optional().or(z.literal(""));
 
@@ -275,6 +276,31 @@ export const listTrialSessions = createServerFn({ method: "GET" })
   });
 
 /**
+ * What a trial row carries out of the server, by who is asking.
+ *
+ * A trial belongs to a lead, and a lead is a family's contact details - the
+ * parent's name and mobile, gathered by the office. A tutor needs none of that
+ * to tick a name off a roll, and the way to keep it from them is not to open
+ * the `leads` table to tutors but to stop selecting the columns: the tutor
+ * shape is the child's name, their year, and the lesson they are sitting in on.
+ */
+function trialRollSelect(role: StaffRole): string {
+  if (role === "tutor") {
+    return (
+      "id, status, session_id, scheduled_for, " +
+      "leads(student_name, year_level), " +
+      "sessions(starts_at, ends_at, tutor_id)"
+    );
+  }
+  return (
+    "id, code, kind, status, session_id, scheduled_for, class_offering_id, " +
+    "leads(id, code, student_name, year_level, guardian_name, guardian_mobile), " +
+    "class_offerings(code, programs(name)), " +
+    "sessions(code, starts_at, ends_at, tutor_id, tutors(full_name, colour))"
+  );
+}
+
+/**
  * Trial students to overlay on the Attendance roll. A trial has no student or
  * attendance record until conversion, so these are read straight from the
  * trials table, joined to their session and lead, and filtered to the same date
@@ -295,12 +321,7 @@ export const listTrialRoll = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const { data: rows, error } = await db(context.supabase)
       .from("trials")
-      .select(
-        "id, code, kind, status, session_id, scheduled_for, class_offering_id, " +
-          "leads(id, code, student_name, year_level, guardian_name, guardian_mobile), " +
-          "class_offerings(code, programs(name)), " +
-          "sessions(code, starts_at, ends_at, tutors(full_name, colour))",
-      )
+      .select(trialRollSelect(context.staff.role))
       .not("session_id", "is", null)
       .order("scheduled_for", { ascending: true });
     if (error) throw error;
@@ -349,10 +370,28 @@ export const setTrialStatus = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ context, data }) => {
-    const { error } = await db(context.supabase)
-      .from("trials")
-      .update({ status: data.status })
-      .eq("id", data.id);
+    const client = db(context.supabase);
+
+    // A tutor may say whether the trial student in front of them turned up, and
+    // only that one. RLS says the same, but a policy that matches no rows
+    // answers "success, nothing changed" - so the refusal is made here, in
+    // words, before the write.
+    if (context.staff.role === "tutor") {
+      const { data: trial, error: readError } = await client
+        .from("trials")
+        .select("session_id, sessions(tutor_id)")
+        .eq("id", data.id)
+        .maybeSingle();
+      if (readError) throw readError;
+      if (!trial) throw new Error("That trial is no longer booked.");
+      if (!mayMarkRoll(context.staff, { tutor_id: (trial as Row).sessions?.tutor_id ?? null })) {
+        throw new Error(
+          "Trial students are marked by the office, or by the tutor teaching that lesson.",
+        );
+      }
+    }
+
+    const { error } = await client.from("trials").update({ status: data.status }).eq("id", data.id);
     if (error) throw error;
     return { success: true };
   });

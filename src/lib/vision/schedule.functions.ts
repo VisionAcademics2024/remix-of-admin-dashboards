@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { withPendingSync } from "./gcal";
 import { db, requireManager, requireStaff } from "./guard";
-import { mayWriteSessionNotes } from "./session-notes";
+import { mayWriteSessionNotes, redactNotes } from "./session-notes";
 
 import {
   assertReschedulable,
@@ -65,11 +65,16 @@ export const listWeek = createServerFn({ method: "GET" })
       }
     }
 
-    return inWeek.map((s: Row) => ({
-      ...s,
-      roll_marked: counts.get(s.id)?.marked ?? 0,
-      roll_total: counts.get(s.id)?.total ?? 0,
-    }));
+    // A tutor reads the whole calendar, so the note on every lesson came with
+    // it. It leaves blanked on the ones they do not teach - RLS cannot mask a
+    // single column, so the read path does.
+    return inWeek.map((s: Row) =>
+      redactNotes(context.staff, {
+        ...s,
+        roll_marked: counts.get(s.id)?.marked ?? 0,
+        roll_total: counts.get(s.id)?.total ?? 0,
+      }),
+    );
   });
 
 /**
@@ -135,18 +140,20 @@ export const listRange = createServerFn({ method: "GET" })
     // the lessons already in hand and merged in here.
     const mapping = await calendarMappingBySession(client, ids);
 
-    return inRange.map((s: Row) => ({
-      ...s,
-      roll_marked: counts.get(s.id)?.marked ?? 0,
-      roll_total: counts.get(s.id)?.total ?? 0,
-      sole_student_name: soleStudent.get(s.class_offering_id) ?? null,
-      ...(mapping.get(s.id) ?? {
-        google_calendar_id: null,
-        google_event_id: null,
-        calendar_sync_status: "not_synced",
-        calendar_last_synced_at: null,
+    return inRange.map((s: Row) =>
+      redactNotes(context.staff, {
+        ...s,
+        roll_marked: counts.get(s.id)?.marked ?? 0,
+        roll_total: counts.get(s.id)?.total ?? 0,
+        sole_student_name: soleStudent.get(s.class_offering_id) ?? null,
+        ...(mapping.get(s.id) ?? {
+          google_calendar_id: null,
+          google_event_id: null,
+          calendar_sync_status: "not_synced",
+          calendar_last_synced_at: null,
+        }),
       }),
-    }));
+    );
   });
 
 export type CalendarMapping = {
@@ -278,7 +285,9 @@ export const listToday = createServerFn({ method: "GET" })
       .lte("starts_at", `${shiftDate(data.date, 2)}T00:00:00Z`)
       .order("starts_at");
     if (error) throw error;
-    return (sessions ?? []).filter((s: Row) => s.session_date === data.date);
+    return (sessions ?? [])
+      .filter((s: Row) => s.session_date === data.date)
+      .map((s: Row) => redactNotes(context.staff, s));
   });
 
 const sessionPatch = z.object({
@@ -588,9 +597,15 @@ export const getSessionRoll = createServerFn({ method: "GET" })
       // Trial students booked onto this exact lesson. They have no enrolment or
       // attendance row - they live on the trials table until their lead converts
       // - so they are read separately and shown alongside the enrolled roll.
+      // A tutor is handed the child's name and year and nothing else: the rest
+      // of a trial row is the family's contact details, gathered by the office.
       client
         .from("trials")
-        .select("id, code, status, session_id, scheduled_for, leads(id, code, student_name)")
+        .select(
+          context.staff.role === "tutor"
+            ? "id, status, session_id, leads(student_name, year_level)"
+            : "id, code, status, session_id, scheduled_for, leads(id, code, student_name)",
+        )
         .eq("session_id", data.session_id)
         .eq("kind", "class_trial")
         .not("status", "in", "(declined,converted)"),
@@ -605,7 +620,13 @@ export const getSessionRoll = createServerFn({ method: "GET" })
       (a.leads?.student_name ?? "").localeCompare(b.leads?.student_name ?? ""),
     );
 
-    return { session: session.data, roll: entries, trials: trialEntries };
+    return {
+      // The note is the lesson tutor's and the office's; a tutor covering
+      // somebody else's class sees the roll but not what was written about it.
+      session: session.data ? redactNotes(context.staff, session.data as Row) : session.data,
+      roll: entries,
+      trials: trialEntries,
+    };
   });
 
 /** Seeding is idempotent, so this is safe to offer as a button on every lesson. */
