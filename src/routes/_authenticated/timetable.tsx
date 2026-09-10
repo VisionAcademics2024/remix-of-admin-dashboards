@@ -74,6 +74,7 @@ import {
   getSessionRoll,
   listRange,
   rescheduleSession,
+  restoreSession,
   saveSessionNotes,
   seedRoll,
   updateSession,
@@ -465,6 +466,7 @@ function SessionDialog({
   const reschedule = useServerFn(rescheduleSession);
   const sync = useServerFn(syncSessionToGoogle);
   const cancel = useServerFn(cancelSession);
+  const restore = useServerFn(restoreSession);
   const remove = useServerFn(deleteSession);
 
   const [tab, setTab] = useState<"details" | "roll">("details");
@@ -684,7 +686,35 @@ function SessionDialog({
 
             <DialogFooter className="flex-col gap-2 pt-1 sm:flex-row sm:justify-between">
               <div className="flex gap-2">
-                {may.manage && (
+                {/* A cancelled lesson offers the way back rather than the way
+                    out. Cancelling only changes a status - the roll is left
+                    exactly as it was, and hours read zero because the view
+                    refuses to spend them on a lesson that did not run - so
+                    putting it back restores the lesson, its roll and its hours
+                    together. */}
+                {may.manage && session.status === "cancelled" && (
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      try {
+                        await restore({ data: { id: session.id } });
+                        toast.success("Lesson is back on. Its roll and hours come back with it.");
+                        await invalidate();
+                        onClose();
+                      } catch (error) {
+                        toast.error((error as Error).message);
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    Put this lesson back on
+                  </Button>
+                )}
+
+                {may.manage && session.status !== "cancelled" && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button variant="outline" className="text-destructive">
@@ -696,7 +726,8 @@ function SessionDialog({
                         <AlertDialogTitle>Cancel this lesson?</AlertDialogTitle>
                         <AlertDialogDescription>
                           Cancelling keeps the roll and the history. Nobody is paid for it and
-                          nobody's hours are consumed. This is almost always what you want.
+                          nobody's hours are consumed. This is almost always what you want - and it
+                          can be undone from this same dialog.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>

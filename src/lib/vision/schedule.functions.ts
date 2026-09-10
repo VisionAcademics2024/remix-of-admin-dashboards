@@ -477,6 +477,44 @@ export const cancelSession = createServerFn({ method: "POST" })
  * and is never deleted here - a lesson that has a roll is cancelled, which
  * keeps the history intact. There is no force option, by design.
  */
+/**
+ * Put a cancelled lesson back on.
+ *
+ * Cancelling is the reversible half of the pair - it changes a status and
+ * touches nothing else - but there was no way back from it, so a mis-click cost
+ * a lesson and everyone on its roll had to be rebuilt by hand.
+ *
+ * The roll survives cancellation untouched: `hours_consumed` reads zero for a
+ * cancelled lesson because the view refuses to spend hours on one that did not
+ * run, not because the marks were erased. So restoring the status restores the
+ * hours and the billing with it, which is exactly right - the lesson is running
+ * again.
+ */
+export const restoreSession = createServerFn({ method: "POST" })
+  .middleware([requireManager])
+  .inputValidator((data) => z.object({ id: z.string().uuid() }).parse(data))
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+
+    const { data: session, error: readError } = await client
+      .from("sessions")
+      .select("id, status")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (readError) throw readError;
+    if (!session) throw new Error("That lesson no longer exists.");
+    if (session.status !== "cancelled") {
+      throw new Error("That lesson is not cancelled, so there is nothing to put back.");
+    }
+
+    const { error } = await client
+      .from("sessions")
+      .update({ status: "scheduled" })
+      .eq("id", data.id);
+    if (error) throw error;
+    return { success: true };
+  });
+
 export const deleteSession = createServerFn({ method: "POST" })
   .middleware([requireManager])
   .inputValidator((data) => z.object({ id: z.string().uuid() }).parse(data))
