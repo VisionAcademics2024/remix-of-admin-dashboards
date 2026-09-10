@@ -351,7 +351,7 @@ function TrialRollSection({
                     {t.leads?.student_name ?? "Trial"}
                     <StatusPill tone="info">Trial</StatusPill>
                   </div>
-                  {t.leads?.code ?? t.code ? (
+                  {(t.leads?.code ?? t.code) ? (
                     <Link
                       to="/leads"
                       className="text-xs text-primary underline-offset-2 hover:underline"
@@ -383,34 +383,34 @@ function TrialRollSection({
                     {mayMarkRoll(staff ?? { role: null }, {
                       tutor_id: t.sessions?.tutor_id ?? null,
                     }) && (
-                    <>
-                    <button
-                      type="button"
-                      title="Attended"
-                      onClick={() => mark(t, "attended")}
-                      className={cn(
-                        "flex h-7 w-7 items-center justify-center rounded-lg border transition-colors",
-                        t.status === "attended"
-                          ? "border-success/40 bg-success/20 text-success"
-                          : "border-[var(--edge)] text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      <Check className="h-4 w-4" strokeWidth={2} />
-                    </button>
-                    <button
-                      type="button"
-                      title="No-show"
-                      onClick={() => mark(t, "no_show")}
-                      className={cn(
-                        "flex h-7 w-7 items-center justify-center rounded-lg border transition-colors",
-                        t.status === "no_show"
-                          ? "border-warning/40 bg-warning/20 text-warning"
-                          : "border-[var(--edge)] text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      <X className="h-4 w-4" strokeWidth={2} />
-                    </button>
-                    </>
+                      <>
+                        <button
+                          type="button"
+                          title="Attended"
+                          onClick={() => mark(t, "attended")}
+                          className={cn(
+                            "flex h-7 w-7 items-center justify-center rounded-lg border transition-colors",
+                            t.status === "attended"
+                              ? "border-success/40 bg-success/20 text-success"
+                              : "border-[var(--edge)] text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          <Check className="h-4 w-4" strokeWidth={2} />
+                        </button>
+                        <button
+                          type="button"
+                          title="No-show"
+                          onClick={() => mark(t, "no_show")}
+                          className={cn(
+                            "flex h-7 w-7 items-center justify-center rounded-lg border transition-colors",
+                            t.status === "no_show"
+                              ? "border-warning/40 bg-warning/20 text-warning"
+                              : "border-[var(--edge)] text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          <X className="h-4 w-4" strokeWidth={2} />
+                        </button>
+                      </>
                     )}
                     <StatusPill tone={toneForStatus("trial", t.status)}>
                       {LABELS.trialStatus[t.status as keyof typeof LABELS.trialStatus]}
@@ -513,9 +513,11 @@ function LessonGroup({
   // A tutor may read every lesson on the roll - useful when picking up a class -
   // but marks only the ones they teach. Drawing the tick anyway meant pressing
   // it did nothing, silently, because RLS refused the write.
-  const canMark = may.markRoll && mayMarkRoll(staff ?? { role: null }, {
-    tutor_id: lesson.lesson_tutor_id ?? null,
-  });
+  const canMark =
+    may.markRoll &&
+    mayMarkRoll(staff ?? { role: null }, {
+      tutor_id: lesson.lesson_tutor_id ?? null,
+    });
   const marked = rows.filter((r: Row) => r.status !== "not_marked").length;
   const unmarkedIds = rows.filter((r: Row) => r.status === "not_marked").map((r: Row) => r.id);
   const makeUpable = rows.filter((r: Row) => r.att_type !== "make_up");
@@ -643,44 +645,44 @@ function LessonGroup({
                 </Td>
                 <Td className="text-right">
                   {canMark ? (
-                  <div className="flex justify-end gap-1">
-                    <Button
-                      size="sm"
-                      variant={row.status === "present" ? "default" : "outline"}
-                      title="Present"
-                      aria-label="Present"
-                      onClick={() => onSetStatus(row.id, "present")}
-                    >
-                      <Check className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={row.status === "absent" ? "destructive" : "outline"}
-                      title="Away"
-                      aria-label="Away"
-                      onClick={() => onSetStatus(row.id, "absent")}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      title="Away, and owed a make-up"
-                      disabled={row.att_type === "make_up"}
-                      onClick={() => onMakeUp([row])}
-                    >
-                      Make up
-                    </Button>
-                    {row.status !== "not_marked" && (
+                    <div className="flex justify-end gap-1">
                       <Button
                         size="sm"
-                        variant="ghost"
-                        onClick={() => onSetStatus(row.id, "not_marked")}
+                        variant={row.status === "present" ? "default" : "outline"}
+                        title="Present"
+                        aria-label="Present"
+                        onClick={() => onSetStatus(row.id, "present")}
                       >
-                        Clear
+                        <Check className="h-4 w-4" />
                       </Button>
-                    )}
-                  </div>
+                      <Button
+                        size="sm"
+                        variant={row.status === "absent" ? "destructive" : "outline"}
+                        title="Away"
+                        aria-label="Away"
+                        onClick={() => onSetStatus(row.id, "absent")}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        title="Away, and owed a make-up"
+                        disabled={row.att_type === "make_up"}
+                        onClick={() => onMakeUp([row])}
+                      >
+                        Make up
+                      </Button>
+                      {row.status !== "not_marked" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => onSetStatus(row.id, "not_marked")}
+                        >
+                          Clear
+                        </Button>
+                      )}
+                    </div>
                   ) : (
                     /* Not their lesson: the roll still reads, it just does not
                        take marks. */

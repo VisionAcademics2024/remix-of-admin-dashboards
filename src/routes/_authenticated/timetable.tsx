@@ -914,7 +914,7 @@ function LessonRollPanel({
               <StatusPill tone="info">Trial</StatusPill>
             </div>
             <div className="text-[0.7rem] text-muted-foreground">
-              {t.leads?.code ?? t.code ? <Code>{t.leads?.code ?? t.code}</Code> : null}
+              {(t.leads?.code ?? t.code) ? <Code>{t.leads?.code ?? t.code}</Code> : null}
               {t.leads?.year_level ? ` · ${t.leads.year_level}` : " · lead"}
             </div>
           </div>
@@ -948,9 +948,15 @@ function LessonRollPanel({
             /* Somebody else's lesson: who is coming is still worth knowing, so
                the name stays and only the marking goes. */
             <StatusPill
-              tone={t.status === "attended" ? "success" : t.status === "no_show" ? "danger" : "neutral"}
+              tone={
+                t.status === "attended" ? "success" : t.status === "no_show" ? "danger" : "neutral"
+              }
             >
-              {t.status === "attended" ? "Attended" : t.status === "no_show" ? "No-show" : "Expected"}
+              {t.status === "attended"
+                ? "Attended"
+                : t.status === "no_show"
+                  ? "No-show"
+                  : "Expected"}
             </StatusPill>
           )}
         </div>
@@ -972,20 +978,20 @@ function LessonRollPanel({
             : "This lesson has no roll yet. Seeding adds every enrolled student - it is safe to run more than once."}
         </p>
         {canMark && (
-        <Button
-          size="sm"
-          onClick={async () => {
-            try {
-              const { created } = await seed({ data: { session_id: session.id } });
-              toast.success(`${created} student${created === 1 ? "" : "s"} added to the roll.`);
-              await onChanged();
-            } catch (error) {
-              toast.error((error as Error).message);
-            }
-          }}
-        >
-          Seed the roll
-        </Button>
+          <Button
+            size="sm"
+            onClick={async () => {
+              try {
+                const { created } = await seed({ data: { session_id: session.id } });
+                toast.success(`${created} student${created === 1 ? "" : "s"} added to the roll.`);
+                await onChanged();
+              } catch (error) {
+                toast.error((error as Error).message);
+              }
+            }}
+          >
+            Seed the roll
+          </Button>
         )}
         {may.manage && (
           <AddStudentRow session={session} enrolledIds={new Set()} onChanged={onChanged} />
@@ -1001,22 +1007,22 @@ function LessonRollPanel({
           {marked}/{roll.length} marked
         </StatusPill>
         {canMark && (
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={notMarkedIds.length === 0}
-          onClick={async () => {
-            try {
-              await bulk({ data: { ids: notMarkedIds, status: "present" } });
-              toast.success("Whole class marked present.");
-              await onChanged();
-            } catch (error) {
-              toast.error((error as Error).message);
-            }
-          }}
-        >
-          All present
-        </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={notMarkedIds.length === 0}
+            onClick={async () => {
+              try {
+                await bulk({ data: { ids: notMarkedIds, status: "present" } });
+                toast.success("Whole class marked present.");
+                await onChanged();
+              } catch (error) {
+                toast.error((error as Error).message);
+              }
+            }}
+          >
+            All present
+          </Button>
         )}
       </div>
 
@@ -1036,48 +1042,48 @@ function LessonRollPanel({
               </div>
             </div>
             {canMark ? (
-            <div className="flex shrink-0 items-center gap-1">
-              <Button
-                size="sm"
-                variant={r.status === "present" ? "default" : "outline"}
-                title="Present"
-                aria-label="Present"
-                onClick={() => set(r.id, "present")}
-              >
-                <Check className="h-4 w-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant={r.status === "absent" ? "destructive" : "outline"}
-                title="Away"
-                aria-label="Away"
-                onClick={() => set(r.id, "absent")}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                title="Away, and owed a make-up"
-                disabled={r.att_type === "make_up"}
-                onClick={async () => {
-                  try {
-                    await hold({ data: { ids: [r.id] } });
-                    toast.success("Marked away and owed a make-up.");
-                    await onChanged();
-                  } catch (error) {
-                    toast.error((error as Error).message);
-                  }
-                }}
-              >
-                Make up
-              </Button>
-              {r.status !== "not_marked" && (
-                <Button size="sm" variant="ghost" onClick={() => set(r.id, "not_marked")}>
-                  Clear
+              <div className="flex shrink-0 items-center gap-1">
+                <Button
+                  size="sm"
+                  variant={r.status === "present" ? "default" : "outline"}
+                  title="Present"
+                  aria-label="Present"
+                  onClick={() => set(r.id, "present")}
+                >
+                  <Check className="h-4 w-4" />
                 </Button>
-              )}
-            </div>
+                <Button
+                  size="sm"
+                  variant={r.status === "absent" ? "destructive" : "outline"}
+                  title="Away"
+                  aria-label="Away"
+                  onClick={() => set(r.id, "absent")}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  title="Away, and owed a make-up"
+                  disabled={r.att_type === "make_up"}
+                  onClick={async () => {
+                    try {
+                      await hold({ data: { ids: [r.id] } });
+                      toast.success("Marked away and owed a make-up.");
+                      await onChanged();
+                    } catch (error) {
+                      toast.error((error as Error).message);
+                    }
+                  }}
+                >
+                  Make up
+                </Button>
+                {r.status !== "not_marked" && (
+                  <Button size="sm" variant="ghost" onClick={() => set(r.id, "not_marked")}>
+                    Clear
+                  </Button>
+                )}
+              </div>
             ) : (
               <StatusPill
                 tone={
