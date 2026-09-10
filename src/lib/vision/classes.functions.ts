@@ -2,7 +2,13 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { addDays, sydneyLocalToInstant, sydToday } from "@/lib/format";
-import { db, requireStaff } from "./guard";
+import { db, requireManager, requireStaff } from "./guard";
+import { applyTaughtFilters } from "./billing-audit";
+import {
+  classRemovalConsequences,
+  classRemovalRefusal,
+  type ClassRemovalFacts,
+} from "./class-removal";
 import type { Row } from "./types";
 
 const OFFERING_SELECT =
@@ -243,8 +249,25 @@ export const seedRollForOffering = createServerFn({ method: "POST" })
   });
 
 /**
- * Closing, not deleting. Deleting is allowed only while a class has no
- * enrolments and no lessons - the foreign keys enforce the rest.
+ * The class's status, and the lessons that follow from it.
+ *
+ * Setting a class to Cancelled used to change one word on the Classes screen
+ * and nothing else: every lesson it had generated stayed on the timetable,
+ * because nothing cascaded from a class to its own lessons. So "I cancelled it
+ * and it is still there" was exactly right, and the only honest answer to a
+ * class that should not be running.
+ *
+ * Cancelling now takes its lessons with it - but only the ones it is safe to
+ * take. A lesson whose roll has been marked is history: `hours_consumed` reads
+ * zero for a cancelled lesson, so cancelling one that was taught would silently
+ * un-bill it. Those are left alone, and so is anything already in the past.
+ * What gets cancelled is what was still going to happen.
+ *
+ * Nothing is un-cancelled on the way back. Setting a class active again does
+ * not know which of its lessons were cancelled by this and which by a person,
+ * and guessing wrong puts a lesson back that somebody deliberately called off.
+ * A single lesson goes back on from the timetable, where the person doing it
+ * can see what they are restoring.
  */
 export const closeClassOffering = createServerFn({ method: "POST" })
   .middleware([requireStaff])
@@ -257,10 +280,220 @@ export const closeClassOffering = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ context, data }) => {
-    const { error } = await db(context.supabase)
+    const client = db(context.supabase);
+
+    const { error } = await client
       .from("class_offerings")
       .update({ status: data.status })
       .eq("id", data.id);
     if (error) throw error;
-    return { success: true };
+
+    if (data.status !== "cancelled") return { success: true, lessons_cancelled: 0 };
+
+    // Lessons still to come, that nobody has marked.
+    const { data: upcoming, error: readError } = await client
+      .from("v_sessions")
+      .select("id, session_date, status")
+      .eq("class_offering_id", data.id)
+      .eq("status", "scheduled")
+      .gte("session_date", sydToday());
+    if (readError) throw readError;
+
+    const ids = (upcoming ?? []).map((row: Row) => row.id as string);
+    if (!ids.length) return { success: true, lessons_cancelled: 0 };
+
+    const { data: marked } = await client
+      .from("attendance")
+      .select("session_id")
+      .in("session_id", ids)
+      .neq("status", "not_marked");
+    const untouched = new Set(ids);
+    for (const row of marked ?? []) untouched.delete((row as Row).session_id as string);
+    if (!untouched.size) return { success: true, lessons_cancelled: 0 };
+
+    const { error: cancelError } = await client
+      .from("sessions")
+      .update({ status: "cancelled" })
+      .in("id", [...untouched]);
+    if (cancelError) throw cancelError;
+
+    return { success: true, lessons_cancelled: untouched.size };
   });
+
+/**
+ * What deleting this class would take with it, before anyone commits to it.
+ *
+ * Read separately from the delete so the confirmation states this class's own
+ * numbers rather than a generic warning - ten lessons and a student is a very
+ * different thing to agree to than an empty shell.
+ */
+export const getClassOfferingRemoval = createServerFn({ method: "GET" })
+  .middleware([requireManager])
+  .inputValidator((data) => z.object({ id: z.string().uuid() }).parse(data))
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+
+    const { data: offering, error } = await client
+      .from("class_offerings")
+      .select("id, code, status, programs(name)")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!offering) throw new Error("That class no longer exists.");
+
+    const facts = await classRemovalFacts(client, data.id);
+    return {
+      offering: offering as Row,
+      facts,
+      refusal: classRemovalRefusal(facts),
+      consequences: classRemovalConsequences(facts),
+    };
+  });
+
+/**
+ * Delete a class outright - the undo for one built by mistake.
+ *
+ * Foreign keys onto class_offerings are ON DELETE RESTRICT from both sessions
+ * and enrolments, and attendance sits under both, so this unpicks them in the
+ * only order that works: roll, then enrolments and lessons, then the class.
+ *
+ * The same two refusals as the dialog, checked again here: a screen can be out
+ * of date by the time the button is pressed, and whether a lesson has been
+ * charged must not depend on how fresh it was.
+ */
+export const deleteClassOffering = createServerFn({ method: "POST" })
+  .middleware([requireManager])
+  .inputValidator((data) => z.object({ id: z.string().uuid() }).parse(data))
+  .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+
+    const facts = await classRemovalFacts(client, data.id);
+    const refusal = classRemovalRefusal(facts);
+    if (refusal) throw new Error(refusal);
+
+    const [{ data: sessions }, { data: enrolments }] = await Promise.all([
+      client.from("sessions").select("id").eq("class_offering_id", data.id),
+      client.from("enrolments").select("id").eq("class_offering_id", data.id),
+    ]);
+    const sessionIds = (sessions ?? []).map((row: Row) => row.id as string);
+    const enrolmentIds = (enrolments ?? []).map((row: Row) => row.id as string);
+
+    // The roll first: attendance restricts the delete of an enrolment and
+    // cascades from a session, so clearing it explicitly keeps the order plain
+    // rather than relying on which side happens to cascade. Cleared by id from
+    // both sides - see rollEntryIds - because an enrolment can be booked onto a
+    // make-up that is not one of these lessons.
+    const attendanceIds = await rollEntryIds(client, sessionIds, enrolmentIds);
+    if (attendanceIds.length) {
+      const { error } = await client.from("attendance").delete().in("id", attendanceIds);
+      if (error) throw error;
+    }
+
+    const { error: enrolError } = await client
+      .from("enrolments")
+      .delete()
+      .eq("class_offering_id", data.id);
+    if (enrolError) throw enrolError;
+
+    const { error: sessionError } = await client
+      .from("sessions")
+      .delete()
+      .eq("class_offering_id", data.id);
+    if (sessionError) throw sessionError;
+
+    const { error: offeringError } = await client
+      .from("class_offerings")
+      .delete()
+      .eq("id", data.id);
+    if (offeringError) throw offeringError;
+
+    return { success: true, ...facts };
+  });
+
+/**
+ * Every roll entry this class touches, from both sides.
+ *
+ * Almost always these are the same rows: the roll of this class's own lessons.
+ * But a make-up books this class's enrolment onto a lesson of its own, so an
+ * enrolment can carry roll entries that sit on none of these sessions - and
+ * those would meet the delete below as a foreign-key error rather than a
+ * sentence. The union is what the warning counts and what the delete clears.
+ */
+async function rollEntryIds(
+  client: ReturnType<typeof db>,
+  sessionIds: string[],
+  enrolmentIds: string[],
+): Promise<string[]> {
+  const ids = new Set<string>();
+
+  if (sessionIds.length) {
+    const { data, error } = await client
+      .from("attendance")
+      .select("id")
+      .in("session_id", sessionIds);
+    if (error) throw error;
+    for (const row of data ?? []) ids.add((row as Row).id as string);
+  }
+
+  if (enrolmentIds.length) {
+    const { data, error } = await client
+      .from("attendance")
+      .select("id")
+      .in("enrolment_id", enrolmentIds);
+    if (error) throw error;
+    for (const row of data ?? []) ids.add((row as Row).id as string);
+  }
+
+  return [...ids];
+}
+
+/** The counts both the warning and the delete are decided from. */
+async function classRemovalFacts(
+  client: ReturnType<typeof db>,
+  offeringId: string,
+): Promise<ClassRemovalFacts> {
+  const [{ data: sessions }, { data: enrolments }] = await Promise.all([
+    client.from("sessions").select("id").eq("class_offering_id", offeringId),
+    client.from("enrolments").select("id").eq("class_offering_id", offeringId),
+  ]);
+
+  const sessionIds = (sessions ?? []).map((row: Row) => row.id as string);
+  const enrolmentIds = (enrolments ?? []).map((row: Row) => row.id as string);
+  const attendanceIds = await rollEntryIds(client, sessionIds, enrolmentIds);
+
+  if (!attendanceIds.length) {
+    return {
+      lessons: sessionIds.length,
+      enrolments: enrolmentIds.length,
+      rollEntries: 0,
+      taughtLessons: 0,
+      charges: 0,
+    };
+  }
+
+  const [taught, charged] = await Promise.all([
+    // The same definition of "taught" the billing audit uses, so the refusal
+    // and the money agree about which lessons actually happened.
+    applyTaughtFilters(
+      client
+        .from("v_attendance")
+        .select("id", { count: "exact", head: true })
+        .in("id", attendanceIds),
+    ),
+    // Charges point at attendance, so the roll ids are what decides whether any
+    // money has been asked for against this class.
+    client
+      .from("charges")
+      .select("id", { count: "exact", head: true })
+      .in("attendance_id", attendanceIds)
+      .neq("status", "cancelled"),
+  ]);
+
+  return {
+    lessons: sessionIds.length,
+    enrolments: enrolmentIds.length,
+    rollEntries: attendanceIds.length,
+    taughtLessons: taught.count ?? 0,
+    charges: charged.count ?? 0,
+  };
+}

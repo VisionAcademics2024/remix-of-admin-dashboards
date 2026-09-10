@@ -1,12 +1,20 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { queryOptions, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
-import { LayoutGrid, Plus, RefreshCw } from "lucide-react";
+import { LayoutGrid, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -23,12 +31,15 @@ import {
   Td,
   Th,
   TutorDot,
+  WarningNote,
   toneForStatus,
 } from "@/components/vision/ui";
 import { formatDate, formatHours } from "@/lib/format";
 import {
   closeClassOffering,
+  deleteClassOffering,
   generateSessions,
+  getClassOfferingRemoval,
   listClassOfferings,
   seedRollForOffering,
 } from "@/lib/vision/classes.functions";
@@ -50,6 +61,7 @@ function ClassesPage() {
   const seed = useServerFn(seedRollForOffering);
   const setStatus = useServerFn(closeClassOffering);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<Row | null>(null);
 
   const term = search.trim().toLowerCase();
   const visible = term
@@ -214,8 +226,15 @@ function ClassesPage() {
                       <Select
                         value={c.status}
                         onValueChange={async (v) => {
-                          await setStatus({ data: { id: c.id, status: v as OfferingStatus } });
-                          toast.success("Class status updated.");
+                          const result = await setStatus({
+                            data: { id: c.id, status: v as OfferingStatus },
+                          });
+                          const cancelled = result?.lessons_cancelled ?? 0;
+                          toast.success(
+                            cancelled > 0
+                              ? `Class cancelled, and ${cancelled} lesson${cancelled === 1 ? "" : "s"} still to come came off the timetable.`
+                              : "Class status updated.",
+                          );
                           await refresh();
                         }}
                       >
@@ -229,6 +248,20 @@ function ClassesPage() {
                           <SelectItem value="cancelled">Cancelled</SelectItem>
                         </SelectContent>
                       </Select>
+                      {/* Cancelling is for a class that ran and stopped;
+                          this is for one built by mistake. It refuses where
+                          anything real has happened, which is why both are
+                          offered rather than one pretending to be the other. */}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-destructive"
+                        title="Delete this class and everything the builder made with it"
+                        aria-label={`Delete ${c.programs?.name ?? "this class"}`}
+                        onClick={() => setDeleting(c)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </Td>
                 </tr>
@@ -238,11 +271,97 @@ function ClassesPage() {
         </TableShell>
       )}
 
+      {deleting && <DeleteClassDialog offering={deleting} onClose={() => setDeleting(null)} />}
+
       <p className="text-xs text-muted-foreground">
         Generating lessons is idempotent - the unique index on (class, start time) means re-running
         never creates duplicates. Changing a lesson's time is an edit on the Timetable, never a
         delete and regenerate.
       </p>
     </div>
+  );
+}
+
+/**
+ * Confirming the deletion of a whole class.
+ *
+ * It asks the server what this particular class costs rather than reciting a
+ * generic warning: a term of lessons with a student on them is a different
+ * thing to agree to than an empty shell, and the two refusals - charged, or
+ * already taught - only apply to some classes. A warning that is the same
+ * every time is one nobody reads by the third go.
+ */
+function DeleteClassDialog({ offering, onClose }: { offering: Row; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const remove = useServerFn(deleteClassOffering);
+  const [busy, setBusy] = useState(false);
+
+  const { data, isPending } = useQuery({
+    queryKey: ["class-removal", offering.id],
+    queryFn: () => getClassOfferingRemoval({ data: { id: offering.id } }),
+  });
+
+  const name = offering.programs?.name ?? offering.code ?? "this class";
+
+  async function confirm() {
+    setBusy(true);
+    try {
+      await remove({ data: { id: offering.id } });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["classes"] }),
+        queryClient.invalidateQueries({ queryKey: ["timetable"] }),
+        queryClient.invalidateQueries({ queryKey: ["today"] }),
+        queryClient.invalidateQueries({ queryKey: ["roll"] }),
+        queryClient.invalidateQueries({ queryKey: ["enrolments"] }),
+        queryClient.invalidateQueries({ queryKey: ["billing"] }),
+        queryClient.invalidateQueries({ queryKey: ["billing-audit"] }),
+        queryClient.invalidateQueries({ queryKey: ["needs-attention-count"] }),
+      ]);
+      toast.success(`${name} is gone, with its lessons and enrolments.`);
+      onClose();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Delete {name}?</DialogTitle>
+          <DialogDescription>
+            <Code>{offering.code}</Code> · {offering.operating_periods?.code ?? "no term"}
+          </DialogDescription>
+        </DialogHeader>
+
+        {isPending ? (
+          <p className="text-sm text-muted-foreground">Checking what this class carries…</p>
+        ) : data?.refusal ? (
+          <WarningNote>{data.refusal}</WarningNote>
+        ) : (
+          <ul className="space-y-1.5 text-sm text-muted-foreground">
+            {(data?.consequences ?? []).map((line: string) => (
+              <li key={line} className="flex gap-2">
+                <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-current" />
+                <span>{line}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            {data?.refusal ? "Close" : "Keep it"}
+          </Button>
+          {!data?.refusal && (
+            <Button variant="destructive" disabled={busy || isPending} onClick={confirm}>
+              {busy ? "Deleting…" : "Delete this class"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
