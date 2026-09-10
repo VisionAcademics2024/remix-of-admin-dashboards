@@ -40,3 +40,41 @@ export function mayWriteSessionNotes(
 
   return session.tutor_id === staff.tutor_id;
 }
+
+/**
+ * Who may READ a lesson note.
+ *
+ * The same line as writing, drawn for the other direction, and it had been
+ * missing: a tutor reads the whole calendar on purpose - they need to know what
+ * is on - and `sessions` rows arrive whole, so the note on every class in the
+ * school came with them. A note is written for the family it is about and for
+ * the people teaching them, not for the staffroom at large.
+ *
+ * Row-level security cannot mask one column, and v_sessions is `select s.*`,
+ * so the masking is done in the read path instead: the API drops the column
+ * before it leaves. That hides notes from the app, not from the database.
+ */
+export function mayReadSessionNotes(
+  staff: { role: StaffRole | null | undefined; tutor_id?: string | null },
+  session: { tutor_id?: string | null },
+): boolean {
+  if (staff.role === "owner" || staff.role === "admin") return true;
+  if (staff.role !== "tutor") return false;
+  if (!staff.tutor_id) return false;
+  if (!session.tutor_id) return false;
+  return session.tutor_id === staff.tutor_id;
+}
+
+/**
+ * The same row with `notes` blanked when this reader is not entitled to it.
+ *
+ * Applied at every point a session leaves the server, so the screen is never
+ * trusted to hide something it was handed.
+ */
+export function redactNotes<T extends { tutor_id?: string | null; notes?: unknown }>(
+  staff: { role: StaffRole | null | undefined; tutor_id?: string | null },
+  session: T,
+): T {
+  if (mayReadSessionNotes(staff, session)) return session;
+  return { ...session, notes: null };
+}

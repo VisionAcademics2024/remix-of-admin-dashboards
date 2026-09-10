@@ -55,7 +55,12 @@ import {
 } from "@/components/vision/calendar";
 import { cn } from "@/lib/utils";
 import { meQueryOptions } from "@/lib/vision/me";
-import { lessonPermissions, type LessonPermissions } from "@/lib/vision/tutor-access";
+import {
+  lessonPermissions,
+  mayMarkRoll,
+  type LessonPermissions,
+  type Viewer,
+} from "@/lib/vision/tutor-access";
 import {
   addDays,
   formatDay,
@@ -441,6 +446,7 @@ function TimetablePage() {
           session={editing}
           tutors={catalogue?.tutors ?? []}
           may={may}
+          staff={me?.staff ?? null}
           onClose={() => setEditing(null)}
         />
       )}
@@ -452,14 +458,21 @@ function SessionDialog({
   session,
   tutors,
   may,
+  staff,
   onClose,
 }: {
   session: Row;
   tutors: Row[];
   /** What this viewer's role lets them do to a lesson. */
   may: LessonPermissions;
+  /** Who is looking, so "their own lesson" can be asked of THIS lesson. */
+  staff: Viewer;
   onClose: () => void;
 }) {
+  // A tutor covering nothing here: the roll and the note belong to the tutor
+  // teaching this lesson, and the office. Reading the class is still allowed -
+  // a tutor picking up a class needs to see who is expected.
+  const mine = may.markRoll && mayMarkRoll(staff ?? { role: null }, session);
   const queryClient = useQueryClient();
   const update = useServerFn(updateSession);
   const saveNotes = useServerFn(saveSessionNotes);
@@ -665,21 +678,31 @@ function SessionDialog({
 
             <div className="space-y-1.5">
               <Label htmlFor="notes">Lesson notes</Label>
-              <Textarea
-                id="notes"
-                rows={3}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="What happened in this lesson - what was covered, who struggled, what to pick up next week."
-              />
-              {/* One note per lesson, and both sides write it. Saying so is the
-                  difference between a handover and a diary: a tutor who thinks
-                  the office cannot see this writes something else. */}
-              <p className="text-xs text-muted-foreground">
-                {may.manage
-                  ? "Shared with the tutor teaching this lesson - they can read this and add to it."
-                  : "Shared with the office - they can read this, and you can read what they add."}
-              </p>
+              {mine ? (
+                <>
+                  <Textarea
+                    id="notes"
+                    rows={3}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="What happened in this lesson - what was covered, who struggled, what to pick up next week."
+                  />
+                  {/* One note per lesson, and both sides write it. Saying so is the
+                      difference between a handover and a diary: a tutor who thinks
+                      the office cannot see this writes something else. */}
+                  <p className="text-xs text-muted-foreground">
+                    {may.manage
+                      ? "Shared with the tutor teaching this lesson - they can read this and add to it."
+                      : "Shared with the office - they can read this, and you can read what they add."}
+                  </p>
+                </>
+              ) : (
+                /* Not their lesson. An empty box they could type into and never
+                   save is worse than no box, so it says whose it is instead. */
+                <p className="text-sm text-muted-foreground">
+                  The note on this lesson is between the office and the tutor teaching it.
+                </p>
+              )}
             </div>
 
             {may.manage && <GoogleSyncRow session={session} onSynced={invalidate} />}
@@ -794,14 +817,22 @@ function SessionDialog({
                 )}
               </div>
 
-              <Button onClick={may.manage ? saveDetails : saveNotesOnly} disabled={busy}>
-                {may.manage ? "Save changes" : "Save notes"}
-              </Button>
+              {(may.manage || mine) && (
+                <Button onClick={may.manage ? saveDetails : saveNotesOnly} disabled={busy}>
+                  {may.manage ? "Save changes" : "Save notes"}
+                </Button>
+              )}
             </DialogFooter>
           </TabsContent>
 
           <TabsContent value="roll" className="pt-3">
-            <LessonRollPanel session={session} tutors={tutors} may={may} onChanged={invalidate} />
+            <LessonRollPanel
+              session={session}
+              tutors={tutors}
+              may={may}
+              canMark={mine}
+              onChanged={invalidate}
+            />
           </TabsContent>
         </Tabs>
       </DialogContent>
@@ -819,11 +850,14 @@ function LessonRollPanel({
   session,
   tutors,
   may,
+  canMark,
   onChanged,
 }: {
   session: Row;
   tutors: Row[];
   may: LessonPermissions;
+  /** Whether this viewer may mark THIS lesson - not merely rolls in general. */
+  canMark: boolean;
   onChanged: () => Promise<void>;
 }) {
   const mark = useServerFn(markAttendance);
@@ -880,34 +914,45 @@ function LessonRollPanel({
               <StatusPill tone="info">Trial</StatusPill>
             </div>
             <div className="text-[0.7rem] text-muted-foreground">
-              <Code>{t.leads?.code ?? t.code}</Code> · lead
+              {t.leads?.code ?? t.code ? <Code>{t.leads?.code ?? t.code}</Code> : null}
+              {t.leads?.year_level ? ` · ${t.leads.year_level}` : " · lead"}
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <Button
-              size="sm"
-              variant={t.status === "attended" ? "default" : "outline"}
-              title="Attended"
-              aria-label="Attended"
-              onClick={() => markTrial(t.id, "attended")}
-            >
-              <Check className="h-4 w-4" />
-            </Button>
-            <Button
-              size="sm"
-              variant={t.status === "no_show" ? "destructive" : "outline"}
-              title="No-show"
-              aria-label="No-show"
-              onClick={() => markTrial(t.id, "no_show")}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-            {(t.status === "attended" || t.status === "no_show") && (
-              <Button size="sm" variant="ghost" onClick={() => markTrial(t.id, "scheduled")}>
-                Clear
+          {canMark ? (
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                size="sm"
+                variant={t.status === "attended" ? "default" : "outline"}
+                title="Attended"
+                aria-label="Attended"
+                onClick={() => markTrial(t.id, "attended")}
+              >
+                <Check className="h-4 w-4" />
               </Button>
-            )}
-          </div>
+              <Button
+                size="sm"
+                variant={t.status === "no_show" ? "destructive" : "outline"}
+                title="No-show"
+                aria-label="No-show"
+                onClick={() => markTrial(t.id, "no_show")}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+              {(t.status === "attended" || t.status === "no_show") && (
+                <Button size="sm" variant="ghost" onClick={() => markTrial(t.id, "scheduled")}>
+                  Clear
+                </Button>
+              )}
+            </div>
+          ) : (
+            /* Somebody else's lesson: who is coming is still worth knowing, so
+               the name stays and only the marking goes. */
+            <StatusPill
+              tone={t.status === "attended" ? "success" : t.status === "no_show" ? "danger" : "neutral"}
+            >
+              {t.status === "attended" ? "Attended" : t.status === "no_show" ? "No-show" : "Expected"}
+            </StatusPill>
+          )}
         </div>
       ))}
     </div>
@@ -926,6 +971,7 @@ function LessonRollPanel({
             ? "No enrolled students on the roll yet. Seeding adds every enrolled student - it is safe to run more than once."
             : "This lesson has no roll yet. Seeding adds every enrolled student - it is safe to run more than once."}
         </p>
+        {canMark && (
         <Button
           size="sm"
           onClick={async () => {
@@ -940,6 +986,7 @@ function LessonRollPanel({
         >
           Seed the roll
         </Button>
+        )}
         {may.manage && (
           <AddStudentRow session={session} enrolledIds={new Set()} onChanged={onChanged} />
         )}
@@ -953,6 +1000,7 @@ function LessonRollPanel({
         <StatusPill tone={marked === roll.length ? "success" : marked > 0 ? "warning" : "neutral"}>
           {marked}/{roll.length} marked
         </StatusPill>
+        {canMark && (
         <Button
           size="sm"
           variant="outline"
@@ -969,6 +1017,7 @@ function LessonRollPanel({
         >
           All present
         </Button>
+        )}
       </div>
 
       <div className="max-h-64 space-y-1 overflow-y-auto">
@@ -986,6 +1035,7 @@ function LessonRollPanel({
                 {r.att_type === "make_up" ? " · make-up" : r.att_type === "trial" ? " · trial" : ""}
               </div>
             </div>
+            {canMark ? (
             <div className="flex shrink-0 items-center gap-1">
               <Button
                 size="sm"
@@ -1028,6 +1078,15 @@ function LessonRollPanel({
                 </Button>
               )}
             </div>
+            ) : (
+              <StatusPill
+                tone={
+                  r.status === "present" ? "success" : r.status === "absent" ? "danger" : "neutral"
+                }
+              >
+                {r.status === "present" ? "Present" : r.status === "absent" ? "Away" : "Not marked"}
+              </StatusPill>
+            )}
           </div>
         ))}
       </div>

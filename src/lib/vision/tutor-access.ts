@@ -56,6 +56,38 @@ export function lessonPermissions(role: StaffRole | null | undefined): LessonPer
   }
 }
 
+/**
+ * Whether this person may mark THIS lesson's roll.
+ *
+ * `lessonPermissions` answers by role alone, which is as much as it can know:
+ * every tutor marks rolls, so it returns markRoll: true for all of them. The
+ * screen then drew the tick, the cross and Make-up on every lesson in the
+ * school, including the ones taught by somebody else - and RLS refused the
+ * write, so pressing them did nothing at all and said nothing about it.
+ *
+ * So the session-scoped question lives here, in the same shape as
+ * `mayWriteSessionNotes`: a tutor marks the lesson they teach and no other.
+ * Fails closed - an account with no tutor behind it, or a lesson nobody has
+ * been assigned to yet, marks nothing.
+ */
+/**
+ * Who is looking, as much of it as a permission question needs: the role, and
+ * which tutor the account is linked to. Screens hold this shape rather than the
+ * whole staff record so the rules can be asked from anywhere.
+ */
+export type Viewer = { role: StaffRole | null | undefined; tutor_id?: string | null } | null;
+
+export function mayMarkRoll(
+  staff: { role: StaffRole | null | undefined; tutor_id?: string | null },
+  session: { tutor_id?: string | null },
+): boolean {
+  if (staff.role === "owner" || staff.role === "admin") return true;
+  if (staff.role !== "tutor") return false;
+  if (!staff.tutor_id) return false;
+  if (!session.tutor_id) return false;
+  return staff.tutor_id === session.tutor_id;
+}
+
 /** Owner or admin - the two roles that run the schedule. */
 export function isManager(role: StaffRole | null | undefined): boolean {
   return role === "owner" || role === "admin";

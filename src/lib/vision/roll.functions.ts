@@ -3,9 +3,39 @@ import { z } from "zod";
 
 import { sydneyLocalToInstant } from "@/lib/format";
 
-import { db, requireManager, requireStaff } from "./guard";
+import { db, requireManager, requireStaff, type AnyClient } from "./guard";
 import { removalConsequences, removalRefusal, type RollEntryFacts } from "./roll-removal";
-import type { Row } from "./types";
+import { mayMarkRoll } from "./tutor-access";
+import type { Row, Staff } from "./types";
+
+/**
+ * Refuse, out loud, a tutor marking a roll that is not theirs.
+ *
+ * RLS already refuses it - `attendance` is only updatable for a lesson
+ * `teaches_session()` agrees with - but a policy that matches no rows returns
+ * a success that changed nothing, and the screen then shows a tick that means
+ * the opposite of what happened. So the same question is asked here first, and
+ * the answer is a sentence.
+ */
+async function assertMayMarkRoll(client: AnyClient, staff: Staff, ids: string[]): Promise<void> {
+  if (staff.role === "owner" || staff.role === "admin") return;
+
+  const { data, error } = await client
+    .from("attendance")
+    .select("id, sessions(tutor_id)")
+    .in("id", ids);
+  if (error) throw error;
+  if (!data?.length) throw new Error("Those roll entries no longer exist.");
+
+  for (const row of data as Row[]) {
+    if (!mayMarkRoll(staff, { tutor_id: row.sessions?.tutor_id ?? null })) {
+      throw new Error(
+        "The roll is marked by the office, or by the tutor teaching that lesson. " +
+          "This one is somebody else's - you can see who is expected, but not mark them.",
+      );
+    }
+  }
+}
 
 const ROLL_SELECT =
   "*, sessions(code, starts_at, ends_at, status, tutors(full_name, colour), class_offerings(code, programs(name))), enrolments(code, method, students(id, code, full_name))";
@@ -108,10 +138,13 @@ export const markAttendance = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ context, data }) => {
+    const client = db(context.supabase);
+    await assertMayMarkRoll(client, context.staff, [data.id]);
+
     const patch: Record<string, unknown> = { status: data.status };
     if (data.correction_note !== undefined) patch["correction_note"] = data.correction_note || null;
 
-    const { error } = await db(context.supabase).from("attendance").update(patch).eq("id", data.id);
+    const { error } = await client.from("attendance").update(patch).eq("id", data.id);
     if (error) throw error;
     return { success: true };
   });
@@ -128,7 +161,10 @@ export const markRollBulk = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ context, data }) => {
-    const { error } = await db(context.supabase)
+    const client = db(context.supabase);
+    await assertMayMarkRoll(client, context.staff, data.ids);
+
+    const { error } = await client
       .from("attendance")
       .update({ status: data.status })
       .in("id", data.ids);
@@ -181,7 +217,10 @@ export const holdMakeUp = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ context, data }) => {
-    const { error } = await db(context.supabase)
+    const client = db(context.supabase);
+    await assertMayMarkRoll(client, context.staff, data.ids);
+
+    const { error } = await client
       .from("attendance")
       .update({
         status: "absent",

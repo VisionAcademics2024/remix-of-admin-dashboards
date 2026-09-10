@@ -4,6 +4,7 @@ import {
   isManager,
   lessonPermissions,
   linkedTutorMismatch,
+  mayMarkRoll,
   sharedTutorLinks,
 } from "./tutor-access";
 
@@ -93,5 +94,34 @@ describe("sharedTutorLinks", () => {
       { user_id: "u4", role: "tutor", tutor_id: null },
     ]);
     expect(shared.size).toBe(0);
+  });
+});
+
+describe("mayMarkRoll", () => {
+  const lesson = (tutor_id: string | null) => ({ tutor_id });
+
+  it("lets the office mark any lesson", () => {
+    for (const role of ["owner", "admin"] as const) {
+      expect(mayMarkRoll({ role }, lesson("alice"))).toBe(true);
+      expect(mayMarkRoll({ role }, lesson(null))).toBe(true);
+    }
+  });
+
+  it("lets a tutor mark the lesson they teach", () => {
+    expect(mayMarkRoll({ role: "tutor", tutor_id: "alice" }, lesson("alice"))).toBe(true);
+  });
+
+  it("refuses a tutor a lesson taught by somebody else", () => {
+    // RLS refuses the write too, but a refused policy returns "success, zero
+    // rows changed" - so the buttons must not be offered in the first place.
+    expect(mayMarkRoll({ role: "tutor", tutor_id: "alice" }, lesson("harrison"))).toBe(false);
+  });
+
+  it("fails closed on an unlinked account, an unassigned lesson, or no role yet", () => {
+    expect(mayMarkRoll({ role: "tutor", tutor_id: null }, lesson("alice"))).toBe(false);
+    expect(mayMarkRoll({ role: "tutor" }, lesson("alice"))).toBe(false);
+    expect(mayMarkRoll({ role: "tutor", tutor_id: "alice" }, lesson(null))).toBe(false);
+    expect(mayMarkRoll({ role: null }, lesson("alice"))).toBe(false);
+    expect(mayMarkRoll({ role: undefined }, lesson("alice"))).toBe(false);
   });
 });

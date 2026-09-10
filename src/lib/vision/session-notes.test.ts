@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { mayWriteSessionNotes } from "./session-notes";
+import { mayReadSessionNotes, mayWriteSessionNotes, redactNotes } from "./session-notes";
 
 const lesson = (tutor_id: string | null) => ({ tutor_id });
 

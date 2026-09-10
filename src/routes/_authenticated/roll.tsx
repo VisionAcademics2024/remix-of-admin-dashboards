@@ -46,9 +46,14 @@ import {
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { getCatalogue } from "@/lib/vision/catalogue.functions";
-import { listTrialRoll, saveTrial } from "@/lib/vision/leads.functions";
+import { listTrialRoll, setTrialStatus } from "@/lib/vision/leads.functions";
 import { meQueryOptions } from "@/lib/vision/me";
-import { lessonPermissions, type LessonPermissions } from "@/lib/vision/tutor-access";
+import {
+  lessonPermissions,
+  mayMarkRoll,
+  type LessonPermissions,
+  type Viewer,
+} from "@/lib/vision/tutor-access";
 import { LABELS, type Row } from "@/lib/vision/types";
 import {
   bookMakeUp,
@@ -255,7 +260,7 @@ function RollPage() {
         </div>
       </div>
 
-      <TrialRollSection filter={filter} today={today} />
+      <TrialRollSection filter={filter} today={today} staff={me?.staff ?? null} />
 
       <p className="text-xs text-muted-foreground">
         Un-marking a student refunds their hours automatically - the balance is a view, not a stored
@@ -283,9 +288,20 @@ function RollPage() {
  */
 const TRIAL_ROLL_FILTERS: RollFilter[] = ["today", "tomorrow", "this_week", "trials", "all"];
 
-function TrialRollSection({ filter, today }: { filter: RollFilter; today: string }) {
+function TrialRollSection({
+  filter,
+  today,
+  staff,
+}: {
+  filter: RollFilter;
+  today: string;
+  staff: Viewer;
+}) {
   const queryClient = useQueryClient();
-  const save = useServerFn(saveTrial);
+  // Marking a trial student is only ever a change of status, so it goes through
+  // the endpoint that changes only that. The fuller save also writes the lead,
+  // which is the office's record and none of a tutor's business.
+  const save = useServerFn(setTrialStatus);
   const enabled = TRIAL_ROLL_FILTERS.includes(filter);
 
   const queryKey = ["trial-roll", filter, today];
@@ -302,17 +318,7 @@ function TrialRollSection({ filter, today }: { filter: RollFilter; today: string
       (old ?? []).map((t) => (t.id === trial.id ? { ...t, status } : t)),
     );
     try {
-      await save({
-        data: {
-          id: trial.id,
-          lead_id: trial.leads?.id,
-          kind: trial.kind,
-          class_offering_id: trial.class_offering_id,
-          session_id: trial.session_id,
-          scheduled_for: trial.scheduled_for ?? "",
-          status,
-        },
-      });
+      await save({ data: { id: trial.id, status } });
     } catch (error) {
       toast.error((error as Error).message);
       await queryClient.invalidateQueries({ queryKey });
@@ -344,12 +350,16 @@ function TrialRollSection({ filter, today }: { filter: RollFilter; today: string
                     {t.leads?.student_name ?? "Trial"}
                     <StatusPill tone="info">Trial</StatusPill>
                   </div>
-                  <Link
-                    to="/leads"
-                    className="text-xs text-primary underline-offset-2 hover:underline"
-                  >
-                    {t.leads?.code ?? t.code}
-                  </Link>
+                  {t.leads?.code ?? t.code ? (
+                    <Link
+                      to="/leads"
+                      className="text-xs text-primary underline-offset-2 hover:underline"
+                    >
+                      {t.leads?.code ?? t.code}
+                    </Link>
+                  ) : t.leads?.year_level ? (
+                    <span className="text-xs text-muted-foreground">{t.leads.year_level}</span>
+                  ) : null}
                 </Td>
                 <Td>{t.class_offerings?.programs?.name ?? t.class_offerings?.code ?? "-"}</Td>
                 <Td className="whitespace-nowrap">
@@ -369,6 +379,10 @@ function TrialRollSection({ filter, today }: { filter: RollFilter; today: string
                 </Td>
                 <Td>
                   <div className="flex items-center justify-end gap-1.5">
+                    {mayMarkRoll(staff ?? { role: null }, {
+                      tutor_id: t.sessions?.tutor_id ?? null,
+                    }) && (
+                    <>
                     <button
                       type="button"
                       title="Attended"
@@ -395,6 +409,8 @@ function TrialRollSection({ filter, today }: { filter: RollFilter; today: string
                     >
                       <X className="h-4 w-4" strokeWidth={2} />
                     </button>
+                    </>
+                    )}
                     <StatusPill tone={toneForStatus("trial", t.status)}>
                       {LABELS.trialStatus[t.status as keyof typeof LABELS.trialStatus]}
                     </StatusPill>
