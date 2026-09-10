@@ -2427,7 +2427,7 @@ export type Database = {
       attendance_type: "regular" | "trial" | "make_up"
       billing_method: "hours" | "payg"
       charge_route: "parent" | "internal"
-      charge_source: "hours" | "payg"
+      charge_source: "hours" | "payg" | "manual"
       charge_status: "to_invoice" | "invoiced" | "paid" | "cancelled"
       closure_reason: "completed" | "withdrawn" | "transferred" | "other"
       contact_channel:
@@ -2625,7 +2625,7 @@ export const Constants = {
       attendance_type: ["regular", "trial", "make_up"],
       billing_method: ["hours", "payg"],
       charge_route: ["parent", "internal"],
-      charge_source: ["hours", "payg"],
+      charge_source: ["hours", "payg", "manual"],
       charge_status: ["to_invoice", "invoiced", "paid", "cancelled"],
       closure_reason: ["completed", "withdrawn", "transferred", "other"],
       contact_channel: [
