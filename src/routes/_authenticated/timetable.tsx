@@ -662,13 +662,22 @@ function SessionDialog({
             )}
 
             <div className="space-y-1.5">
-              <Label htmlFor="notes">Notes</Label>
+              <Label htmlFor="notes">Lesson notes</Label>
               <Textarea
                 id="notes"
-                rows={2}
+                rows={3}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
+                placeholder="What happened in this lesson - what was covered, who struggled, what to pick up next week."
               />
+              {/* One note per lesson, and both sides write it. Saying so is the
+                  difference between a handover and a diary: a tutor who thinks
+                  the office cannot see this writes something else. */}
+              <p className="text-xs text-muted-foreground">
+                {may.manage
+                  ? "Shared with the tutor teaching this lesson - they can read this and add to it."
+                  : "Shared with the office - they can read this, and you can read what they add."}
+              </p>
             </div>
 
             {may.manage && <GoogleSyncRow session={session} onSynced={invalidate} />}

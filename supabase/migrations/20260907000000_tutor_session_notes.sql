@@ -1,4 +1,19 @@
 -- =============================================================================
+-- NO LONGER REQUIRED.
+--
+-- The app called this function to let a tutor write a lesson note, and until
+-- this migration was applied every tutor pressing Save got "Could not find the
+-- function public.set_session_notes in the schema cache" - a database error in
+-- front of someone who cannot apply a database migration.
+--
+-- saveSessionNotes now asks the same question in application code
+-- (mayWriteSessionNotes, with tests) and writes the one column with the service
+-- role, so nothing calls this. It is left here rather than deleted because it is
+-- CREATE OR REPLACE and harmless where it has already been applied; it can be
+-- dropped whenever the schema is next tidied.
+-- =============================================================================
+
+-- =============================================================================
 -- Let a tutor write up their own lesson.
 --
 -- The tutor access migration gave a tutor SELECT on sessions and no UPDATE, so
