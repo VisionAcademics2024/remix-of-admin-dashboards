@@ -156,6 +156,7 @@ export type Database = {
           created_at: string
           id: string
           invoice_date: string | null
+          invoice_id: string | null
           method: Database["public"]["Enums"]["payment_method"] | null
           notes: string | null
           package_id: string | null
@@ -178,6 +179,7 @@ export type Database = {
           created_at?: string
           id?: string
           invoice_date?: string | null
+          invoice_id?: string | null
           method?: Database["public"]["Enums"]["payment_method"] | null
           notes?: string | null
           package_id?: string | null
@@ -200,6 +202,7 @@ export type Database = {
           created_at?: string
           id?: string
           invoice_date?: string | null
+          invoice_id?: string | null
           method?: Database["public"]["Enums"]["payment_method"] | null
           notes?: string | null
           package_id?: string | null
@@ -227,6 +230,13 @@ export type Database = {
             columns: ["attendance_id"]
             isOneToOne: false
             referencedRelation: "v_attendance"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "charges_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
           {
@@ -553,6 +563,56 @@ export type Database = {
             columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          code: string | null
+          created_at: string
+          id: string
+          invoice_date: string
+          invoice_year: number
+          method: Database["public"]["Enums"]["payment_method"] | null
+          notes: string | null
+          payer_id: string | null
+          seq: number
+          updated_at: string
+          xero_invoice_no: string | null
+        }
+        Insert: {
+          code?: string | null
+          created_at?: string
+          id?: string
+          invoice_date: string
+          invoice_year?: number
+          method?: Database["public"]["Enums"]["payment_method"] | null
+          notes?: string | null
+          payer_id?: string | null
+          seq?: number
+          updated_at?: string
+          xero_invoice_no?: string | null
+        }
+        Update: {
+          code?: string | null
+          created_at?: string
+          id?: string
+          invoice_date?: string
+          invoice_year?: number
+          method?: Database["public"]["Enums"]["payment_method"] | null
+          notes?: string | null
+          payer_id?: string | null
+          seq?: number
+          updated_at?: string
+          xero_invoice_no?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_payer_id_fkey"
+            columns: ["payer_id"]
+            isOneToOne: false
+            referencedRelation: "guardians"
             referencedColumns: ["id"]
           },
         ]
