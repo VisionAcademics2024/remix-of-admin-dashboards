@@ -1961,12 +1961,14 @@ export type Database = {
       v_charges: {
         Row: {
           adjustment: number | null
+          airtable_id: string | null
           attendance_id: string | null
           code: string | null
           created_at: string | null
           final_amount: number | null
           id: string | null
           invoice_date: string | null
+          invoice_id: string | null
           method: Database["public"]["Enums"]["payment_method"] | null
           notes: string | null
           package_id: string | null
@@ -1974,6 +1976,7 @@ export type Database = {
           payer_id: string | null
           payment_ref: string | null
           route: Database["public"]["Enums"]["charge_route"] | null
+          seq: number | null
           source: Database["public"]["Enums"]["charge_source"] | null
           standard_amount: number | null
           status: Database["public"]["Enums"]["charge_status"] | null
@@ -1982,12 +1985,14 @@ export type Database = {
         }
         Insert: {
           adjustment?: number | null
+          airtable_id?: string | null
           attendance_id?: string | null
           code?: string | null
           created_at?: string | null
           final_amount?: never
           id?: string | null
           invoice_date?: string | null
+          invoice_id?: string | null
           method?: Database["public"]["Enums"]["payment_method"] | null
           notes?: string | null
           package_id?: string | null
@@ -1995,6 +2000,7 @@ export type Database = {
           payer_id?: string | null
           payment_ref?: string | null
           route?: Database["public"]["Enums"]["charge_route"] | null
+          seq?: number | null
           source?: Database["public"]["Enums"]["charge_source"] | null
           standard_amount?: number | null
           status?: Database["public"]["Enums"]["charge_status"] | null
@@ -2003,12 +2009,14 @@ export type Database = {
         }
         Update: {
           adjustment?: number | null
+          airtable_id?: string | null
           attendance_id?: string | null
           code?: string | null
           created_at?: string | null
           final_amount?: never
           id?: string | null
           invoice_date?: string | null
+          invoice_id?: string | null
           method?: Database["public"]["Enums"]["payment_method"] | null
           notes?: string | null
           package_id?: string | null
@@ -2016,6 +2024,7 @@ export type Database = {
           payer_id?: string | null
           payment_ref?: string | null
           route?: Database["public"]["Enums"]["charge_route"] | null
+          seq?: number | null
           source?: Database["public"]["Enums"]["charge_source"] | null
           standard_amount?: number | null
           status?: Database["public"]["Enums"]["charge_status"] | null
@@ -2035,6 +2044,13 @@ export type Database = {
             columns: ["attendance_id"]
             isOneToOne: false
             referencedRelation: "v_attendance"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "charges_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
           {
