@@ -243,6 +243,7 @@ function RollPage() {
                   tutors={catalogue?.tutors ?? []}
                   onSetStatus={setStatus}
                   may={may}
+                  staff={me?.staff ?? null}
                   onMakeUp={setMakingUp}
                   onBulk={async (ids, status) => {
                     try {
@@ -491,6 +492,7 @@ function LessonGroup({
   tutors,
   onSetStatus,
   may,
+  staff,
   onMakeUp,
   onBulk,
   onChanged,
@@ -501,11 +503,19 @@ function LessonGroup({
   tutors: Row[];
   onSetStatus: (id: string, status: "present" | "absent" | "not_marked") => Promise<void>;
   may: LessonPermissions;
+  /** Who is looking, so "their own lesson" can be asked of THIS lesson. */
+  staff: Viewer;
   onMakeUp: (rows: Row[]) => void;
   onBulk: (ids: string[], status: "present" | "absent" | "not_marked") => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
   const { lesson, rows } = group;
+  // A tutor may read every lesson on the roll - useful when picking up a class -
+  // but marks only the ones they teach. Drawing the tick anyway meant pressing
+  // it did nothing, silently, because RLS refused the write.
+  const canMark = may.markRoll && mayMarkRoll(staff ?? { role: null }, {
+    tutor_id: lesson.lesson_tutor_id ?? null,
+  });
   const marked = rows.filter((r: Row) => r.status !== "not_marked").length;
   const unmarkedIds = rows.filter((r: Row) => r.status === "not_marked").map((r: Row) => r.id);
   const makeUpable = rows.filter((r: Row) => r.att_type !== "make_up");
@@ -535,25 +545,27 @@ function LessonGroup({
           {marked}/{rows.length} marked
         </StatusPill>
 
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={unmarkedIds.length === 0}
-            onClick={() => onBulk(unmarkedIds, "present")}
-          >
-            All present
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={makeUpable.length === 0}
-            title="The whole class was away - book one make-up lesson for all of them"
-            onClick={() => onMakeUp(makeUpable)}
-          >
-            Make up the class
-          </Button>
-        </div>
+        {canMark && (
+          <div className="ml-auto flex flex-wrap items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={unmarkedIds.length === 0}
+              onClick={() => onBulk(unmarkedIds, "present")}
+            >
+              All present
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={makeUpable.length === 0}
+              title="The whole class was away - book one make-up lesson for all of them"
+              onClick={() => onMakeUp(makeUpable)}
+            >
+              Make up the class
+            </Button>
+          </div>
+        )}
       </header>
 
       {/* The roll sits flush under the header - no card-within-a-card. The one
@@ -630,6 +642,7 @@ function LessonGroup({
                   </StatusPill>
                 </Td>
                 <Td className="text-right">
+                  {canMark ? (
                   <div className="flex justify-end gap-1">
                     <Button
                       size="sm"
@@ -668,6 +681,13 @@ function LessonGroup({
                       </Button>
                     )}
                   </div>
+                  ) : (
+                    /* Not their lesson: the roll still reads, it just does not
+                       take marks. */
+                    <span className="text-xs text-muted-foreground">
+                      {lesson.lesson_tutor_id ? "Another tutor's lesson" : "Office only"}
+                    </span>
+                  )}
                 </Td>
               </tr>
             ))}
