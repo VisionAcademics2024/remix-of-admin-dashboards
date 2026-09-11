@@ -1,11 +1,11 @@
 {
-  "version": 1,
   "asset_id": "6f6d80a4-d0ea-47e2-8c1e-64d67ec99d17",
-  "project_id": "18ed47e9-415e-414c-a5fb-19e372a38c00",
-  "url": "/__l5e/assets-v1/6f6d80a4-d0ea-47e2-8c1e-64d67ec99d17/vermilion.jpg",
-  "r2_key": "a/v1/18ed47e9-415e-414c-a5fb-19e372a38c00/6f6d80a4-d0ea-47e2-8c1e-64d67ec99d17/vermilion.jpg",
-  "original_filename": "vermilion.jpg",
-  "size": 495956,
   "content_type": "image/jpeg",
-  "created_at": "2026-08-24T08:00:36Z"
+  "created_at": "2026-08-24T08:00:36Z",
+  "original_filename": "vermilion.jpg",
+  "project_id": "b1200814-71cc-47e5-99f7-01c485168514",
+  "r2_key": "a/v1/b1200814-71cc-47e5-99f7-01c485168514/6f6d80a4-d0ea-47e2-8c1e-64d67ec99d17/vermilion.jpg",
+  "size": 495956,
+  "url": "/__l5e/assets-v1/6f6d80a4-d0ea-47e2-8c1e-64d67ec99d17/vermilion.jpg",
+  "version": 1
 }

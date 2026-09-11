@@ -1,11 +1,11 @@
 {
-  "version": 1,
   "asset_id": "9b893ff7-8deb-4266-8605-45e1291044e3",
-  "project_id": "18ed47e9-415e-414c-a5fb-19e372a38c00",
-  "url": "/__l5e/assets-v1/9b893ff7-8deb-4266-8605-45e1291044e3/sonoma-thumb.jpg",
-  "r2_key": "a/v1/18ed47e9-415e-414c-a5fb-19e372a38c00/9b893ff7-8deb-4266-8605-45e1291044e3/sonoma-thumb.jpg",
-  "original_filename": "sonoma-thumb.jpg",
-  "size": 978,
   "content_type": "image/jpeg",
-  "created_at": "2026-08-25T03:55:00Z"
+  "created_at": "2026-08-25T03:55:00Z",
+  "original_filename": "sonoma-thumb.jpg",
+  "project_id": "b1200814-71cc-47e5-99f7-01c485168514",
+  "r2_key": "a/v1/b1200814-71cc-47e5-99f7-01c485168514/9b893ff7-8deb-4266-8605-45e1291044e3/sonoma-thumb.jpg",
+  "size": 978,
+  "url": "/__l5e/assets-v1/9b893ff7-8deb-4266-8605-45e1291044e3/sonoma-thumb.jpg",
+  "version": 1
 }

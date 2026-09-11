@@ -1,11 +1,11 @@
 {
-  "version": 1,
   "asset_id": "9e8444eb-d1fd-4b71-bcac-914ad217e7aa",
-  "project_id": "18ed47e9-415e-414c-a5fb-19e372a38c00",
-  "url": "/__l5e/assets-v1/9e8444eb-d1fd-4b71-bcac-914ad217e7aa/mavericks-thumb.jpg",
-  "r2_key": "a/v1/18ed47e9-415e-414c-a5fb-19e372a38c00/9e8444eb-d1fd-4b71-bcac-914ad217e7aa/mavericks-thumb.jpg",
-  "original_filename": "mavericks-thumb.jpg",
-  "size": 985,
   "content_type": "image/jpeg",
-  "created_at": "2026-08-25T03:55:07Z"
+  "created_at": "2026-08-25T03:55:07Z",
+  "original_filename": "mavericks-thumb.jpg",
+  "project_id": "b1200814-71cc-47e5-99f7-01c485168514",
+  "r2_key": "a/v1/b1200814-71cc-47e5-99f7-01c485168514/9e8444eb-d1fd-4b71-bcac-914ad217e7aa/mavericks-thumb.jpg",
+  "size": 985,
+  "url": "/__l5e/assets-v1/9e8444eb-d1fd-4b71-bcac-914ad217e7aa/mavericks-thumb.jpg",
+  "version": 1
 }

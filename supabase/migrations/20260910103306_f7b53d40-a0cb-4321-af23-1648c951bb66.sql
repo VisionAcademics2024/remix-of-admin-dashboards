@@ -1,1 +1,0 @@
-alter type charge_source add value if not exists 'manual';
